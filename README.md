@@ -16,10 +16,6 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
   - View overall completion rates, longest streaks, and breakdowns by category
   - Interactive charts (bar and pie)
 
-- 📂 **Category & Subcategory Support**
-  - Organize tasks into categories like Workout, Food, Water Intake, etc.
-  - Two-level categorization: Primary & Subcategories
-
 - 🔁 **Auto Reset Logic**
   - Automatically resets tasks based on their frequency (daily/weekly/monthly)
 
