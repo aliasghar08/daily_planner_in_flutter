@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
+
 
     <application
         android:label="daily_planner"
@@ -19,6 +22,7 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="daily_planner_channel" />
 
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -28,35 +32,30 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
-            
+
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
-            
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
+        <!-- Flutter engine -->
+        <meta-data android:name="flutterEmbedding" android:value="2" />
+        <meta-data android:name="com.google.android.gms.client_id" android:value="YOUR_CLIENT_ID_HERE" />
 
-        <meta-data
-            android:name="com.google.android.gms.client_id"
-            android:value="777337977048-vf0nr3plk0e3k5h11u4r1gqsqrbm9o2u.apps.googleusercontent.com" />
-
-        <!-- Foreground Service (dataSync + alarm) -->
-        <!-- For API 29+ -->
+        <!-- Flutter Foreground Task Service -->
         <service
-            android:name=".AlarmForegroundService"
-            android:enabled="true"
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:permission="android.permission.FOREGROUND_SERVICE"
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
-        <!-- Local Notification Receivers -->
+        <!-- flutter_local_notifications Receivers -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
             android:exported="true" />
@@ -74,7 +73,7 @@
         <receiver
             android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmBroadcastReceiver"
             android:exported="true" />
-        
+
         <receiver
             android:name="dev.fluttercommunity.plus.androidalarmmanager.RebootBroadcastReceiver"
             android:enabled="true"
@@ -85,7 +84,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- Custom Broadcast Receiver -->
+        <!-- Optional: Your custom broadcast receiver -->
         <receiver
             android:name=".AlarmReceiver"
             android:exported="true">
@@ -94,15 +93,12 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        
     </application>
 
-    <!-- Intent Query Support -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
     </queries>
-
 </manifest>

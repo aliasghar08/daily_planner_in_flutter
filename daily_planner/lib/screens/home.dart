@@ -78,7 +78,7 @@ class _MyHomeState extends State<MyHome> {
 
   Future<void> _startForegroundService() async {
     try {
-      await NativeAlarmHelper.startForegroundService();
+    //  await NativeAlarmHelper.startForegroundService();
       debugPrint("Foreground service started.");
     } catch (e) {
       debugPrint("Error starting foreground service: $e");

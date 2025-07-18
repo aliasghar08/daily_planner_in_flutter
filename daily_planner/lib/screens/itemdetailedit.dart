@@ -153,7 +153,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
           title: 'Reminder: ${updatedTask.title}',
           body:
               '${updatedTask.title} is due at ${DateFormat.jm().format(updatedTask.date)}',
-          time: notificationTime,
+          dateTime: updatedTask.date,
         );
 
         _showSnackBar(

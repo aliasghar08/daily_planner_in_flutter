@@ -1,164 +1,267 @@
+// import 'dart:io';
+// import 'package:flutter/foundation.dart';
+// import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// import 'package:flutter_timezone/flutter_timezone.dart';
+// import 'package:permission_handler/permission_handler.dart';
+// import 'package:timezone/data/latest_all.dart' as tz;
+// import 'package:timezone/timezone.dart' as tz;
+
+// /// Standalone helper for local notifications
+// class NativeAlarmHelper {
+//   static final _flnp = FlutterLocalNotificationsPlugin();
+
+//   /// MUST call once during app startup
+//   static Future<void> initialize() async {
+//     // Android settings
+//     const androidSettings = AndroidInitializationSettings(
+//       '@mipmap/ic_launcher',
+//     );
+//     // iOS settings
+//     final iosSettings = DarwinInitializationSettings(
+//       requestAlertPermission: true,
+//       requestBadgePermission: true,
+//       requestSoundPermission: true,
+//     );
+
+//     final initSettings = InitializationSettings(
+//       android: androidSettings,
+//       iOS: iosSettings,
+//     );
+//     await _flnp.initialize(initSettings);
+
+//     // Timezone setup
+//     tz.initializeTimeZones();
+//     final name = await FlutterTimezone.getLocalTimezone();
+//     tz.setLocalLocation(tz.getLocation(name));
+//   }
+
+//   /// Show a notification immediately
+//   static Future<void> showNow({
+//     required int id,
+//     required String title,
+//     required String body,
+//   }) async {
+//     const androidDetails = AndroidNotificationDetails(
+//       'daily_planner_channel',
+//       'Daily Planner',
+//       channelDescription: 'Task reminders and alerts',
+//       importance: Importance.high,
+//       priority: Priority.high,
+//     );
+//     const iosDetails = DarwinNotificationDetails();
+
+//     await _flnp.show(
+//       id,
+//       title,
+//       body,
+//       NotificationDetails(android: androidDetails, iOS: iosDetails),
+//     );
+//   }
+
+//   /// Schedule a notification at a specific time
+//   static Future<void> scheduleAlarmAtTime({
+//     required int id,
+//     required String title,
+//     required String body,
+//     required DateTime dateTime,
+//   }) async {
+//     final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
+//     const androidDetails = AndroidNotificationDetails(
+//       'daily_planner_channel',
+//       'Daily Planner',
+//       channelDescription: 'Task reminders and alerts',
+//       importance: Importance.high,
+//       priority: Priority.high,
+//     );
+//     const iosDetails = DarwinNotificationDetails();
+
+//     await _flnp.zonedSchedule(
+//       id,
+//       title,
+//       body,
+//       tzScheduled,
+//       NotificationDetails(android: androidDetails, iOS: iosDetails),
+//       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+//     );
+//   }
+
+//   /// Cancel a scheduled notification
+//   static Future<void> cancelAlarmById(int id) async {
+//     await _flnp.cancel(id);
+//   }
+
+//   static Future<void> startForegroundService() async {}
+
+//   static Future<bool> checkExactAlarmPermission() async {
+//     if (kIsWeb) {
+//       return false;
+//     }
+//     if (Platform.isAndroid) {
+//       final status = Permission.notification.status;
+//       return status.isGranted;
+//     }
+//     return false;
+//   }
+
+//   static Future<void> requestExactAlarmPermission() async {
+//     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+//       if (await Permission.notification.request().isGranted) {
+//         // Optional: show a sample notification to verify
+//         await showNow(
+//           id: -1,
+//           title: 'Reminder Active',
+//           body: 'Exact alarms enabled',
+//         );
+//       }
+//     }
+//   }
+
+//   static Future<void> schedulePermissionDummyAlarm() async {}
+// }
+
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
+/// Standalone helper for local notifications and native AlarmManager
 class NativeAlarmHelper {
   static const MethodChannel _channel = MethodChannel('exact_alarm_permission');
-  static final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  static final _flnp = FlutterLocalNotificationsPlugin();
 
+  /// MUST call once during app startup
   static Future<void> initialize() async {
-    if (!kIsWeb && Platform.isAndroid) {
-      await Firebase.initializeApp();
-      
-      // Request notification permissions
-      await _firebaseMessaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+    // FlutterLocalNotifications setup
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    final iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    await _flnp.initialize(
+      InitializationSettings(android: androidSettings, iOS: iosSettings),
+    );
 
-      // Set up background message handler
-      FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundMessageHandler);
-    }
+    // Timezone setup
+    tz.initializeTimeZones();
+    final name = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(name));
   }
 
-  // Background message handler
-  @pragma('vm:entry-point')
-  static Future<void> _firebaseBackgroundMessageHandler(RemoteMessage message) async {
-    await Firebase.initializeApp();
-    if (message.notification != null) {
-      // You can add local notification display here if needed
-      print('Received background notification: ${message.notification?.title}');
-    }
+  /// Show a notification immediately
+  static Future<void> showNow({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    final androidDetails = AndroidNotificationDetails(
+      'daily_planner_channel',
+      'Daily Planner',
+      channelDescription: 'Task reminders and alerts',
+      importance: Importance.high,
+      priority: Priority.high,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList(const [0, 1000, 500, 1000]),
+      ongoing: true,
+      autoCancel: false,
+      sound: null, // place alarm_sound.mp3 in android/app/src/main/res/raw/
+      additionalFlags: Int32List.fromList(<int>[
+        4,
+      ]), // FLAG_INSISTENT: repeats sound until user acts
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction('STOP_ACTION', 'Stop'),
+        AndroidNotificationAction('SNOOZE_ACTION', 'Snooze'),
+      ],
+    );
+    const iosDetails = DarwinNotificationDetails();
+
+    await _flnp.show(
+      id,
+      title,
+      body,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+    );
   }
 
-  static Future<void> schedulePermissionDummyAlarm() async {
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('scheduleAlarm', {
-          "id": 777,
-          "title": "Permission Activation Alarm",
-          "body": "This is required for Alarms & Reminders permission",
-          "time": DateTime.now().millisecondsSinceEpoch + 30 * 1000, // 30 sec later
-        });
-        
-        // Also schedule via FCM as fallback
-        await _scheduleFcmNotification(
-          id: 777,
-          title: "Permission Activation Alarm",
-          body: "This is required for Alarms & Reminders permission",
-          triggerTime: DateTime.now().add(Duration(seconds: 30)),
-        );
-      } catch (e) {
-        print("Failed to schedule native alarm: $e");
-      }
-    }
-  }
-
-  static Future<void> requestExactAlarmPermission() async {
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('requestExactAlarmPermission');
-      } catch (e) {
-        print("Failed to request exact alarm permission: $e");
-      }
-    }
-  }
-
-  /// Schedule an alarm for a specific time with custom title/body
+  /// Schedule a notification at a specific time
   static Future<void> scheduleAlarmAtTime({
     required int id,
-    required DateTime time,
     required String title,
     required String body,
+    required DateTime dateTime,
   }) async {
-    if (!kIsWeb && Platform.isAndroid) {
-      try {
-        // Schedule native alarm first
-        await _channel.invokeMethod('scheduleAlarm', {
-          "id": id,
-          "title": title,
-          "body": body,
-          "time": time.millisecondsSinceEpoch,
-        });
+    // Schedule native AlarmManager
+    await _channel.invokeMethod('scheduleNativeAlarm', {
+      'id': id,
+      'title': title,
+      'body': body,
+      'time': dateTime.millisecondsSinceEpoch,
+    });
 
-        // Schedule FCM notification as fallback
-        await _scheduleFcmNotification(
-          id: id,
-          title: title,
-          body: body,
-          triggerTime: time,
-        );
-      } catch (e) {
-        print("Failed to schedule alarm at specific time: $e");
-      }
-    }
+    // Schedule fallback local notification
+    final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
+    const androidDetails = AndroidNotificationDetails(
+      'daily_planner_channel',
+      'Daily Planner',
+      channelDescription: 'Task reminders and alerts',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails();
+
+    await _flnp.zonedSchedule(
+      id,
+      title,
+      body,
+      tzScheduled,
+      NotificationDetails(android: androidDetails, iOS: iosDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
   }
 
-  static Future<void> _scheduleFcmNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime triggerTime,
-  }) async {
-    try {
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token == null) {
-        print("FCM token is null. Cannot schedule notification.");
-        return;
-      }
-
-      final callable = FirebaseFunctions.instance.httpsCallable('scheduleFcmNotification');
-      final result = await callable.call({
-        'token': token,
-        'title': title,
-        'body': body,
-        'triggerTime': triggerTime.toUtc().toIso8601String(),
-        'payload': {
-          'id': id.toString(),
-        }
-      });
-
-      if (result.data['success'] == true) {
-        print('✅ FCM notification scheduled successfully: ID = ${result.data['notificationId']}');
-      } else {
-        print('⚠️ Failed to schedule FCM notification. Result: ${result.data}');
-      }
-    } catch (e) {
-      print('❌ Error calling Cloud Function to schedule FCM notification: $e');
-    }
-  }
-
-  static Future<void> startForegroundService() async {
-    try {
-      await _channel.invokeMethod('startForegroundService');
-    } on PlatformException catch (e) {
-      print("Failed to start foreground service: '${e.message}'.");
-    }
-  }
-
-  static Future<bool> checkExactAlarmPermission() async {
-    try {
-      final bool granted = await _channel.invokeMethod('checkExactAlarmPermission');
-      return granted;
-    } catch (e) {
-      debugPrint("checkExactAlarmPermission error: $e");
-      return false;
-    }
-  }
-
-  /// Cancel a scheduled alarm/notification by ID
+  /// Cancel both local and native alarms
   static Future<void> cancelAlarmById(int id) async {
+    await _flnp.cancel(id);
+    await _channel.invokeMethod('cancelAlarm', {'id': id});
+  }
+
+  /// Check notification permission on Android
+  static Future<bool> checkExactAlarmPermission() async {
+    if (kIsWeb) return false;
+    if (Platform.isAndroid) {
+      return await Permission.notification.status.isGranted;
+    }
+    return true;
+  }
+
+  /// Request notification permission on Android
+  static Future<void> requestExactAlarmPermission() async {
     if (!kIsWeb && Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('cancelAlarm', {"id": id});
-        print("✅ Alarm with ID $id cancelled successfully.");
-      } catch (e) {
-        print("❌ Failed to cancel alarm with ID $id: $e");
+      if (await Permission.notification.request().isGranted) {
+        await showNow(
+          id: -1,
+          title: 'Reminder Active',
+          body: 'Notifications enabled',
+        );
       }
     }
+  }
+
+  /// Schedule a dummy alarm (to trigger permission prompt via exact alarm call)
+  static Future<void> schedulePermissionDummyAlarm() async {
+    final now = DateTime.now();
+    await scheduleAlarmAtTime(
+      id: 777,
+      title: 'Permission Alarm',
+      body: 'Checking alarm capability',
+      dateTime: now.add(const Duration(seconds: 30)),
+    );
   }
 }

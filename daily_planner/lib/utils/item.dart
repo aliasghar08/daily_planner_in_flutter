@@ -131,7 +131,7 @@ class _ItemWidgetState extends State<ItemWidget> {
             id: notificationId,
             title: widget.item.title,
             body: widget.item.detail,
-            time: widget.item.date,
+            dateTime: widget.item.date
           );
         }
       }

@@ -1,124 +1,159 @@
-import 'dart:io' show Platform;
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/reset_task.dart';
+import 'dart:io' show Platform, exit;
+import 'dart:isolate';
+import 'package:daily_planner/utils/battery_optimization_helper.dart';
+import 'package:daily_planner/utils/permissionHandler.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:daily_planner/screens/changePass.dart';
-import 'package:daily_planner/screens/forgotPass.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:daily_planner/utils/reset_task.dart';
+import 'package:daily_planner/utils/thememode.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/login.dart';
-import 'package:daily_planner/utils/thememode.dart';
+import 'package:daily_planner/screens/changePass.dart';
+import 'package:daily_planner/screens/forgotPass.dart';
+import 'package:timezone/timezone.dart' as tz;
 import 'firebase_options.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:permission_handler/permission_handler.dart';
+
+final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+Future<void> initializeTimeZones() async {
+  tz.initializeTimeZones();
+
+  final String tzName = await FlutterTimezone.getLocalTimezone();
+
+  tz.setLocalLocation(tz.getLocation(tzName));
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize critical services first with error handling
+  await initializeTimeZones();
+  await NativeAlarmHelper.initialize();
+
   try {
     await _initializeCoreServices();
+    await _initializeAndroidServices();
     runApp(const MyApp());
   } catch (e, stack) {
     debugPrint('Initialization failed: $e\n$stack');
     runApp(const InitializationErrorApp());
   }
+
+  if (!kIsWeb && Platform.isAndroid) {}
 }
 
-Future<void> _initializeCoreServices() async {
-  // 1. Firebase initialization
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+// Future<void> requestBatteryOptimizationDisable() async {
+//   final alreadyDisabled = await DisableBatteryOptimization.isBatteryOptimizationDisabled;
+//   if (!alreadyDisabled!) {
+//     await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+//   }
+// }
 
-  // 2. Timezone initialization
+Future<void> _initializeCoreServices() async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   tz.initializeTimeZones();
 
-  // 3. Android-specific services
   if (!kIsWeb && Platform.isAndroid) {
     await _initializeAndroidServices();
   }
 
-  // 4. App-specific initializations
   await resetAllTasksIfNeeded();
   await ThemePreferences.loadTheme();
 }
 
-Future<void> _initializeAndroidServices() async {
-  try {
-    // Request notification permission with retry logic
-    await _requestNotificationPermissionWithRetry();
+// Future<void> ensureOptimizationsDisabled() async {
+//   // ① Native battery optimization
+//   bool? nativeDisabled =
+//       await DisableBatteryOptimization.isBatteryOptimizationDisabled;
+//   if (!nativeDisabled!) {
+//     await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
+//   }
 
-    // Handle exact alarm permission
-    await _handleAlarmPermissions();
-
-    // Initialize notification services
-    await NativeAlarmHelper.initialize();
-  } catch (e) {
-    debugPrint('Android services initialization error: $e');
-    rethrow;
-  }
-}
-
-// Future<void> _requestNotificationPermissionWithRetry() async {
-//   const maxRetries = 2;
-//   for (var i = 0; i < maxRetries; i++) {
-//     try {
-//       await NativeAlarmHelper.requestExactAlarmPermission();
-//       if (await Permission.notification.isGranted) break;
-//       await Future.delayed(const Duration(seconds: 1));
-//     } catch (e) {
-//       if (i == maxRetries - 1) rethrow;
-//     }
+//   // ② Manufacturer-specific optimization (optional but recommended)
+//   bool? manDisabled =
+//       await DisableBatteryOptimization
+//           .isManufacturerBatteryOptimizationDisabled;
+//   if (!manDisabled!) {
+//     await DisableBatteryOptimization.showDisableManufacturerBatteryOptimizationSettings(
+//       "Disable Manufacturer Battery Optimization",
+//       "Please follow steps to exempt this app for consistent reminders.",
+//     );
 //   }
 // }
 
-Future<void> _requestNotificationPermissionWithRetry() async {
-  if (await Permission.notification.isGranted) return;
+Future<void> _initializeAndroidServices() async {
+  await Permission.notification.request();
 
-  const maxRetries = 2;
-  for (var i = 0; i < maxRetries; i++) {
-    try {
-      final status = await Permission.notification.request();
-      if (status.isGranted) break;
-      await Future.delayed(const Duration(seconds: 1));
-    } catch (e) {
-      if (i == maxRetries - 1) rethrow;
-    }
-  }
-}
-
-
-Future<void> _handleAlarmPermissions() async {
-  final hasPermission = await NativeAlarmHelper.checkExactAlarmPermission();
-
-  if (!hasPermission) {
+  final hasExact = await NativeAlarmHelper.checkExactAlarmPermission();
+  if (!hasExact) {
     await NativeAlarmHelper.requestExactAlarmPermission();
-    // Optionally wait a moment for the user to respond to the dialog
     await Future.delayed(const Duration(milliseconds: 500));
   }
-
-  // Only schedule dummy alarm if permission is now granted
   if (await NativeAlarmHelper.checkExactAlarmPermission()) {
     await NativeAlarmHelper.schedulePermissionDummyAlarm();
   }
-}
 
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  final iosInit = DarwinInitializationSettings(
+    requestAlertPermission: true,
+    requestBadgePermission: true,
+    requestSoundPermission: true,
+  );
+
+  final initializationSettings = InitializationSettings(
+    android: androidInit,
+    iOS: iosInit,
+
+  );
+
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings,   onDidReceiveNotificationResponse: (NotificationResponse response) {
+    if (response.actionId == 'STOP_ACTION') {
+      flutterLocalNotificationsPlugin.cancel(response.id!);
+    } else if (response.actionId == 'SNOOZE_ACTION') {
+      flutterLocalNotificationsPlugin.cancel(response.id!);
+      // Reschedule after 5 minutes
+      flutterLocalNotificationsPlugin.zonedSchedule(
+        response.id!,
+        'Snoozed Reminder',
+        'Reminder after snooze!',
+        tz.TZDateTime.now(tz.local).add(Duration(minutes: 5)),
+        NotificationDetails(),
+        
+       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle);
+    }
+  },);
+  if (Platform.isAndroid) {
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.requestNotificationsPermission();
+  }
+}
 
 class InitializationErrorApp extends StatelessWidget {
   const InitializationErrorApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       home: Scaffold(
         body: Center(
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('App initialization failed'),
+              const Text('App failed to initialize'),
               const SizedBox(height: 20),
-              ElevatedButton(onPressed: () {}, child: const Text('Exit')),
+              ElevatedButton(
+                onPressed: () => exit(0),
+                child: const Text('Exit'),
+              ),
             ],
           ),
         ),
@@ -129,7 +164,6 @@ class InitializationErrorApp extends StatelessWidget {
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
-
   @override
   State<MyApp> createState() => _MyAppState();
 }
@@ -138,25 +172,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _handleBatteryOptimization();
-  }
-
-  Future<void> _handleBatteryOptimization() async {
     if (!kIsWeb && Platform.isAndroid) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        await _requestIgnoreBatteryOptimization();
-      });
-    }
-  }
-
-  Future<void> _requestIgnoreBatteryOptimization() async {
-    try {
-      final status = await Permission.ignoreBatteryOptimizations.status;
-      if (status.isDenied) {
-        await Permission.ignoreBatteryOptimizations.request();
-      }
-    } catch (e) {
-      debugPrint('Battery optimization error: $e');
+      WidgetsBinding.instance.addPostFrameCallback((_) async {});
+      BatteryOptimizationHelper.requestDisableBatteryOptimization();
     }
   }
 
@@ -164,19 +182,19 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+      builder: (_, mode, __) {
         return MaterialApp(
           title: "Daily Planner",
           debugShowCheckedModeBanner: false,
           theme: ThemeData.light(),
           darkTheme: ThemeData.dark(),
-          themeMode: currentMode,
+          themeMode: mode,
           home: const AuthWrapper(),
           routes: {
-            "/home": (context) => const MyHome(),
-            "/login": (context) => const LoginPage(),
-            "/changepassword": (context) => const ChangePasswordPage(),
-            "/forgotpass": (context) => const ForgotPasswordScreen(),
+            "/home": (_) => const MyHome(),
+            "/login": (_) => const LoginPage(),
+            "/changepassword": (_) => const ChangePasswordPage(),
+            "/forgotpass": (_) => const ForgotPasswordScreen(),
           },
         );
       },
@@ -186,7 +204,6 @@ class _MyAppState extends State<MyApp> {
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
@@ -197,7 +214,6 @@ class AuthWrapper extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
         return snapshot.hasData ? const MyHome() : const LoginPage();
       },
     );

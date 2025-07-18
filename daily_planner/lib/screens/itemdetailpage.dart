@@ -180,9 +180,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       await NativeAlarmHelper.scheduleAlarmAtTime(
         id: id,
-        time: time,
+        
         title: '🔔 Test Alarm',
-        body: 'You tapped the test alarm button!',
+        body: 'You tapped the test alarm button!', dateTime: time,
       );
 
       scaffoldMessengerKey.currentState?.showSnackBar(
@@ -223,7 +223,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       await NativeAlarmHelper.scheduleAlarmAtTime(
         id: id,
-        time: time,
+        dateTime: time,
         title: title,
         body: body,
       );

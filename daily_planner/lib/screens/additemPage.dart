@@ -226,7 +226,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
           title: 'Upcoming Task',
           body:
               '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-          time: notificationTime,
+           dateTime: newTask.date,
         );
 
         ScaffoldMessenger.of(context).showSnackBar(
