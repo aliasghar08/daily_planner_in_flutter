@@ -8,7 +8,7 @@ class CatlalogModel {
       detail: "I need to have my dinner done on time",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(),
+      completedAt: DateTime.now(), notificationTimes: [],
     ),
     Task(
       id: 2,
@@ -16,7 +16,7 @@ class CatlalogModel {
       detail: "I need to get my work done before the deadline at any cost",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(),
+      completedAt: DateTime.now(), notificationTimes: [],
     ),
   ];
 }
@@ -57,6 +57,7 @@ class Task {
   DateTime? completedAt;
   List<TaskEdit> editHistory;
   String taskType;
+  List<DateTime> notificationTimes;
 
   Task({
     this.docId,
@@ -69,8 +70,11 @@ class Task {
     this.completedAt,
     List<TaskEdit>? editHistory,
     this.taskType = 'oneTime',
+    List<DateTime>? notificationTimes,
   }) : createdAt = createdAt ?? DateTime.now(),
-       editHistory = editHistory ?? [];
+       editHistory = editHistory ?? [], 
+       notificationTimes = notificationTimes ?? []; 
+
 
   factory Task.fromMap(Map<String, dynamic> map, {String? docId}) {
     List<TaskEdit> history = [];
@@ -92,6 +96,18 @@ class Task {
       return parseTimeNullable(val) ?? DateTime.now();
     }
 
+    List<DateTime> parseNotificationTimes(dynamic val) {
+      if (val == null || val is! List) return [];
+      return val
+          .map((e) {
+            if (e is Timestamp) return e.toDate();
+            if (e is String) return DateTime.tryParse(e);
+            return null;
+          })
+          .whereType<DateTime>()
+          .toList();
+    }
+
     return Task(
       docId: docId,
       id: map['id'] ?? 0,
@@ -103,6 +119,7 @@ class Task {
       completedAt: parseTimeNullable(map['completedAt']),
       editHistory: history,
       taskType: map['taskType'] ?? 'oneTime', // ✅ Fallback for old records
+      notificationTimes: parseNotificationTimes(map['notificationTimes']),
     );
   }
 
@@ -116,6 +133,10 @@ class Task {
       'createdAt': Timestamp.fromDate(createdAt),
       'editHistory': editHistory.map((e) => e.toMap()).toList(),
       'taskType': taskType,
+      'notificationTimes':
+          notificationTimes
+              .map((dt) => Timestamp.fromDate(dt))
+              .toList(), // ✅ Add this line
     };
 
     if (completedAt != null) {
@@ -130,31 +151,32 @@ class Task {
   Iterable? get completionStamps => null;
 
   Task copyWith({
-  String? docId,
-  int? id,
-  String? title,
-  String? detail,
-  DateTime? date,
-  bool? isCompleted,
-  DateTime? createdAt,
-  DateTime? completedAt,
-  List<TaskEdit>? editHistory,
-  String? taskType,
-}) {
-  return Task(
-    docId: docId ?? this.docId,
-    id: id ?? this.id,
-    title: title ?? this.title,
-    detail: detail ?? this.detail,
-    date: date ?? this.date,
-    isCompleted: isCompleted ?? this.isCompleted,
-    createdAt: createdAt ?? this.createdAt,
-    completedAt: completedAt ?? this.completedAt,
-    editHistory: editHistory ?? this.editHistory,
-    taskType: taskType ?? this.taskType,
-  );
-}
-
+    String? docId,
+    int? id,
+    String? title,
+    String? detail,
+    DateTime? date,
+    bool? isCompleted,
+    DateTime? createdAt,
+    DateTime? completedAt,
+    List<TaskEdit>? editHistory,
+    String? taskType,
+    List<DateTime>? notificationTimes,
+  }) {
+    return Task(
+      docId: docId ?? this.docId,
+      id: id ?? this.id,
+      title: title ?? this.title,
+      detail: detail ?? this.detail,
+      date: date ?? this.date,
+      isCompleted: isCompleted ?? this.isCompleted,
+      createdAt: createdAt ?? this.createdAt,
+      completedAt: completedAt ?? this.completedAt,
+      editHistory: editHistory ?? this.editHistory,
+      taskType: taskType ?? this.taskType,
+      notificationTimes: notificationTimes ?? this.notificationTimes,
+    );
+  }
 }
 
 class DailyTask extends Task {
@@ -173,7 +195,9 @@ class DailyTask extends Task {
     super.completedAt,
     this.morning = true,
     List<DateTime>? completionStamps,
-  }) : completionStamps = completionStamps ?? [];
+    required List<DateTime> notificationTimes,
+  }) : completionStamps = completionStamps ?? [],
+       super(notificationTimes: notificationTimes);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -182,7 +206,9 @@ class DailyTask extends Task {
     'taskType': 'DailyTask',
     'morning': morning,
     'completionStamps':
-        completionStamps.map((dt) => dt.toIso8601String()).toList(),
+        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
+    'notificationTimes':
+        notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
   };
 
   factory DailyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -197,6 +223,18 @@ class DailyTask extends Task {
       return List<DateTime>.from((list as List).map(parseTime));
     }
 
+    List<DateTime> parseNotificationTimes(dynamic list) {
+      if (list == null || list is! List) return [];
+      return list
+          .map((e) {
+            if (e is Timestamp) return e.toDate();
+            if (e is String) return DateTime.tryParse(e);
+            return null;
+          })
+          .whereType<DateTime>()
+          .toList();
+    }
+
     return DailyTask(
       docId: docId,
       id: map['id'],
@@ -209,6 +247,7 @@ class DailyTask extends Task {
           map['completedAt'] != null ? parseTime(map['completedAt']) : null,
       morning: map['morning'] ?? true,
       completionStamps: parseStamps(map['completionStamps']),
+      notificationTimes: parseNotificationTimes(map['notificationTimes']),
     );
   }
 
@@ -240,7 +279,9 @@ class WeeklyTask extends Task {
     required super.createdAt,
     super.completedAt,
     List<DateTime>? completionStamps,
-  }) : completionStamps = completionStamps ?? [];
+    required List<DateTime> notificationTimes,
+  }) : completionStamps = completionStamps ?? [],
+       super(notificationTimes: notificationTimes);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -248,7 +289,9 @@ class WeeklyTask extends Task {
     'type': 'WeeklyTask',
     'taskType': 'WeeklyTask',
     'completionStamps':
-        completionStamps.map((d) => d.toIso8601String()).toList(),
+        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
+    'notificationTimes':
+        notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
   };
 
   factory WeeklyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -263,6 +306,18 @@ class WeeklyTask extends Task {
       return List<DateTime>.from((list as List).map(parseTime));
     }
 
+    List<DateTime> parseNotificationTimes(dynamic list) {
+      if (list == null || list is! List) return [];
+      return list
+          .map((e) {
+            if (e is Timestamp) return e.toDate();
+            if (e is String) return DateTime.tryParse(e);
+            return null;
+          })
+          .whereType<DateTime>()
+          .toList();
+    }
+
     return WeeklyTask(
       docId: docId,
       id: map['id'],
@@ -274,6 +329,7 @@ class WeeklyTask extends Task {
       completedAt:
           map['completedAt'] != null ? parseTime(map['completedAt']) : null,
       completionStamps: parseStamps(map['completionStamps']),
+      notificationTimes: parseNotificationTimes(map['notificationsTimes']),
     );
   }
 
@@ -302,7 +358,9 @@ class MonthlyTask extends Task {
     super.completedAt,
     required this.dayOfMonth,
     List<DateTime>? completionStamps,
-  }) : completionStamps = completionStamps ?? [];
+    required List<DateTime> notificationTimes,
+  }) : completionStamps = completionStamps ?? [],
+       super(notificationTimes: notificationTimes);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -311,7 +369,9 @@ class MonthlyTask extends Task {
     'taskType': 'MonthlyTask',
     'dayOfMonth': dayOfMonth,
     'completionStamps':
-        completionStamps.map((d) => d.toIso8601String()).toList(),
+        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
+        'notificationTimes': notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
+
   };
 
   factory MonthlyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -326,6 +386,16 @@ class MonthlyTask extends Task {
       return List<DateTime>.from((list as List).map(parseTime));
     }
 
+    List<DateTime> parseNotificationTimes(dynamic list) {
+  if (list == null || list is! List) return [];
+  return list.map((e) {
+    if (e is Timestamp) return e.toDate();
+    if (e is String) return DateTime.tryParse(e);
+    return null;
+  }).whereType<DateTime>().toList();
+}
+
+
     return MonthlyTask(
       docId: docId,
       id: map['id'],
@@ -338,6 +408,7 @@ class MonthlyTask extends Task {
           map['completedAt'] != null ? parseTime(map['completedAt']) : null,
       dayOfMonth: map['dayOfMonth'],
       completionStamps: parseStamps(map['completionStamps']),
+      notificationTimes: parseNotificationTimes(map['notificationTimes'])
     );
   }
 

@@ -41,23 +41,26 @@ class _ItemWidgetState extends State<ItemWidget> {
     });
 
     // resetDaily(widget.item, completedList as Future<List<DateTime>>);
-     WidgetsBinding.instance.addPostFrameCallback((_) async {
-  final taskType = widget.item.taskType;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final taskType = widget.item.taskType;
 
-  if (taskType != 'oneTime') {
-    if (taskType == "DailyTask") {
-     /// await resetDaily(widget.item, completedList as Future<List<DateTime>>);
-    } else if (taskType == 'WeeklyTask') {
-      await resetWeekly(widget.item, completedList as Future<List<DateTime>>);
-    } else if (taskType == 'MonthlyTask') {
-      await resetMonthly(widget.item, completedList as Future<List<DateTime>>);
-    }
-    setState(() {}); // Refresh UI if task was reset
-  }
-});
-
-
-
+      if (taskType != 'oneTime') {
+        if (taskType == "DailyTask") {
+          /// await resetDaily(widget.item, completedList as Future<List<DateTime>>);
+        } else if (taskType == 'WeeklyTask') {
+          await resetWeekly(
+            widget.item,
+            completedList as Future<List<DateTime>>,
+          );
+        } else if (taskType == 'MonthlyTask') {
+          await resetMonthly(
+            widget.item,
+            completedList as Future<List<DateTime>>,
+          );
+        }
+        setState(() {}); // Refresh UI if task was reset
+      }
+    });
   }
 
   int get notificationId => widget.item.id.hashCode & 0x7FFFFFFF;
@@ -131,7 +134,7 @@ class _ItemWidgetState extends State<ItemWidget> {
             id: notificationId,
             title: widget.item.title,
             body: widget.item.detail,
-            dateTime: widget.item.date
+            dateTime: widget.item.date,
           );
         }
       }
@@ -164,6 +167,12 @@ class _ItemWidgetState extends State<ItemWidget> {
       });
       _showSnackbar("❌ Failed to update task: $e");
     }
+  }
+
+  int generateNotificationId(String taskId, DateTime time) {
+    // Creates a unique hash based on task ID and time
+    // return '${taskId}_${time.toIso8601String()}'.hashCode & 0x7FFFFFFF;
+    return (taskId + time.toIso8601String()).hashCode.abs();
   }
 
   Future<void> deleteTask(Task task) async {
@@ -205,9 +214,20 @@ class _ItemWidgetState extends State<ItemWidget> {
     );
 
     try {
-      final safeNotificationId = task.id.hashCode & 0x7FFFFFFF;
-      await NativeAlarmHelper.cancelAlarmById(safeNotificationId);
+      // 🔔 Cancel ALL notifications for this task
+      if (task.notificationTimes != null) {
+        for (final time in task.notificationTimes!) {
+          final id = generateNotificationId(task.id as String, time);
+          await NativeAlarmHelper.cancelAlarmById(id);
+          print("🔕 Canceled alarm for ID $id at $time");
+        }
+      } else {
+        // Fallback for single-alarm tasks
+        final fallbackId = task.id.hashCode & 0x7FFFFFFF;
+        await NativeAlarmHelper.cancelAlarmById(fallbackId);
+      }
 
+      // 🗑️ Delete from Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -277,48 +297,45 @@ class _ItemWidgetState extends State<ItemWidget> {
     return TextSpan(children: spans);
   }
 
- Future<List<DateTime>> loadCompletionStamps(Task task) async {
-  List<DateTime> completedList = [];
+  Future<List<DateTime>> loadCompletionStamps(Task task) async {
+    List<DateTime> completedList = [];
 
-  try {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw Exception("User not logged in");
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception("User not logged in");
 
-    final taskRef = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('tasks')
-        .doc(task.docId);
+      final taskRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(task.docId);
 
-    final snapshot = await taskRef.get();
+      final snapshot = await taskRef.get();
 
-    if (!snapshot.exists) {
-      print("⚠️ Document does not exist for task: ${task.docId}");
-      return completedList;
+      if (!snapshot.exists) {
+        print("⚠️ Document does not exist for task: ${task.docId}");
+        return completedList;
+      }
+
+      final data = snapshot.data();
+
+      if (data != null && data['completionStamps'] != null) {
+        final List<dynamic> stamps = data['completionStamps'];
+
+        completedList =
+            stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+
+        print("✅ Loaded ${completedList.length} completion stamps.");
+      } else {
+        print("⚠️ No 'completionStamps' field found.");
+      }
+    } catch (e, stack) {
+      print("❌ Error loading completion stamps: $e");
+      print(stack);
     }
 
-    final data = snapshot.data();
-
-    if (data != null && data['completionStamps'] != null) {
-      final List<dynamic> stamps = data['completionStamps'];
-
-      completedList = stamps
-          .whereType<Timestamp>()
-          .map((ts) => ts.toDate())
-          .toList();
-
-      print("✅ Loaded ${completedList.length} completion stamps.");
-    } else {
-      print("⚠️ No 'completionStamps' field found.");
-    }
-  } catch (e, stack) {
-    print("❌ Error loading completion stamps: $e");
-    print(stack);
+    return completedList;
   }
-
-  return completedList;
-}
-
 
   Future<void> resetDaily(
     Task task,

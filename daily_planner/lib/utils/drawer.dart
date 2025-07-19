@@ -1,5 +1,4 @@
 import 'package:daily_planner/screens/login.dart';
-import 'package:daily_planner/screens/performance.dart';
 import 'package:daily_planner/screens/settings.dart';
 import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
 import 'package:daily_planner/utils/performance_page/total_tasks.dart';

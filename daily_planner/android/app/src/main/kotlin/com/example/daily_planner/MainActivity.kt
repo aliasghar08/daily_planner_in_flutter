@@ -53,6 +53,19 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
 
+                        "cancelAlarm" -> {
+    val id = call.argument<Int>("id") ?: 0
+    cancelAlarm(id)
+    result.success(null)
+}
+
+
+                        "promptDisableBatteryOptimization" -> {
+    promptDisableBatteryOptimization()
+    result.success(null)
+}
+
+
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {
@@ -121,6 +134,25 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun promptDisableBatteryOptimization() {
+    try {
+        val packageName = applicationContext.packageName
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = android.net.Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+        } else {
+            Log.i("BatteryOpt", "Already ignoring battery optimizations.")
+        }
+    } catch (e: Exception) {
+        Log.e("BatteryOpt", "Failed to prompt disable battery optimization", e)
+    }
+}
+
+
     private fun openManufacturerSettings() {
         val manufacturer = Build.MANUFACTURER.lowercase(Locale.getDefault())
         val intent = when {
@@ -163,4 +195,18 @@ class MainActivity : FlutterActivity() {
             startActivity(Intent(Settings.ACTION_SETTINGS))
         }
     }
+
+    private fun cancelAlarm(id: Int) {
+    val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val intent = Intent(this, AlarmReceiver::class.java)
+
+    val pendingIntent = PendingIntent.getBroadcast(
+        this, id, intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    alarmManager.cancel(pendingIntent)
+    Log.d("AlarmCancel", "Alarm with ID $id cancelled.")
+}
+
 }

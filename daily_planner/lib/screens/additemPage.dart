@@ -34,9 +34,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _detailController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
-  TaskType _selectedType = TaskType.oneTime; 
+  TaskType _selectedType = TaskType.oneTime;
   bool _isCompleted = false;
   bool _isSaving = false;
+  List<DateTime> _notificationTimes = [];
 
   @override
   void dispose() {
@@ -75,6 +76,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   String formatDate(DateTime date) => DateFormat.yMMMd().format(date);
   String formatTime(DateTime date) => DateFormat.jm().format(date);
+
+  // Generate unique notification ID based on task ID and notification time
+  int _generateNotificationId(String taskId, DateTime notificationTime) {
+    // return (taskId.hashCode + notificationTime.toIso8601String()).abs();
+    return (taskId + notificationTime.toIso8601String()).hashCode.abs();
+  }
 
   Future<void> _addTask() async {
     final title = _titleController.text.trim();
@@ -118,22 +125,23 @@ class _AddTaskPageState extends State<AddTaskPage> {
       if (_isCompleted && _selectedDate.isAfter(now)) {
         final confirm = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text("Mark as Completed?"),
-            content: const Text(
-              "This task is set in the future. Are you sure you want to mark it as completed?",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text("No"),
+          builder:
+              (context) => AlertDialog(
+                title: const Text("Mark as Completed?"),
+                content: const Text(
+                  "This task is set in the future. Are you sure you want to mark it as completed?",
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text("No"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text("Yes"),
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text("Yes"),
-              ),
-            ],
-          ),
         );
         if (confirm != true) {
           setState(() {
@@ -143,12 +151,28 @@ class _AddTaskPageState extends State<AddTaskPage> {
         }
       }
 
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-      final newTaskRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc();
+      // final uid = FirebaseAuth.instance.currentUser!.uid;
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("❌ You must be logged in to add tasks."),
+          ),
+        );
+        setState(() {
+          _isSaving = false;
+        });
+        return;
+      }
+      final uid = user.uid;
+
+      final newTaskRef =
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('tasks')
+              .doc();
 
       final taskId = now.millisecondsSinceEpoch;
       final notificationId = taskId % 100000;
@@ -167,6 +191,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             taskType: _selectedType.name,
+            notificationTimes: _notificationTimes,
           );
           break;
 
@@ -181,6 +206,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
+            notificationTimes: _notificationTimes,
           );
           break;
 
@@ -195,6 +221,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
+            notificationTimes: _notificationTimes,
           );
           break;
 
@@ -211,36 +238,85 @@ class _AddTaskPageState extends State<AddTaskPage> {
             completedAt: _isCompleted ? now : null,
             dayOfMonth: dayOfMonth,
             completionStamps: _isCompleted ? [now] : [],
+            notificationTimes:
+                _notificationTimes, // Fixed typo in parameter name
           );
           break;
       }
 
       await newTaskRef.set(newTask.toMap());
 
-      final notificationTime = newTask.date.subtract(
-        const Duration(minutes: 15),
-      );
-      if (!_isCompleted && notificationTime.isAfter(now)) {
-        await NativeAlarmHelper.scheduleAlarmAtTime(
-          id: notificationId,
-          title: 'Upcoming Task',
-          body:
-              '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-           dateTime: newTask.date,
-        );
+      if (!_isCompleted) {
+        if (_notificationTimes.isEmpty) {
+          final fallbackTime = newTask.date.subtract(
+            const Duration(minutes: 15),
+          );
+          if (fallbackTime.isAfter(now)) {
+            final fallbackId = _generateNotificationId(
+              newTaskRef.id,
+              fallbackTime,
+            );
+            await NativeAlarmHelper.scheduleAlarmAtTime(
+              id: fallbackId,
+              title: 'Upcoming Task',
+              body:
+                  '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+              dateTime: fallbackTime,
+            );
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "✅ Notification scheduled at ${DateFormat.yMd().add_jm().format(notificationTime)} (ID: $notificationId)",
-            ),
-          ),
-        );
+            _notificationTimes.add(fallbackTime);
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "✅ Notification scheduled at ${DateFormat.yMd().add_jm().format(fallbackTime)} (ID: $fallbackId)",
+                ),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  "ℹ️ Default notification time too close. No notification scheduled.",
+                ),
+              ),
+            );
+          }
+        } else {
+          int scheduledCount = 0;
+          for (final notiTime in _notificationTimes) {
+            if (notiTime.isAfter(now)) {
+              final notiId = _generateNotificationId(newTaskRef.id, notiTime);
+              await NativeAlarmHelper.scheduleAlarmAtTime(
+                id: notiId,
+                title: 'Task Reminder',
+                body:
+                    '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+                dateTime: notiTime,
+              );
+              scheduledCount++;
+            }
+          }
+
+          if (scheduledCount > 0) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("✅ $scheduledCount notification(s) scheduled."),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("ℹ️ No future notifications scheduled."),
+              ),
+            );
+          }
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "ℹ️ No notification scheduled (task is completed or time is too close).",
+              "ℹ️ Task is marked completed. No notification scheduled.",
             ),
           ),
         );
@@ -271,6 +347,67 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
+  Future<void> _pickNotificationTime() async {
+    final now = DateTime.now();
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: now,
+      lastDate: _selectedDate,
+    );
+    if (pickedDate == null) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (pickedTime == null) return;
+
+    final newNotificationTime = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    if (newNotificationTime.isBefore(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Notification time must be in the future."),
+        ),
+      );
+      return;
+    }
+
+    if (newNotificationTime.isAfter(_selectedDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ Notification time must be before task time."),
+        ),
+      );
+      return;
+    }
+
+    // Check for duplicate notification times
+    if (_notificationTimes.any(
+      (time) => time.isAtSameMomentAs(newNotificationTime),
+    )) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ This notification time is already added."),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _notificationTimes.add(newNotificationTime);
+      _notificationTimes.sort();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedDate = formatDate(_selectedDate);
@@ -296,12 +433,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
               DropdownButtonFormField<TaskType>(
                 value: _selectedType,
                 decoration: const InputDecoration(labelText: "Task Type"),
-                items: TaskType.values.map((type) {
-                  return DropdownMenuItem(
-                    value: type,
-                    child: Text(type.label),
-                  );
-                }).toList(),
+                items:
+                    TaskType.values.map((type) {
+                      return DropdownMenuItem(
+                        value: type,
+                        child: Text(type.label),
+                      );
+                    }).toList(),
                 onChanged: (type) {
                   if (type != null) {
                     setState(() {
@@ -320,6 +458,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
               if (_selectedType == TaskType.oneTime)
                 const Text("📌 This task will occur only once."),
               const SizedBox(height: 12),
+
               Row(
                 children: [
                   Expanded(child: Text("Date: $formattedDate")),
@@ -330,6 +469,40 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Text("🔔 Notifications:"),
+                  TextButton(
+                    onPressed: _pickNotificationTime,
+                    child: const Text("Add Notification Time"),
+                  ),
+                ],
+              ),
+              if (_notificationTimes.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children:
+                      _notificationTimes.map((time) {
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            "• ${DateFormat.yMd().add_jm().format(time)}",
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              setState(() {
+                                _notificationTimes.remove(time);
+                              });
+                            },
+                          ),
+                        );
+                      }).toList(),
+                ),
+
               SwitchListTile(
                 title: const Text("Completed"),
                 value: _isCompleted,
@@ -343,10 +516,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
               _isSaving
                   ? const CircularProgressIndicator()
                   : ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
-                      label: const Text("Add Task"),
-                      onPressed: _addTask,
-                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add Task"),
+                    onPressed: _addTask,
+                  ),
             ],
           ),
         ),

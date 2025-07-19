@@ -20,6 +20,8 @@ class _EditTaskPageState extends State<EditTaskPage> {
   late TextEditingController _editNoteController;
   late DateTime _selectedDate;
   late bool _isCompleted;
+  List<DateTime> _notiificationTimes = [];
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -29,6 +31,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _editNoteController = TextEditingController();
     _selectedDate = widget.task.date;
     _isCompleted = widget.task.isCompleted;
+
+    loadNotificationTimes(widget.task).then((times) {
+      setState(() {
+        _notiificationTimes = times;
+      });
+    });
   }
 
   @override
@@ -37,6 +45,40 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _detailController.dispose();
     _editNoteController.dispose();
     super.dispose();
+  }
+
+  // Generate unique notification ID based on task ID and notification time
+  int generateNotificationId(String taskId, DateTime time) {
+    //  return (taskId.hashCode + time.millisecondsSinceEpoch).hashCode.abs();
+    return (taskId + time.toIso8601String()).hashCode.abs();
+  }
+
+  Future<List<DateTime>> loadNotificationTimes(Task task) async {
+    List<DateTime> notificationTimes = [];
+
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception("User not logged in");
+
+      final taskRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(task.docId);
+
+      final snapshot = await taskRef.get();
+      final data = snapshot.data();
+
+      if (data != null && data['notificationTimes'] != null) {
+        final List<dynamic> rawList = data['notificationTimes'];
+        notificationTimes =
+            rawList.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+      }
+    } catch (e) {
+      debugPrint("Error loading Notification Times: $e");
+    }
+
+    return notificationTimes;
   }
 
   Future<void> _pickDateTime() async {
@@ -67,9 +109,216 @@ class _EditTaskPageState extends State<EditTaskPage> {
     });
   }
 
-  Future<void> _saveChanges() async {
-    final user = FirebaseAuth.instance.currentUser;
+  Future<void> _pickNotificationTime() async {
+    final now = DateTime.now();
 
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: now,
+      lastDate: _selectedDate,
+    );
+    if (pickedDate == null) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (pickedTime == null) return;
+
+    final newNotificationTime = DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+
+    if (newNotificationTime.isBefore(now)) {
+      _showSnackBar("❌ Notification time must be in the future.");
+      return;
+    }
+
+    if (newNotificationTime.isAfter(_selectedDate)) {
+      _showSnackBar("❌ Notification time must be before task time.");
+      return;
+    }
+
+    // Check for duplicate
+    if (_notiificationTimes.any(
+      (time) => time.isAtSameMomentAs(newNotificationTime),
+    )) {
+      _showSnackBar("❌ This notification time is already added.");
+      return;
+    }
+
+    setState(() {
+      _notiificationTimes.add(newNotificationTime);
+      _notiificationTimes.sort();
+    });
+  }
+
+  void removeNotificationTime(DateTime time) {
+    setState(() {
+      _notiificationTimes.remove(time);
+    });
+  }
+
+  // Future<void> _saveChanges() async {
+  //   if (_isSaving) return;
+  //   setState(() => _isSaving = true);
+
+  //   final user = FirebaseAuth.instance.currentUser;
+
+  //   if (user == null) {
+  //     _showSnackBar("❌ User not signed in.");
+  //     setState(() => _isSaving = false);
+  //     return;
+  //   }
+
+  //   if (widget.task.docId == null) {
+  //     _showSnackBar("❌ Task ID not found.");
+  //     setState(() => _isSaving = false);
+  //     return;
+  //   }
+
+  //   final String newTitle = _titleController.text.trim();
+
+  //   if (newTitle.isEmpty) {
+  //     _showSnackBar("⚠️ Task title cannot be empty.");
+  //     setState(() => _isSaving = false);
+  //     return;
+  //   }
+
+  //   if (_selectedDate.isBefore(DateTime.now())) {
+  //     _showSnackBar("⚠️ Please choose a future date and time.");
+  //     setState(() => _isSaving = false);
+  //     return;
+  //   }
+
+  //   if (_isCompleted && _selectedDate.isAfter(DateTime.now())) {
+  //     final confirm = await showDialog<bool>(
+  //       context: context,
+  //       builder:
+  //           (context) => AlertDialog(
+  //             title: const Text("Mark as Completed?"),
+  //             content: const Text(
+  //               "This task is still scheduled for the future. Are you sure you want to mark it as completed?",
+  //             ),
+  //             actions: [
+  //               TextButton(
+  //                 onPressed: () => Navigator.pop(context, false),
+  //                 child: const Text("No"),
+  //               ),
+  //               ElevatedButton(
+  //                 onPressed: () => Navigator.pop(context, true),
+  //                 child: const Text("Yes"),
+  //               ),
+  //             ],
+  //           ),
+  //     );
+  //     if (confirm != true) {
+  //       setState(() => _isSaving = false);
+  //       return;
+  //     }
+  //   }
+
+  //   // Prepare notification times (add fallback if needed)
+  //   List<DateTime> finalNotificationTimes = List.from(_notiificationTimes);
+  //   final now = DateTime.now();
+
+  //   if (!_isCompleted && finalNotificationTimes.isEmpty) {
+  //     final fallbackTime = _selectedDate.subtract(const Duration(minutes: 15));
+  //     if (fallbackTime.isAfter(now)) {
+  //       finalNotificationTimes.add(fallbackTime);
+  //       finalNotificationTimes.sort();
+  //     }
+  //   }
+
+  //   // Cancel all existing notifications
+  //   for (final time in widget.task.notificationTimes) {
+  //     final id = generateNotificationId(widget.task.docId!, time);
+  //     await NativeAlarmHelper.cancelAlarmById(id);
+  //   }
+
+  //   // Schedule new notifications
+  //   if (!_isCompleted) {
+  //     int scheduledCount = 0;
+
+  //     for (final time in finalNotificationTimes) {
+  //       if (time.isAfter(now)) {
+  //         final id = generateNotificationId(widget.task.docId!, time);
+  //         await NativeAlarmHelper.scheduleAlarmAtTime(
+  //           id: id,
+  //           title: 'Reminder: $newTitle',
+  //           body:
+  //               '$newTitle is due at ${DateFormat.jm().format(_selectedDate)}',
+  //           dateTime: time,
+  //         );
+  //         scheduledCount++;
+  //       }
+  //     }
+
+  //     if (scheduledCount > 0) {
+  //       _showSnackBar("✅ $scheduledCount notification(s) scheduled.");
+  //     } else {
+  //       _showSnackBar("ℹ️ No future notifications scheduled.");
+  //     }
+  //   }
+
+  //   // Update task in Firestore
+  //   final updatedTask = widget.task.copyWith(
+  //     title: newTitle,
+  //     detail: _detailController.text.trim(),
+  //     date: _selectedDate,
+  //     isCompleted: _isCompleted,
+  //     notificationTimes: finalNotificationTimes,
+  //     editHistory: [
+  //       ...widget.task.editHistory,
+  //       TaskEdit(
+  //         timestamp: DateTime.now(),
+  //         note:
+  //             _editNoteController.text.trim().isEmpty
+  //                 ? null
+  //                 : _editNoteController.text.trim(),
+  //       ),
+  //     ],
+  //   );
+
+  //   try {
+  //     final updateData = updatedTask.toMap();
+  //     // Convert DateTime fields to Firestore Timestamps
+  //     updateData['date'] = Timestamp.fromDate(updatedTask.date);
+  //     updateData['notificationTimes'] =
+  //         updatedTask.notificationTimes
+  //             .map((dt) => Timestamp.fromDate(dt))
+  //             .toList();
+
+  //    await FirebaseFirestore.instance
+  //   .collection('users')
+  //   .doc(user.uid)
+  //   .collection('tasks')
+  //   .doc(updatedTask.docId)
+  //   .update(updateData);
+
+
+  //     _showSnackBar("✅ Task '${updatedTask.title}' updated successfully.");
+  //     if (mounted) Navigator.pop(context, true);
+  //   } catch (e, stackTrace) {
+  //     debugPrint("❌ Error updating task: $e");
+  //     debugPrint("📌 Stack trace: $stackTrace");
+  //     _showSnackBar("❌ Failed to update task. Try again.");
+  //   } finally {
+  //     if (mounted) setState(() => _isSaving = false);
+  //   }
+  // }
+
+  Future<void> _saveChanges() async {
+  if (_isSaving) return;
+  setState(() => _isSaving = true);
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _showSnackBar("❌ User not signed in.");
       return;
@@ -81,109 +330,108 @@ class _EditTaskPageState extends State<EditTaskPage> {
     }
 
     final String newTitle = _titleController.text.trim();
-
     if (newTitle.isEmpty) {
       _showSnackBar("⚠️ Task title cannot be empty.");
       return;
     }
 
-    if (_selectedDate.isBefore(DateTime.now())) {
-      _showSnackBar("⚠️ Please choose a future date and time.");
-      return;
-    }
+    // Prepare notification times
+    List<DateTime> finalNotificationTimes = List.from(_notiificationTimes);
+    final now = DateTime.now();
 
-    if (_isCompleted && _selectedDate.isAfter(DateTime.now())) {
-      final confirm = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Mark as Completed?"),
-          content: const Text(
-            "This task is still scheduled for the future. Are you sure you want to mark it as completed?",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("No"),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Yes"),
-            ),
-          ],
-        ),
-      );
-      if (confirm != true) return;
-    }
-
-    final updatedTask = widget.task.copyWith(
-      title: newTitle,
-      detail: _detailController.text.trim(),
-      date: _selectedDate,
-      isCompleted: _isCompleted,
-      editHistory: [
-        ...widget.task.editHistory,
-        TaskEdit(
-          timestamp: DateTime.now(),
-          note: _editNoteController.text.trim().isEmpty
-              ? null
-              : _editNoteController.text.trim(),
-        ),
-      ],
-    );
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .doc(updatedTask.docId)
-          .update(updatedTask.toMap());
-
-      final int notificationId = updatedTask.id.hashCode & 0x7FFFFFFF;
-      await NativeAlarmHelper.cancelAlarmById(notificationId);
-
-      final DateTime notificationTime = updatedTask.date.subtract(
-        const Duration(minutes: 15),
-      );
-
-      if (!updatedTask.isCompleted &&
-          notificationTime.isAfter(DateTime.now())) {
-        await NativeAlarmHelper.scheduleAlarmAtTime(
-          id: updatedTask.id,
-          title: 'Reminder: ${updatedTask.title}',
-          body:
-              '${updatedTask.title} is due at ${DateFormat.jm().format(updatedTask.date)}',
-          dateTime: updatedTask.date,
-        );
-
-        _showSnackBar(
-          "✅ Notification scheduled at ${DateFormat.yMd().add_jm().format(notificationTime)}",
-        );
-      } else if (updatedTask.isCompleted) {
-        _showSnackBar(
-          "✔️ Task marked as completed, no notification scheduled.",
-        );
-      } else {
-        _showSnackBar("⏰ Too late to schedule notification.");
+    if (!_isCompleted && finalNotificationTimes.isEmpty) {
+      final fallbackTime = _selectedDate.subtract(const Duration(minutes: 15));
+      if (fallbackTime.isAfter(now)) {
+        finalNotificationTimes.add(fallbackTime);
+        finalNotificationTimes.sort();
       }
-
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      debugPrint("❌ Error updating task: $e");
-      _showSnackBar("❌ Failed to update task. Try again.");
     }
+
+    // Cancel all existing notifications
+    for (final time in widget.task.notificationTimes) {
+      final id = generateNotificationId(widget.task.docId!, time);
+      await NativeAlarmHelper.cancelAlarmById(id);
+    }
+
+    // Schedule new notifications
+    if (!_isCompleted) {
+      for (final time in finalNotificationTimes) {
+        if (time.isAfter(now)) {
+          final id = generateNotificationId(widget.task.docId!, time);
+          await NativeAlarmHelper.scheduleAlarmAtTime(
+            id: id,
+            title: 'Reminder: $newTitle',
+            body: '$newTitle is due at ${DateFormat.jm().format(_selectedDate)}',
+            dateTime: time,
+          );
+        }
+      }
+    }
+
+    // Create update data with proper type conversions
+    final updateData = {
+      'title': newTitle,
+      'detail': _detailController.text.trim(),
+      'date': Timestamp.fromDate(_selectedDate),
+      'isCompleted': _isCompleted,
+      'notificationTimes': finalNotificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
+      'editHistory': FieldValue.arrayUnion([
+        {
+          'timestamp': Timestamp.now(),
+          'note': _editNoteController.text.trim().isEmpty 
+              ? null 
+              : _editNoteController.text.trim(),
+        }
+      ]),
+    };
+
+    // Handle task type specific fields
+    if (widget.task is DailyTask) {
+      updateData['type'] = 'DailyTask';
+      updateData['taskType'] = 'DailyTask';
+    } 
+    else if (widget.task is WeeklyTask) {
+      updateData['type'] = 'WeeklyTask';
+      updateData['taskType'] = 'WeeklyTask';
+    }
+    else if (widget.task is MonthlyTask) {
+      updateData['type'] = 'MonthlyTask';
+      updateData['taskType'] = 'MonthlyTask';
+      updateData['dayOfMonth'] = (widget.task as MonthlyTask).dayOfMonth;
+    }
+
+    debugPrint("Updating task with data: $updateData");
+
+    // Update Firestore document
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('tasks')
+        .doc(widget.task.docId)
+        .update(updateData);
+
+    _showSnackBar("✅ Task updated successfully!");
+    if (mounted) Navigator.pop(context, true);
+
+  } catch (e, stackTrace) {
+    debugPrint("❌ Error updating task: $e");
+    debugPrint("📌 Stack trace: $stackTrace");
+    _showSnackBar("❌ Failed to update task: ${e.toString()}");
+  } finally {
+    if (mounted) setState(() => _isSaving = false);
   }
+}
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final String dateStr =
-        DateFormat('EEE, MMM d, yyyy').format(_selectedDate);
+    final String dateStr = DateFormat('EEE, MMM d, yyyy').format(_selectedDate);
     final String timeStr = DateFormat('h:mm a').format(_selectedDate);
 
     return Scaffold(
@@ -242,12 +490,43 @@ class _EditTaskPageState extends State<EditTaskPage> {
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.save),
-                label: const Text("Save Changes"),
-                onPressed: _saveChanges,
+              const SizedBox(height: 16),
+
+              ExpansionTile(
+                leading: const Icon(Icons.notifications),
+                title: const Text("Notification Times"),
+                children: [
+                  ..._notiificationTimes.map((date) {
+                    final id = generateNotificationId(widget.task.docId!, date);
+
+                    return ListTile(
+                      leading: const Icon(Icons.access_time),
+                      title: Text(
+                        DateFormat('MMM d, yyyy • h:mm a').format(date),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => removeNotificationTime(date),
+                      ),
+                    );
+                  }).toList(),
+                  TextButton.icon(
+                    onPressed: _pickNotificationTime,
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add Notification Time"),
+                  ),
+                ],
               ),
+
+              const SizedBox(height: 24),
+              _isSaving
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text("Save Changes"),
+                    onPressed: _saveChanges,
+                  ),
+                  const SizedBox(height: 24,),
             ],
           ),
         ),

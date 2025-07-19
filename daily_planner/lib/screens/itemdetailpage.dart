@@ -23,6 +23,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   List<DateTime> completedList = [];
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  List<DateTime> notificationTimes = [];
 
   // Use default system sound instead of custom resource
   final AndroidNotificationDetails _androidDetails =
@@ -48,6 +49,12 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     loadCompletionStamps(widget.task).then((loadedList) {
       setState(() {
         completedList = loadedList;
+      });
+    });
+
+    loadNotificationTimes(widget.task).then((times) {
+      setState(() {
+        notificationTimes = times;
       });
     });
   }
@@ -134,32 +141,33 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   }
 
   Future<void> _showInstantNotification() async {
-  try {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'daily_planner_channel',
-      'Daily Planner Notifications',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-    
-    const NotificationDetails platformChannelSpecifics =
-        NotificationDetails(android: androidPlatformChannelSpecifics);
-    
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      'Test Notification',
-      'This is a test notification',
-      platformChannelSpecifics,
-      payload: 'test_payload',
-    );
-    
-    debugPrint('Notification shown successfully');
-  } catch (e) {
-    debugPrint('Error showing notification: $e');
+    try {
+      const AndroidNotificationDetails androidPlatformChannelSpecifics =
+          AndroidNotificationDetails(
+            'daily_planner_channel',
+            'Daily Planner Notifications',
+            importance: Importance.max,
+            priority: Priority.high,
+            showWhen: true,
+          );
+
+      const NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidPlatformChannelSpecifics,
+      );
+
+      await flutterLocalNotificationsPlugin.show(
+        0,
+        'Test Notification',
+        'This is a test notification',
+        platformChannelSpecifics,
+        payload: 'test_payload',
+      );
+
+      debugPrint('Notification shown successfully');
+    } catch (e) {
+      debugPrint('Error showing notification: $e');
+    }
   }
-}
 
   Future<void> _triggerTestAlarm() async {
     try {
@@ -180,9 +188,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       await NativeAlarmHelper.scheduleAlarmAtTime(
         id: id,
-        
+
         title: '🔔 Test Alarm',
-        body: 'You tapped the test alarm button!', dateTime: time,
+        body: 'You tapped the test alarm button!',
+        dateTime: time,
       );
 
       scaffoldMessengerKey.currentState?.showSnackBar(
@@ -295,6 +304,133 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     return completedList;
   }
 
+  // Future<List<DateTime>> loadNotificationTimes(Task task) async {
+  //   notificationTimes = [];
+
+  //   try {
+  //     final uid = FirebaseAuth.instance.currentUser?.uid;
+  //     if (uid == null) throw Exception("User not logged in");
+
+  //     final taskRef = FirebaseFirestore.instance
+  //         .collection('users')
+  //         .doc(uid)
+  //         .collection('tasks')
+  //         .doc(task.docId);
+
+  //     final snapshot = await taskRef.get();
+  //     final data = snapshot.data();
+
+  //     if (data != null && data['notificationTimes'] != null) {
+  //       final List<dynamic> stamps = data['notificationTimes'];
+  //       notificationTimes =
+  //           stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error loading Notification Times: $e");
+  //   }
+
+  //   return notificationTimes;
+  // }
+
+  //   Future<List<DateTime>> loadNotificationTimes(Task task) async {
+  //   List<DateTime> notificationTimes = [];
+
+  //   try {
+  //     final uid = FirebaseAuth.instance.currentUser?.uid;
+  //     if (uid == null) throw Exception("User not logged in");
+
+  //     final taskRef = FirebaseFirestore.instance
+  //         .collection('users')
+  //         .doc(uid)
+  //         .collection('tasks')
+  //         .doc(task.docId);
+
+  //     final snapshot = await taskRef.get();
+  //     final data = snapshot.data();
+
+  //     if (data != null && data['notificationTimes'] != null) {
+  //       final List<dynamic> rawList = data['notificationTimes'];
+
+  //       // Safely convert dynamic list to DateTime
+  //       notificationTimes = rawList
+  //           .where((e) => e != null)
+  //           .map((e) {
+  //             if (e is Timestamp) return e.toDate();
+  //             if (e is DateTime) return e;
+  //             return null;
+  //           })
+  //           .whereType<DateTime>()
+  //           .toList();
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error loading Notification Times: $e");
+  //   }
+
+  //   return notificationTimes;
+  // }
+
+  // Future<List<DateTime>> loadNotificationTimes(Task task) async {
+  //   List<DateTime> notificationTimes = [];
+
+  //   try {
+  //     final uid = FirebaseAuth.instance.currentUser?.uid;
+  //     if (uid == null) throw Exception("User not logged in");
+
+  //     final taskRef = FirebaseFirestore.instance
+  //         .collection('users')
+  //         .doc(uid)
+  //         .collection('tasks')
+  //         .doc(task.docId);
+
+  //     final snapshot = await taskRef.get();
+  //     final data = snapshot.data();
+
+  //     if (data != null && data['notificationTimes'] != null) {
+  //       final List<dynamic> rawList = data['notificationTimes'];
+
+  //       // ⛳ Match loadCompletionStamps pattern
+  //       notificationTimes =
+  //           rawList.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error loading Notification Times: $e");
+  //   }
+
+  //   return notificationTimes;
+  // }
+
+  Future<List<DateTime>> loadNotificationTimes(Task task) async {
+    List<DateTime> notificationTimes = [];
+
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw Exception("User not logged in");
+
+      final taskRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(task.docId);
+
+      final snapshot = await taskRef.get();
+      final data = snapshot.data();
+
+      if (data != null && data['notificationTimes'] != null) {
+        final List<dynamic> rawList = data['notificationTimes'];
+
+        // ⛳ Match loadCompletionStamps pattern
+        notificationTimes =
+            rawList.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+      }
+    } catch (e) {
+      debugPrint("Error loading Notification Times: $e");
+    }
+
+    print("Parsed: $notificationTimes");
+
+    return notificationTimes;
+  }
+
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
@@ -404,6 +540,19 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 ],
 
                 const SizedBox(height: 24),
+                ExpansionTile(
+                  leading: const Icon(Icons.notifications),
+                  title: const Text("See All Notifcation Times"),
+                  children:
+                      notificationTimes.map((date) {
+                        return ListTile(
+                          leading: const Icon(Icons.check),
+                          title: Text(
+                            DateFormat('MMM d, yyyy • h:mm a').format(date),
+                          ),
+                        );
+                      }).toList(),
+                ),
                 const Divider(),
                 const Text(
                   "🔔 Notification Test Buttons",

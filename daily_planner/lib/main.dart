@@ -39,9 +39,18 @@ Future<void> main() async {
   try {
     await _initializeCoreServices();
     await _initializeAndroidServices();
+    // await BatteryOptimizationHelper.promptDisableBatteryOptimization();
     runApp(const MyApp());
   } catch (e, stack) {
     debugPrint('Initialization failed: $e\n$stack');
+    if (!kIsWeb && Platform.isAndroid) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(seconds: 2));
+        {
+          BatteryOptimizationHelper.promptDisableBatteryOptimization();
+        }
+      });
+    }
     runApp(const InitializationErrorApp());
   }
 
@@ -110,25 +119,28 @@ Future<void> _initializeAndroidServices() async {
   final initializationSettings = InitializationSettings(
     android: androidInit,
     iOS: iosInit,
-
   );
 
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings,   onDidReceiveNotificationResponse: (NotificationResponse response) {
-    if (response.actionId == 'STOP_ACTION') {
-      flutterLocalNotificationsPlugin.cancel(response.id!);
-    } else if (response.actionId == 'SNOOZE_ACTION') {
-      flutterLocalNotificationsPlugin.cancel(response.id!);
-      // Reschedule after 5 minutes
-      flutterLocalNotificationsPlugin.zonedSchedule(
-        response.id!,
-        'Snoozed Reminder',
-        'Reminder after snooze!',
-        tz.TZDateTime.now(tz.local).add(Duration(minutes: 5)),
-        NotificationDetails(),
-        
-       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle);
-    }
-  },);
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) {
+      if (response.actionId == 'STOP_ACTION') {
+        flutterLocalNotificationsPlugin.cancel(response.id!);
+      } else if (response.actionId == 'SNOOZE_ACTION') {
+        flutterLocalNotificationsPlugin.cancel(response.id!);
+        // Reschedule after 5 minutes
+        flutterLocalNotificationsPlugin.zonedSchedule(
+          response.id!,
+          'Snoozed Reminder',
+          'Reminder after snooze!',
+          tz.TZDateTime.now(tz.local).add(Duration(minutes: 5)),
+          NotificationDetails(),
+
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        );
+      }
+    },
+  );
   if (Platform.isAndroid) {
     await flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
@@ -173,8 +185,9 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     if (!kIsWeb && Platform.isAndroid) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {});
-      BatteryOptimizationHelper.requestDisableBatteryOptimization();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        BatteryOptimizationHelper.promptDisableBatteryOptimization();
+      });
     }
   }
 

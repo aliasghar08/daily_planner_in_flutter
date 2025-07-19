@@ -10,4 +10,13 @@ class BatteryOptimizationHelper {
       print('Failed to disable battery optimization: ${e.message}');
     }
   }
+
+  static Future<void> promptDisableBatteryOptimization() async {
+  try {
+    await platform.invokeMethod('promptDisableBatteryOptimization');
+  } on PlatformException catch (e) {
+    print('Failed to prompt for disabling battery optimization: ${e.message}');
+  }
+}
+
 }
