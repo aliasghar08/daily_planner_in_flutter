@@ -11,7 +11,7 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
 - 🔔 **Alarms & Notifications**
   - Schedule alarms using native Android code
   - Alarm logic integrated with each task type
-  - Multiple notifications for a task
+  - Multiple alarms for a task
 
 - 📈 **Advanced Performance Analytics**
   - View overall completion rates, longest streaks, and breakdowns by category
