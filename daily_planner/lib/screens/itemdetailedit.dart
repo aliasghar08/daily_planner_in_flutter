@@ -519,13 +519,15 @@ class _EditTaskPageState extends State<EditTaskPage> {
               ),
 
               const SizedBox(height: 24),
-              _isSaving
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Save Changes"),
-                    onPressed: _saveChanges,
-                  ),
+              Center(
+                child: _isSaving
+                    ? const CircularProgressIndicator()
+                    : ElevatedButton.icon(
+                      icon: const Icon(Icons.add),
+                      label: const Text("Save Changes"),
+                      onPressed: _saveChanges,
+                    ),
+              ),
                   const SizedBox(height: 24,),
             ],
           ),

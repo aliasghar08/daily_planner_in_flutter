@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/signup.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -197,7 +198,24 @@ class _LoginPageState extends State<LoginPage> {
                               ? null
                               : 'Password must be at least 6 characters long',
                 ),
-                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    
+                    TextButton(
+
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ForgotPasswordScreen(),
+                          ),
+                        );
+                      },
+                      child: Text("Forgot Password?"),
+                    ),
+                  ],
+                ),
 
                 SizedBox(
                   width: double.infinity,
@@ -253,7 +271,6 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

@@ -53,15 +53,38 @@ class _MyDrawerState extends State<MyDrawer> {
               leading: Icon(Icons.logout),
               title: Text('Logout'),
               onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text("Logged out")));
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => LoginPage()),
+                final shouldLogout = await showDialog<bool>(
+                  context: context,
+                  builder:
+                      (context) => AlertDialog(
+                        title: const Text("Log out Confirmation"),
+                        content: const Text(
+                          "Are you sure you want to log out?",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text("No"),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(true),
+                            child: const Text("Yes"),
+                          ),
+                        ],
+                      ),
                 );
+
+                if (shouldLogout == true) {
+                  await FirebaseAuth.instance.signOut();
+                  Navigator.pop(context); // Close the drawer
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text("Logged out")));
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => LoginPage()),
+                  );
+                }
               },
             ),
             ListTile(
@@ -76,7 +99,7 @@ class _MyDrawerState extends State<MyDrawer> {
                 });
               },
             ),
-        
+
             AnimatedSize(
               duration: const Duration(milliseconds: 300),
               curve: Curves.fastOutSlowIn,
@@ -102,9 +125,7 @@ class _MyDrawerState extends State<MyDrawer> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => TotalTasks(),
-                          ),
+                          MaterialPageRoute(builder: (context) => TotalTasks()),
                         );
                       },
                     ),

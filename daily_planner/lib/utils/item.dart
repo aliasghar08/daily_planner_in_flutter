@@ -338,70 +338,75 @@ class _ItemWidgetState extends State<ItemWidget> {
   }
 
   Future<void> resetDaily(
-    Task task,
-    Future<List<DateTime>> futureTimestamps,
-  ) async {
-    if (!task.isCompleted) return;
+  Task task,
+  Future<List<DateTime>> futureTimestamps,
+) async {
+  if (!task.isCompleted) return;
 
-    final timestamps = await futureTimestamps;
+  final timestamps = await futureTimestamps;
 
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
+  final nowUtc = DateTime.now().toUtc();
+  final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
 
-    final hasCompletedToday = timestamps.any((timestamp) {
-      final tsDate = DateTime(timestamp.year, timestamp.month, timestamp.day);
-      return tsDate.isAtSameMomentAs(today);
-    });
+  final hasCompletedToday = timestamps.any((timestamp) {
+    final tsUtc = timestamp.toUtc();
+    final tsDate = DateTime(tsUtc.year, tsUtc.month, tsUtc.day);
+    return tsDate.isAtSameMomentAs(todayUtc);
+  });
 
-    if (!hasCompletedToday) {
-      task.isCompleted = false;
-    }
+  if (!hasCompletedToday) {
+    task.isCompleted = false;
   }
+}
+
 
   Future<void> resetWeekly(
-    Task task,
-    Future<List<DateTime>> futureTimestamps,
-  ) async {
-    if (!task.isCompleted) return;
+  Task task,
+  Future<List<DateTime>> futureTimestamps,
+) async {
+  if (!task.isCompleted) return;
 
-    final timestamps = await futureTimestamps;
-    final now = DateTime.now();
+  final timestamps = await futureTimestamps;
 
-    // Get the current week's Monday
-    final today = DateTime(now.year, now.month, now.day);
-    final currentWeekStart = today.subtract(Duration(days: today.weekday - 1));
-    final currentWeekEnd = currentWeekStart.add(const Duration(days: 6));
+  final nowUtc = DateTime.now().toUtc();
+  final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
 
-    final hasCompletedThisWeek = timestamps.any((timestamp) {
-      final tsDate = DateTime(timestamp.year, timestamp.month, timestamp.day);
-      return tsDate.isAfter(
-            currentWeekStart.subtract(const Duration(seconds: 1)),
-          ) &&
-          tsDate.isBefore(currentWeekEnd.add(const Duration(days: 1)));
-    });
+  final currentWeekStart = todayUtc.subtract(Duration(days: todayUtc.weekday - 1));
+  final currentWeekEnd = currentWeekStart.add(const Duration(days: 6));
 
-    if (!hasCompletedThisWeek) {
-      task.isCompleted = false;
-    }
+  final hasCompletedThisWeek = timestamps.any((timestamp) {
+    final tsUtc = timestamp.toUtc();
+    final tsDate = DateTime(tsUtc.year, tsUtc.month, tsUtc.day);
+
+    return tsDate.isAfter(currentWeekStart.subtract(const Duration(seconds: 1))) &&
+           tsDate.isBefore(currentWeekEnd.add(const Duration(days: 1)));
+  });
+
+  if (!hasCompletedThisWeek) {
+    task.isCompleted = false;
   }
+}
 
-  Future<void> resetMonthly(
-    Task task,
-    Future<List<DateTime>> futureTimestamps,
-  ) async {
-    if (!task.isCompleted) return;
+Future<void> resetMonthly(
+  Task task,
+  Future<List<DateTime>> futureTimestamps,
+) async {
+  if (!task.isCompleted) return;
 
-    final timestamps = await futureTimestamps;
-    final now = DateTime.now();
+  final timestamps = await futureTimestamps;
 
-    final hasCompletedThisMonth = timestamps.any((timestamp) {
-      return timestamp.year == now.year && timestamp.month == now.month;
-    });
+  final nowUtc = DateTime.now().toUtc();
 
-    if (!hasCompletedThisMonth) {
-      task.isCompleted = false;
-    }
+  final hasCompletedThisMonth = timestamps.any((timestamp) {
+    final tsUtc = timestamp.toUtc();
+    return tsUtc.year == nowUtc.year && tsUtc.month == nowUtc.month;
+  });
+
+  if (!hasCompletedThisMonth) {
+    task.isCompleted = false;
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
