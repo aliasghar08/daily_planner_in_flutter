@@ -304,101 +304,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     return completedList;
   }
 
-  // Future<List<DateTime>> loadNotificationTimes(Task task) async {
-  //   notificationTimes = [];
-
-  //   try {
-  //     final uid = FirebaseAuth.instance.currentUser?.uid;
-  //     if (uid == null) throw Exception("User not logged in");
-
-  //     final taskRef = FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('tasks')
-  //         .doc(task.docId);
-
-  //     final snapshot = await taskRef.get();
-  //     final data = snapshot.data();
-
-  //     if (data != null && data['notificationTimes'] != null) {
-  //       final List<dynamic> stamps = data['notificationTimes'];
-  //       notificationTimes =
-  //           stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
-  //     }
-  //   } catch (e) {
-  //     debugPrint("Error loading Notification Times: $e");
-  //   }
-
-  //   return notificationTimes;
-  // }
-
-  //   Future<List<DateTime>> loadNotificationTimes(Task task) async {
-  //   List<DateTime> notificationTimes = [];
-
-  //   try {
-  //     final uid = FirebaseAuth.instance.currentUser?.uid;
-  //     if (uid == null) throw Exception("User not logged in");
-
-  //     final taskRef = FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('tasks')
-  //         .doc(task.docId);
-
-  //     final snapshot = await taskRef.get();
-  //     final data = snapshot.data();
-
-  //     if (data != null && data['notificationTimes'] != null) {
-  //       final List<dynamic> rawList = data['notificationTimes'];
-
-  //       // Safely convert dynamic list to DateTime
-  //       notificationTimes = rawList
-  //           .where((e) => e != null)
-  //           .map((e) {
-  //             if (e is Timestamp) return e.toDate();
-  //             if (e is DateTime) return e;
-  //             return null;
-  //           })
-  //           .whereType<DateTime>()
-  //           .toList();
-  //     }
-  //   } catch (e) {
-  //     debugPrint("Error loading Notification Times: $e");
-  //   }
-
-  //   return notificationTimes;
-  // }
-
-  // Future<List<DateTime>> loadNotificationTimes(Task task) async {
-  //   List<DateTime> notificationTimes = [];
-
-  //   try {
-  //     final uid = FirebaseAuth.instance.currentUser?.uid;
-  //     if (uid == null) throw Exception("User not logged in");
-
-  //     final taskRef = FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('tasks')
-  //         .doc(task.docId);
-
-  //     final snapshot = await taskRef.get();
-  //     final data = snapshot.data();
-
-  //     if (data != null && data['notificationTimes'] != null) {
-  //       final List<dynamic> rawList = data['notificationTimes'];
-
-  //       // ⛳ Match loadCompletionStamps pattern
-  //       notificationTimes =
-  //           rawList.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
-  //     }
-  //   } catch (e) {
-  //     debugPrint("Error loading Notification Times: $e");
-  //   }
-
-  //   return notificationTimes;
-  // }
-
   Future<List<DateTime>> loadNotificationTimes(Task task) async {
     List<DateTime> notificationTimes = [];
 
@@ -514,10 +419,18 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     children: [
                       const Icon(Icons.check_circle_outline),
                       const SizedBox(width: 8),
-                      Text(
-                        "Last Completed: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}",
-                        style: const TextStyle(fontSize: 16),
-                      ),
+
+                      if (task.taskType != 'oneTime') ...[
+                        Text(
+                          "Last Completed: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ] else ...[
+                        Text(
+                          "Completed At: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -528,14 +441,28 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     leading: const Icon(Icons.list_alt),
                     title: const Text("See All Completion Times"),
                     children:
-                        completedList.map((date) {
-                          return ListTile(
-                            leading: const Icon(Icons.check),
-                            title: Text(
-                              DateFormat('MMM d, yyyy • h:mm a').format(date),
-                            ),
-                          );
-                        }).toList(),
+                        completedList.isEmpty
+                            ? [
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12.0),
+                                child: Center(
+                                  child: Text(
+                                    "No completion times available",
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                            ]
+                            : completedList.map((date) {
+                              return ListTile(
+                                leading: const Icon(Icons.check),
+                                title: Text(
+                                  DateFormat(
+                                    'MMM d, yyyy • h:mm a',
+                                  ).format(date),
+                                ),
+                              );
+                            }).toList(),
                   ),
                 ],
 
@@ -544,14 +471,28 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   leading: const Icon(Icons.notifications),
                   title: const Text("See All Notifcation Times"),
                   children:
-                      notificationTimes.map((date) {
-                        return ListTile(
-                          leading: const Icon(Icons.check),
-                          title: Text(
-                            DateFormat('MMM d, yyyy • h:mm a').format(date),
-                          ),
-                        );
-                      }).toList(),
+                      notificationTimes.isEmpty
+                          ? [
+                            const Padding(
+                              padding: EdgeInsetsGeometry.symmetric(
+                                vertical: 12,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  "No Notification Times available",
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            ),
+                          ]
+                          : notificationTimes.map((date) {
+                            return ListTile(
+                              leading: const Icon(Icons.check),
+                              title: Text(
+                                DateFormat('MMM d, yyyy • h:mm a').format(date),
+                              ),
+                            );
+                          }).toList(),
                 ),
                 const Divider(),
                 const Text(
