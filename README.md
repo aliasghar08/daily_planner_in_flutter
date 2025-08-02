@@ -19,6 +19,7 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
 
 - 🔁 **Auto Reset Logic**
   - Automatically resets tasks based on their frequency (daily/weekly/monthly)
+  - Get Completion stamps in case of recurring tasks
 
 - 🔍 **Search Functionality**
   - Instantly search tasks without reloading from Firestore
@@ -40,3 +41,4 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
    ```bash
    git clone https://github.com/aliasghar08/daily_planner_in_flutter.git
    cd daily-planner
+
