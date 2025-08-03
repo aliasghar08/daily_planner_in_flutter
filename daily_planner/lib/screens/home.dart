@@ -9,6 +9,16 @@ import 'package:flutter/material.dart';
 
 enum TaskFilter { all, completed, incomplete, overdue }
 
+enum TaskType { oneTime, dailyTask, weeklyTask, monthlyTask }
+
+const taskTypeLabels = {
+  'oneTime': 'One-Time Tasks',
+  'DailyTask': 'Daily Tasks',
+  'WeeklyTask': 'Weekly Tasks',
+  'MonthlyTask': 'Monthly Tasks',
+};
+
+
 class MyHome extends StatefulWidget {
   const MyHome({super.key});
 
@@ -159,42 +169,86 @@ class _MyHomeState extends State<MyHome> {
   }
 
   Widget buildTaskList(TaskFilter filter) {
-    final filtered = getFilteredTasks(filter);
+  final filtered = getFilteredTasks(filter);
+  if (isLoading) {
+    return const Center(child: CircularProgressIndicator());
+  }
 
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (filtered.isEmpty) {
-      return Column(
-        children: [
-          buildSearchBar(),
-          const Expanded(child: Center(child: Text("No tasks found."))),
-        ],
-      );
-    }
-
+  if (filtered.isEmpty) {
     return Column(
       children: [
         buildSearchBar(),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () async => fetchTasksFromFirestore(user!),
-            child: ListView.builder(
-              padding: const EdgeInsets.only(bottom: 100),
-              itemCount: filtered.length,
-              itemBuilder: (context, index) {
-                return ItemWidget(
-                  item: filtered[index],
-                  onEditDone: () => fetchTasksFromFirestore(user!),
-                );
-              },
-            ),
-          ),
-        ),
+        const Expanded(child: Center(child: Text("No tasks found."))),
       ],
     );
   }
+
+  // Group tasks by type
+  Map<String, List<Task>> groupedTasks = {
+    "One-Time Tasks": [],
+    "Daily Tasks": [],
+    "Weekly Tasks": [],
+    "Monthly Tasks": [],
+  };
+
+  for (var task in filtered) {
+    switch (task.taskType) {
+      case "oneTime":
+        groupedTasks["One-Time Tasks"]!.add(task);
+        break;
+      case "DailyTask":
+        groupedTasks["Daily Tasks"]!.add(task);
+        break;
+      case "WeeklyTask":
+        groupedTasks["Weekly Tasks"]!.add(task);
+        break;
+      case "MonthlyTask":
+        groupedTasks["Monthly Tasks"]!.add(task);
+        break;
+    }
+  }
+
+  return Column(
+    children: [
+      buildSearchBar(),
+      Expanded(
+        child: RefreshIndicator(
+          onRefresh: () async => fetchTasksFromFirestore(user!),
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: 100),
+            children: groupedTasks.entries
+                .where((entry) => entry.value.isNotEmpty)
+                .map((entry) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Text(
+                      entry.key,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  ...entry.value.map(
+                    (task) => ItemWidget(
+                      item: task,
+                      onEditDone: () => fetchTasksFromFirestore(user!),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 
   Future<void> _navigateToAddTask() async {
     final added = await Navigator.push(

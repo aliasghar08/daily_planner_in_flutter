@@ -52,29 +52,32 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
       //     .orderBy('date')
       //     .get();
 
-      final snapshot = await FirebaseFirestore.instance
-    .collection('users')
-    .doc(user.uid)
-    .collection('tasks')
-    .where('taskType', isEqualTo: 'DailyTask')
-    .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('tasks')
+              .where('taskType', isEqualTo: 'DailyTask')
+              .get();
 
-for (var doc in snapshot.docs) {
-  final data = doc.data();
-  print('📄 ${doc.id} → taskType: ${data['taskType']}');
-}
-
-
-      final filteredTasks = snapshot.docs.where((doc) {
+      for (var doc in snapshot.docs) {
         final data = doc.data();
-        return data.containsKey('taskType') && data['taskType'] == 'DailyTask';
-      }).toList();
+        print('📄 ${doc.id} → taskType: ${data['taskType']}');
+      }
 
-      final tasks = filteredTasks.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
+      final filteredTasks =
+          snapshot.docs.where((doc) {
+            final data = doc.data();
+            return data.containsKey('taskType') &&
+                data['taskType'] == 'DailyTask';
+          }).toList();
+
+      final tasks =
+          filteredTasks.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          }).toList();
 
       debugPrint("✅ Fetched ${tasks.length} daily tasks");
 
@@ -98,25 +101,38 @@ for (var doc in snapshot.docs) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final cleanedTasks = rawTasks.where((task) {
-      if (task['isCompleted'] == true) {
-        return task.containsKey('completedAt') &&
-            task['completedAt'] != null &&
-            task['completedAt'] is Timestamp;
-      }
-      return true;
-    }).toList();
+    // Filter only DailyTasks
+    final dailyTasks =
+        rawTasks.where((task) => task['taskType'] == 'DailyTask').toList();
 
-    totalTasks = cleanedTasks.length;
-    completedTasks = cleanedTasks.where((task) => task['isCompleted'] == true).length;
+    // Only count DailyTasks that exist (regardless of completion)
+    totalTasks = dailyTasks.length;
+
+    // Count completed DailyTasks by checking if completionStamps is non-empty
+    completedTasks =
+        dailyTasks.where((task) {
+          return task.containsKey('completionStamps') &&
+              (task['completionStamps'] as List).isNotEmpty;
+        }).length;
+
+    // Completion rate
     completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
 
-    overdueTasks = cleanedTasks.where((task) {
-      final taskDate = task['date'] as Timestamp;
-      final date = taskDate.toDate();
-      final taskDay = DateTime(date.year, date.month, date.day);
-      return taskDay.isBefore(today) && task['isCompleted'] != true;
-    }).length;
+    // Count overdue DailyTasks (task date < today and no completionStamps)
+    overdueTasks =
+        dailyTasks.where((task) {
+          final taskDate = task['date'];
+          if (taskDate is! Timestamp) return false;
+
+          final date = taskDate.toDate();
+          final taskDay = DateTime(date.year, date.month, date.day);
+
+          final isIncomplete =
+              !(task.containsKey('completionStamps') &&
+                  (task['completionStamps'] as List).isNotEmpty);
+
+          return taskDay.isBefore(today) && isIncomplete;
+        }).length;
 
     calculateStreaks(today);
     calculate7DayBarChartData(today);
@@ -130,11 +146,9 @@ for (var doc in snapshot.docs) {
           task['completedAt'] != null &&
           task['completedAt'] is Timestamp) {
         final completedDate = (task['completedAt'] as Timestamp).toDate();
-        completedDates.add(DateTime(
-          completedDate.year,
-          completedDate.month,
-          completedDate.day,
-        ));
+        completedDates.add(
+          DateTime(completedDate.year, completedDate.month, completedDate.day),
+        );
       }
     }
 
@@ -206,7 +220,9 @@ for (var doc in snapshot.docs) {
           color: colorScheme.secondary,
           title: 'No data',
           radius: 60,
-          titleStyle: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSecondary),
+          titleStyle: theme.textTheme.bodyMedium?.copyWith(
+            color: colorScheme.onSecondary,
+          ),
         ),
       ];
     }
@@ -221,14 +237,18 @@ for (var doc in snapshot.docs) {
         color: Colors.green,
         title: '${completedPercent.toStringAsFixed(1)}%',
         radius: 60,
-        titleStyle: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onPrimary),
+        titleStyle: theme.textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onPrimary,
+        ),
       ),
       PieChartSectionData(
         value: incompletePercent,
         color: Colors.red,
         title: '${incompletePercent.toStringAsFixed(1)}%',
         radius: 60,
-        titleStyle: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onError),
+        titleStyle: theme.textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onError,
+        ),
       ),
     ];
   }
@@ -248,91 +268,117 @@ for (var doc in snapshot.docs) {
     final textStyle = theme.textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text("Daily Tasks Performance"), centerTitle: true,),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              shrinkWrap: true,
-              physics: const ClampingScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              children: [
-                buildStatCard("📋 Daily Tasks", totalTasks.toString()),
-                buildStatCard("✅ Completed", completedTasks.toString()),
-                buildStatCard("📊 Completion Rate",
-                    totalTasks > 0 ? "${(completionRate * 100).toStringAsFixed(1)}%" : "0%"),
-                buildStatCard("🔥 Current Streak", "$currentStreak days"),
-                buildStatCard("🏆 Longest Streak", "$longestStreak days"),
-                buildStatCard("⚠️ Overdue Tasks", overdueTasks.toString()),
-                const SizedBox(height: 20),
-                Text("📈 Daily Task Completion", style: textStyle.titleMedium),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 200,
-                  child: PieChart(
-                    PieChartData(
-                      sections: generatePieChartData(completedTasks, totalTasks),
-                      centerSpaceRadius: 40,
-                      sectionsSpace: 2,
-                      pieTouchData: PieTouchData(enabled: true),
+      appBar: AppBar(title: Text("Daily Tasks Performance"), centerTitle: true),
+      body:
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                shrinkWrap: true,
+                physics: const ClampingScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                children: [
+                  buildStatCard("📋 Daily Tasks", totalTasks.toString()),
+                  buildStatCard("✅ Completed", completedTasks.toString()),
+                  buildStatCard(
+                    "📊 Completion Rate",
+                    totalTasks > 0
+                        ? "${(completionRate * 100).toStringAsFixed(1)}%"
+                        : "0%",
+                  ),
+                  buildStatCard("🔥 Current Streak", "$currentStreak days"),
+                  buildStatCard("🏆 Longest Streak", "$longestStreak days"),
+                  buildStatCard("⚠️ Overdue Tasks", overdueTasks.toString()),
+                  const SizedBox(height: 20),
+                  Text(
+                    "📈 Daily Task Completion",
+                    style: textStyle.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 200,
+                    child: PieChart(
+                      PieChartData(
+                        sections: generatePieChartData(
+                          completedTasks,
+                          totalTasks,
+                        ),
+                        centerSpaceRadius: 40,
+                        sectionsSpace: 2,
+                        pieTouchData: PieTouchData(enabled: true),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text("Completed Daily Tasks (Last 7 Days)",
-                    style: textStyle.titleMedium),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 250,
-                  child: BarChart(
-                    BarChartData(
-                      gridData: const FlGridData(show: false),
-                      alignment: BarChartAlignment.spaceAround,
-                      barTouchData: BarTouchData(enabled: true),
-                      titlesData: FlTitlesData(
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index > 6) return const SizedBox();
-                              final date = DateTime.now().subtract(Duration(days: 6 - index));
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  _getWeekdayAbbreviation(date.weekday),
-                                  style: textStyle.bodySmall?.copyWith(fontWeight: FontWeight.bold),
-                                ),
-                              );
-                            },
+                  const SizedBox(height: 20),
+                  Text(
+                    "Completed Daily Tasks (Last 7 Days)",
+                    style: textStyle.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 250,
+                    child: BarChart(
+                      BarChartData(
+                        gridData: const FlGridData(show: false),
+                        alignment: BarChartAlignment.spaceAround,
+                        barTouchData: BarTouchData(enabled: true),
+                        titlesData: FlTitlesData(
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.toInt();
+                                if (index < 0 || index > 6)
+                                  return const SizedBox();
+                                final date = DateTime.now().subtract(
+                                  Duration(days: 6 - index),
+                                );
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    _getWeekdayAbbreviation(date.weekday),
+                                    style: textStyle.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          leftTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
                           ),
                         ),
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        borderData: FlBorderData(show: false),
+                        barGroups: List.generate(7, (index) {
+                          final date = DateTime.now().subtract(
+                            Duration(days: 6 - index),
+                          );
+                          final key = formatDateKey(date);
+                          final count = completedLast7Days[key] ?? 0;
+                          return BarChartGroupData(
+                            x: index,
+                            barRods: [
+                              BarChartRodData(
+                                toY: count.toDouble(),
+                                width: 20,
+                                color: Colors.blueAccent,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ],
+                          );
+                        }),
                       ),
-                      borderData: FlBorderData(show: false),
-                      barGroups: List.generate(7, (index) {
-                        final date = DateTime.now().subtract(Duration(days: 6 - index));
-                        final key = formatDateKey(date);
-                        final count = completedLast7Days[key] ?? 0;
-                        return BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                              toY: count.toDouble(),
-                              width: 20,
-                              color: Colors.blueAccent,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ],
-                        );
-                      }),
                     ),
                   ),
-                ),
-                SizedBox(height: 23,)
-              ],
-            ),
+                  SizedBox(height: 23),
+                ],
+              ),
     );
   }
 
