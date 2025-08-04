@@ -109,13 +109,28 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     totalTasks = dailyTasks.length;
 
     // Count completed DailyTasks by checking if completionStamps is non-empty
-    completedTasks =
+    // completedTasks =
+    //     dailyTasks.where((task) {
+    //       return task.containsKey('completionStamps') &&
+    //           (task['completionStamps'] as List).isNotEmpty;
+    //     }).length;
+
+    // // Completion rate
+    // completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
+
+    // Filter only DailyTasks that have at least one completionStamp
+    final attemptedTasks =
         dailyTasks.where((task) {
           return task.containsKey('completionStamps') &&
               (task['completionStamps'] as List).isNotEmpty;
-        }).length;
+        }).toList();
 
-    // Completion rate
+    totalTasks = attemptedTasks.length;
+
+    completedTasks =
+        attemptedTasks
+            .length; // since we're only counting those with completionStamps
+
     completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
 
     // Count overdue DailyTasks (task date < today and no completionStamps)
@@ -142,13 +157,21 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     final completedDates = <DateTime>{};
 
     for (final task in rawTasks) {
-      if (task['isCompleted'] == true &&
-          task['completedAt'] != null &&
-          task['completedAt'] is Timestamp) {
-        final completedDate = (task['completedAt'] as Timestamp).toDate();
-        completedDates.add(
-          DateTime(completedDate.year, completedDate.month, completedDate.day),
-        );
+      if (task['completionStamps'] != null &&
+          task['completionStamps'] is List) {
+        final stamps = task['completionStamps'] as List;
+        for (var stamp in stamps) {
+          if (stamp is Timestamp) {
+            final completedDate = stamp.toDate();
+            completedDates.add(
+              DateTime(
+                completedDate.year,
+                completedDate.month,
+                completedDate.day,
+              ),
+            );
+          }
+        }
       }
     }
 
@@ -191,19 +214,23 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     }
 
     for (var task in rawTasks) {
-      if (task['isCompleted'] == true &&
-          task['completedAt'] != null &&
-          task['completedAt'] is Timestamp) {
-        final completedDate = (task['completedAt'] as Timestamp).toDate();
-        final taskDay = DateTime(
-          completedDate.year,
-          completedDate.month,
-          completedDate.day,
-        );
-        final key = formatDateKey(taskDay);
+      if (task['completionStamps'] != null &&
+          task['completionStamps'] is List) {
+        final stamps = task['completionStamps'] as List;
+        for (var stamp in stamps) {
+          if (stamp is Timestamp) {
+            final completedDate = stamp.toDate();
+            final taskDay = DateTime(
+              completedDate.year,
+              completedDate.month,
+              completedDate.day,
+            );
+            final key = formatDateKey(taskDay);
 
-        if (completedLast7Days.containsKey(key)) {
-          completedLast7Days[key] = completedLast7Days[key]! + 1;
+            if (completedLast7Days.containsKey(key)) {
+              completedLast7Days[key] = completedLast7Days[key]! + 1;
+            }
+          }
         }
       }
     }
