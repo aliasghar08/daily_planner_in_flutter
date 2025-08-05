@@ -43,15 +43,6 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
       final now = DateTime.now();
       final oneYearAgo = DateTime(now.year - 1, now.month, now.day);
 
-      // final snapshot = await FirebaseFirestore.instance
-      //     .collection('users')
-      //     .doc(user.uid)
-      //     .collection('tasks')
-      //     .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(oneYearAgo))
-      //     .where('date', isLessThanOrEqualTo: Timestamp.fromDate(now))
-      //     .orderBy('date')
-      //     .get();
-
       final snapshot =
           await FirebaseFirestore.instance
               .collection('users')
@@ -108,24 +99,27 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     // Only count DailyTasks that exist (regardless of completion)
     totalTasks = dailyTasks.length;
 
-    // Count completed DailyTasks by checking if completionStamps is non-empty
-    // completedTasks =
+    // final attemptedTasks =
     //     dailyTasks.where((task) {
     //       return task.containsKey('completionStamps') &&
     //           (task['completionStamps'] as List).isNotEmpty;
-    //     }).length;
+    //     }).toList();
 
-    // // Completion rate
-    // completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
+    // final attemptedTasks =
+    //     dailyTasks.where((task) {
+    //       final hasStamps =
+    //           task['completionStamps'] is List &&
+    //           (task['completionStamps'] as List).isNotEmpty;
+    //       final hasCompletedAt = task['completedAt'] is Timestamp;
+    //       return hasStamps || hasCompletedAt;
+    //     }).toList();
 
-    // Filter only DailyTasks that have at least one completionStamp
-    final attemptedTasks =
-        dailyTasks.where((task) {
-          return task.containsKey('completionStamps') &&
-              (task['completionStamps'] as List).isNotEmpty;
-        }).toList();
+    final attemptedTasks = dailyTasks.where((task) {
+  return task['completedAt'] != null;
+}).toList();
 
-    totalTasks = attemptedTasks.length;
+
+    totalTasks = dailyTasks.length;
 
     completedTasks =
         attemptedTasks
