@@ -37,33 +37,44 @@ class _ItemWidgetState extends State<ItemWidget> {
       setState(() {
         completedList = loadedList;
       });
-      print("📋 Final completedList: $completedList");
     });
 
-    // resetDaily(widget.item, completedList as Future<List<DateTime>>);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final taskType = widget.item.taskType;
-
+      
       if (taskType != 'oneTime') {
         if (taskType == "DailyTask") {
-          /// await resetDaily(widget.item, completedList as Future<List<DateTime>>);
+          await resetDaily(widget.item, completedList);
         } else if (taskType == 'WeeklyTask') {
-          await resetWeekly(
-            widget.item,
-            completedList as Future<List<DateTime>>,
-          );
+          await resetWeekly(widget.item, completedList);
         } else if (taskType == 'MonthlyTask') {
-          await resetMonthly(
-            widget.item,
-            completedList as Future<List<DateTime>>,
-          );
+          await resetMonthly(widget.item, completedList);
         }
-        setState(() {}); // Refresh UI if task was reset
+        setState(() {});
       }
     });
   }
 
   int get notificationId => widget.item.id.hashCode & 0x7FFFFFFF;
+
+  // Helper functions for period comparisons
+  bool _isSameDay(DateTime a, DateTime b) {
+    final aUtc = DateTime.utc(a.year, a.month, a.day);
+    final bUtc = DateTime.utc(b.year, b.month, b.day);
+    return aUtc == bUtc;
+  }
+
+  bool _isSameWeek(DateTime a, DateTime b) {
+    final aUtc = DateTime.utc(a.year, a.month, a.day);
+    final bUtc = DateTime.utc(b.year, b.month, b.day);
+    final aStart = aUtc.subtract(Duration(days: aUtc.weekday - 1));
+    final bStart = bUtc.subtract(Duration(days: bUtc.weekday - 1));
+    return aStart == bStart;
+  }
+
+  bool _isSameMonth(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month;
+  }
 
   Future<void> changeCompleted(bool? newStatus) async {
     final previousStatus = isChecked;
@@ -105,26 +116,46 @@ class _ItemWidgetState extends State<ItemWidget> {
 
       if (newStatus == true) {
         final ts = Timestamp.fromDate(now);
-        if (!updatedStamps.any((stamp) {
-          final date = stamp.toDate();
-          return date.year == today.year &&
-              date.month == today.month &&
-              date.day == today.day;
-        })) {
-          updatedStamps.add(ts);
+        
+        // For repeating tasks, only add if no stamp exists in current period
+        bool shouldAddStamp = true;
+        if (widget.item.taskType != 'oneTime') {
+          shouldAddStamp = !updatedStamps.any((stamp) {
+            final date = stamp.toDate();
+            if (widget.item.taskType == 'DailyTask') {
+              return _isSameDay(date, now);
+            } else if (widget.item.taskType == 'WeeklyTask') {
+              return _isSameWeek(date, now);
+            } else if (widget.item.taskType == 'MonthlyTask') {
+              return _isSameMonth(date, now);
+            }
+            return false;
+          });
         }
 
-        updateData['completedAt'] = ts;
-        updateData['completionStamps'] = updatedStamps;
+        if (shouldAddStamp) {
+          updatedStamps.add(ts);
+          updateData['completedAt'] = ts;
+          updateData['completionStamps'] = updatedStamps;
+        }
 
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
-        updatedStamps.removeWhere((stamp) {
+        // Remove ALL stamps in current period
+        updatedStamps = updatedStamps.where((stamp) {
           final date = stamp.toDate();
-          return date.year == today.year &&
-              date.month == today.month &&
-              date.day == today.day;
-        });
+          
+          if (widget.item.taskType == 'oneTime') {
+            return false; // Remove all for one-time tasks
+          } else if (widget.item.taskType == 'DailyTask') {
+            return !_isSameDay(date, now);
+          } else if (widget.item.taskType == 'WeeklyTask') {
+            return !_isSameWeek(date, now);
+          } else if (widget.item.taskType == 'MonthlyTask') {
+            return !_isSameMonth(date, now);
+          }
+          return true;
+        }).toList();
 
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
@@ -157,21 +188,23 @@ class _ItemWidgetState extends State<ItemWidget> {
           ..addAll(updatedStamps.map((ts) => ts.toDate()));
       }
 
-      widget.item.completedAt = newStatus == true ? now : null;
+      // Update local state
+      setState(() {
+        completedList = updatedStamps.map((ts) => ts.toDate()).toList();
+      });
 
+      widget.item.completedAt = newStatus == true ? now : null;
       widget.onEditDone?.call();
     } catch (e) {
       setState(() {
         isChecked = previousStatus;
         widget.item.isCompleted = previousStatus!;
       });
-      _showSnackbar("❌ Failed to update task: $e");
+      _showSnackbar("❌ Failed to update task: ${e.toString()}");
     }
   }
 
   int generateNotificationId(String taskId, DateTime time) {
-    // Creates a unique hash based on task ID and time
-    // return '${taskId}_${time.toIso8601String()}'.hashCode & 0x7FFFFFFF;
     return (taskId + time.toIso8601String()).hashCode.abs();
   }
 
@@ -185,24 +218,23 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text("Confirm Deletion"),
-            content: const Text("Are you sure you want to delete this task?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Deletion"),
+        content: const Text("Are you sure you want to delete this task?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
           ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
 
     if (confirm != true) return;
@@ -214,20 +246,18 @@ class _ItemWidgetState extends State<ItemWidget> {
     );
 
     try {
-      // 🔔 Cancel ALL notifications for this task
+      // Cancel all notifications
       if (task.notificationTimes != null) {
         for (final time in task.notificationTimes!) {
           final id = generateNotificationId(task.id as String, time);
           await NativeAlarmHelper.cancelAlarmById(id);
-          print("🔕 Canceled alarm for ID $id at $time");
         }
       } else {
-        // Fallback for single-alarm tasks
         final fallbackId = task.id.hashCode & 0x7FFFFFFF;
         await NativeAlarmHelper.cancelAlarmById(fallbackId);
       }
 
-      // 🗑️ Delete from Firestore
+      // Delete from Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -235,20 +265,19 @@ class _ItemWidgetState extends State<ItemWidget> {
           .doc(task.docId)
           .delete();
 
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
       _showSnackbar("🗑️ Task deleted successfully");
       widget.onEditDone?.call();
     } catch (e) {
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
       _showSnackbar("❌ Failed to delete task. Try again.");
       print("Error deleting task: $e");
     }
   }
 
   void _showSnackbar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   TextSpan _highlightSearchText(String text, String query) {
@@ -302,7 +331,7 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw Exception("User not logged in");
+      if (uid == null) return completedList;
 
       final taskRef = FirebaseFirestore.instance
           .collection('users')
@@ -311,102 +340,65 @@ class _ItemWidgetState extends State<ItemWidget> {
           .doc(task.docId);
 
       final snapshot = await taskRef.get();
-
-      if (!snapshot.exists) {
-        print("⚠️ Document does not exist for task: ${task.docId}");
-        return completedList;
-      }
+      if (!snapshot.exists) return completedList;
 
       final data = snapshot.data();
-
       if (data != null && data['completionStamps'] != null) {
         final List<dynamic> stamps = data['completionStamps'];
-
-        completedList =
-            stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
-
-        print("✅ Loaded ${completedList.length} completion stamps.");
-      } else {
-        print("⚠️ No 'completionStamps' field found.");
+        completedList = stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
       }
-    } catch (e, stack) {
+    } catch (e) {
       print("❌ Error loading completion stamps: $e");
-      print(stack);
     }
 
     return completedList;
   }
 
-  Future<void> resetDaily(
-  Task task,
-  Future<List<DateTime>> futureTimestamps,
-) async {
-  if (!task.isCompleted) return;
+  Future<void> resetDaily(Task task, List<DateTime> timestamps) async {
+    if (!task.isCompleted) return;
 
-  final timestamps = await futureTimestamps;
+    final nowUtc = DateTime.now().toUtc();
+    final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
 
-  final nowUtc = DateTime.now().toUtc();
-  final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
+    final hasCompletedToday = timestamps.any((timestamp) {
+      final tsUtc = timestamp.toUtc();
+      return _isSameDay(tsUtc, todayUtc);
+    });
 
-  final hasCompletedToday = timestamps.any((timestamp) {
-    final tsUtc = timestamp.toUtc();
-    final tsDate = DateTime(tsUtc.year, tsUtc.month, tsUtc.day);
-    return tsDate.isAtSameMomentAs(todayUtc);
-  });
-
-  if (!hasCompletedToday) {
-    task.isCompleted = false;
+    if (!hasCompletedToday) {
+      task.isCompleted = false;
+    }
   }
-}
 
+  Future<void> resetWeekly(Task task, List<DateTime> timestamps) async {
+    if (!task.isCompleted) return;
 
-  Future<void> resetWeekly(
-  Task task,
-  Future<List<DateTime>> futureTimestamps,
-) async {
-  if (!task.isCompleted) return;
+    final nowUtc = DateTime.now().toUtc();
 
-  final timestamps = await futureTimestamps;
+    final hasCompletedThisWeek = timestamps.any((timestamp) {
+      final tsUtc = timestamp.toUtc();
+      return _isSameWeek(tsUtc, nowUtc);
+    });
 
-  final nowUtc = DateTime.now().toUtc();
-  final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
-
-  final currentWeekStart = todayUtc.subtract(Duration(days: todayUtc.weekday - 1));
-  final currentWeekEnd = currentWeekStart.add(const Duration(days: 6));
-
-  final hasCompletedThisWeek = timestamps.any((timestamp) {
-    final tsUtc = timestamp.toUtc();
-    final tsDate = DateTime(tsUtc.year, tsUtc.month, tsUtc.day);
-
-    return tsDate.isAfter(currentWeekStart.subtract(const Duration(seconds: 1))) &&
-           tsDate.isBefore(currentWeekEnd.add(const Duration(days: 1)));
-  });
-
-  if (!hasCompletedThisWeek) {
-    task.isCompleted = false;
+    if (!hasCompletedThisWeek) {
+      task.isCompleted = false;
+    }
   }
-}
 
-Future<void> resetMonthly(
-  Task task,
-  Future<List<DateTime>> futureTimestamps,
-) async {
-  if (!task.isCompleted) return;
+  Future<void> resetMonthly(Task task, List<DateTime> timestamps) async {
+    if (!task.isCompleted) return;
 
-  final timestamps = await futureTimestamps;
+    final nowUtc = DateTime.now().toUtc();
 
-  final nowUtc = DateTime.now().toUtc();
+    final hasCompletedThisMonth = timestamps.any((timestamp) {
+      final tsUtc = timestamp.toUtc();
+      return _isSameMonth(tsUtc, nowUtc);
+    });
 
-  final hasCompletedThisMonth = timestamps.any((timestamp) {
-    final tsUtc = timestamp.toUtc();
-    return tsUtc.year == nowUtc.year && tsUtc.month == nowUtc.month;
-  });
-
-  if (!hasCompletedThisMonth) {
-    task.isCompleted = false;
+    if (!hasCompletedThisMonth) {
+      task.isCompleted = false;
+    }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -438,7 +430,6 @@ Future<void> resetMonthly(
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            //Text(task.detail, style: TextStyle(color: textColor)),
             Text(
               DateFormat.yMd().add_jm().format(task.date),
               style: TextStyle(color: textColor),
@@ -468,16 +459,15 @@ Future<void> resetMonthly(
               );
             }
           },
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-                const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
-                const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-                const PopupMenuItem(
-                  value: 'details',
-                  child: Text('📄 Details'),
-                ),
-              ],
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
+            const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
+            const PopupMenuItem(value: 'share', child: Text('📤 Share')),
+            const PopupMenuItem(
+              value: 'details',
+              child: Text('📄 Details'),
+            ),
+          ],
         ),
       ),
     );

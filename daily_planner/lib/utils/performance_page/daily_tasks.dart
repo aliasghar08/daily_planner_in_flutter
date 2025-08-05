@@ -99,21 +99,6 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     // Only count DailyTasks that exist (regardless of completion)
     totalTasks = dailyTasks.length;
 
-    // final attemptedTasks =
-    //     dailyTasks.where((task) {
-    //       return task.containsKey('completionStamps') &&
-    //           (task['completionStamps'] as List).isNotEmpty;
-    //     }).toList();
-
-    // final attemptedTasks =
-    //     dailyTasks.where((task) {
-    //       final hasStamps =
-    //           task['completionStamps'] is List &&
-    //           (task['completionStamps'] as List).isNotEmpty;
-    //       final hasCompletedAt = task['completedAt'] is Timestamp;
-    //       return hasStamps || hasCompletedAt;
-    //     }).toList();
-
     final attemptedTasks = dailyTasks.where((task) {
   return task['completedAt'] != null;
 }).toList();

@@ -20,7 +20,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
   late TextEditingController _editNoteController;
   late DateTime _selectedDate;
   late bool _isCompleted;
-  List<DateTime> _notiificationTimes = [];
+  List<DateTime> _notificationTimes = [];
   bool _isSaving = false;
 
   @override
@@ -34,7 +34,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     loadNotificationTimes(widget.task).then((times) {
       setState(() {
-        _notiificationTimes = times;
+        _notificationTimes = times;
       });
     });
   }
@@ -47,9 +47,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
     super.dispose();
   }
 
-  // Generate unique notification ID based on task ID and notification time
   int generateNotificationId(String taskId, DateTime time) {
-    //  return (taskId.hashCode + time.millisecondsSinceEpoch).hashCode.abs();
     return (taskId + time.toIso8601String()).hashCode.abs();
   }
 
@@ -58,7 +56,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw Exception("User not logged in");
+      if (uid == null) return notificationTimes;
 
       final taskRef = FirebaseFirestore.instance
           .collection('users')
@@ -111,10 +109,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
   Future<void> _pickNotificationTime() async {
     final now = DateTime.now();
+    DateTime initialDate = now.isAfter(_selectedDate) ? now : _selectedDate;
 
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: initialDate,
       firstDate: now,
       lastDate: _selectedDate,
     );
@@ -144,140 +143,205 @@ class _EditTaskPageState extends State<EditTaskPage> {
       return;
     }
 
-    // Check for duplicate
-    if (_notiificationTimes.any(
-      (time) => time.isAtSameMomentAs(newNotificationTime),
-    )) {
+    if (_notificationTimes.any((time) => time.isAtSameMomentAs(newNotificationTime))) {
       _showSnackBar("❌ This notification time is already added.");
       return;
     }
 
     setState(() {
-      _notiificationTimes.add(newNotificationTime);
-      _notiificationTimes.sort();
+      _notificationTimes.add(newNotificationTime);
+      _notificationTimes.sort();
     });
   }
 
   void removeNotificationTime(DateTime time) {
     setState(() {
-      _notiificationTimes.remove(time);
+      _notificationTimes.remove(time);
     });
   }
 
-  Future<void> _saveChanges() async {
-  if (_isSaving) return;
-  setState(() => _isSaving = true);
-
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      _showSnackBar("❌ User not signed in.");
-      return;
-    }
-
-    if (widget.task.docId == null) {
-      _showSnackBar("❌ Task ID not found.");
-      return;
-    }
-
-    final String newTitle = _titleController.text.trim();
-    if (newTitle.isEmpty) {
-      _showSnackBar("⚠️ Task title cannot be empty.");
-      return;
-    }
-
-    // Prepare notification times
-    List<DateTime> finalNotificationTimes = List.from(_notiificationTimes);
-    final now = DateTime.now();
-
-    if (!_isCompleted && finalNotificationTimes.isEmpty) {
-      final fallbackTime = _selectedDate.subtract(const Duration(minutes: 15));
-      if (fallbackTime.isAfter(now)) {
-        finalNotificationTimes.add(fallbackTime);
-        finalNotificationTimes.sort();
-      }
-    }
-
-    // Cancel all existing notifications
-    for (final time in widget.task.notificationTimes) {
-      final id = generateNotificationId(widget.task.docId!, time);
-      await NativeAlarmHelper.cancelAlarmById(id);
-    }
-
-    // Schedule new notifications
-    if (!_isCompleted) {
-      for (final time in finalNotificationTimes) {
-        if (time.isAfter(now)) {
-          final id = generateNotificationId(widget.task.docId!, time);
-          await NativeAlarmHelper.scheduleAlarmAtTime(
-            id: id,
-            title: 'Reminder: $newTitle',
-            body: '$newTitle is due at ${DateFormat.jm().format(_selectedDate)}',
-            dateTime: time,
-          );
-        }
-      }
-    }
-
-    // Create update data with proper type conversions
-    final updateData = {
-      'title': newTitle,
-      'detail': _detailController.text.trim(),
-      'date': Timestamp.fromDate(_selectedDate),
-      'isCompleted': _isCompleted,
-      'notificationTimes': finalNotificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
-      'editHistory': FieldValue.arrayUnion([
-        {
-          'timestamp': Timestamp.now(),
-          'note': _editNoteController.text.trim().isEmpty 
-              ? null 
-              : _editNoteController.text.trim(),
-        }
-      ]),
-    };
-
-    // Handle task type specific fields
-    if (widget.task is DailyTask) {
-      updateData['type'] = 'DailyTask';
-      updateData['taskType'] = 'DailyTask';
-    } 
-    else if (widget.task is WeeklyTask) {
-      updateData['type'] = 'WeeklyTask';
-      updateData['taskType'] = 'WeeklyTask';
-    }
-    else if (widget.task is MonthlyTask) {
-      updateData['type'] = 'MonthlyTask';
-      updateData['taskType'] = 'MonthlyTask';
-      updateData['dayOfMonth'] = (widget.task as MonthlyTask).dayOfMonth;
-    }
-
-    debugPrint("Updating task with data: $updateData");
-
-    // Update Firestore document
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('tasks')
-        .doc(widget.task.docId)
-        .update(updateData);
-
-    _showSnackBar("✅ Task updated successfully!");
-    if (mounted) Navigator.pop(context, true);
-
-  } catch (e, stackTrace) {
-    debugPrint("❌ Error updating task: $e");
-    debugPrint("📌 Stack trace: $stackTrace");
-    _showSnackBar("❌ Failed to update task: ${e.toString()}");
-  } finally {
-    if (mounted) setState(() => _isSaving = false);
+  bool _isSameDay(DateTime date1, DateTime date2) {
+    return date1.year == date2.year && 
+           date1.month == date2.month && 
+           date1.day == date2.day;
   }
-}
+
+  bool _isSameWeek(DateTime date1, DateTime date2) {
+    final monday1 = date1.subtract(Duration(days: date1.weekday - 1));
+    final monday2 = date2.subtract(Duration(days: date2.weekday - 1));
+    return monday1.year == monday2.year && 
+           monday1.month == monday2.month && 
+           monday1.day == monday2.day;
+  }
+
+  bool _isSameMonth(DateTime date1, DateTime date2) {
+    return date1.year == date2.year && date1.month == date2.month;
+  }
+
+  Future<void> _saveChanges() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        _showSnackBar("❌ User not signed in.");
+        return;
+      }
+
+      if (widget.task.docId == null) {
+        _showSnackBar("❌ Task ID not found.");
+        return;
+      }
+
+      final String newTitle = _titleController.text.trim();
+      if (newTitle.isEmpty) {
+        _showSnackBar("⚠️ Task title cannot be empty.");
+        return;
+      }
+
+      final now = DateTime.now();
+      List<DateTime> finalNotificationTimes = List.from(_notificationTimes);
+
+      if (!_isCompleted && finalNotificationTimes.isEmpty) {
+        final fallbackTime = _selectedDate.subtract(const Duration(minutes: 15));
+        if (fallbackTime.isAfter(now)) {
+          finalNotificationTimes.add(fallbackTime);
+          finalNotificationTimes.sort();
+        }
+      }
+
+      // Cancel old alarms
+      for (final time in widget.task.notificationTimes) {
+        final id = generateNotificationId(widget.task.docId!, time);
+        await NativeAlarmHelper.cancelAlarmById(id);
+      }
+
+      // Schedule new notifications
+      if (!_isCompleted) {
+        for (final time in finalNotificationTimes) {
+          if (time.isAfter(now)) {
+            final id = generateNotificationId(widget.task.docId!, time);
+            await NativeAlarmHelper.scheduleAlarmAtTime(
+              id: id,
+              title: 'Reminder: $newTitle',
+              body: '$newTitle is due at ${DateFormat.jm().format(_selectedDate)}',
+              dateTime: time,
+            );
+          }
+        }
+      }
+
+      final updateData = {
+        'title': newTitle,
+        'detail': _detailController.text.trim(),
+        'date': Timestamp.fromDate(_selectedDate),
+        'isCompleted': _isCompleted,
+        'notificationTimes': finalNotificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
+        'editHistory': FieldValue.arrayUnion([
+          {
+            'timestamp': Timestamp.now(),
+            'note': _editNoteController.text.trim().isEmpty 
+                ? null 
+                : _editNoteController.text.trim(),
+          }
+        ]),
+      };
+
+      // Add task type info
+      if (widget.task is DailyTask) {
+        updateData['type'] = 'DailyTask';
+        updateData['taskType'] = 'DailyTask';
+      } else if (widget.task is WeeklyTask) {
+        updateData['type'] = 'WeeklyTask';
+        updateData['taskType'] = 'WeeklyTask';
+      } else if (widget.task is MonthlyTask) {
+        updateData['type'] = 'MonthlyTask';
+        updateData['taskType'] = 'MonthlyTask';
+        updateData['dayOfMonth'] = (widget.task as MonthlyTask).dayOfMonth;
+      }
+
+      // Handle completion stamps
+      final currentStamps = (widget.task.completionStamps ?? []).map((dt) => Timestamp.fromDate(dt)).toList();
+      final nowStamp = Timestamp.fromDate(now);
+      final currentPeriodStamp = _isCompleted ? nowStamp : null;
+
+      if (widget.task.taskType == 'oneTime') {
+        if (_isCompleted) {
+          updateData['completionStamps'] = [nowStamp];
+        } else {
+          updateData['completionStamps'] = [];
+        }
+      } else if (widget.task.taskType != null) {
+        // For recurring tasks
+        if (_isCompleted) {
+          // Check if there's already a stamp in the current period
+          bool periodStampExists = false;
+          
+          for (final ts in currentStamps) {
+            final dt = ts.toDate();
+            
+            if (widget.task.taskType == 'DailyTask' && _isSameDay(dt, now)) {
+              periodStampExists = true;
+              break;
+            } else if (widget.task.taskType == 'WeeklyTask' && _isSameWeek(dt, now)) {
+              periodStampExists = true;
+              break;
+            } else if (widget.task.taskType == 'MonthlyTask' && _isSameMonth(dt, now)) {
+              periodStampExists = true;
+              break;
+            }
+          }
+          
+          if (!periodStampExists) {
+            updateData['completionStamps'] = FieldValue.arrayUnion([nowStamp]);
+          }
+        } else {
+          // Find and remove stamp for current period
+          List<Timestamp> stampsToRemove = [];
+          
+          for (final ts in currentStamps) {
+            final dt = ts.toDate();
+            
+            if (widget.task.taskType == 'DailyTask' && _isSameDay(dt, now)) {
+              stampsToRemove.add(ts);
+            } else if (widget.task.taskType == 'WeeklyTask' && _isSameWeek(dt, now)) {
+              stampsToRemove.add(ts);
+            } else if (widget.task.taskType == 'MonthlyTask' && _isSameMonth(dt, now)) {
+              stampsToRemove.add(ts);
+            }
+          }
+          
+          if (stampsToRemove.isNotEmpty) {
+            updateData['completionStamps'] = FieldValue.arrayRemove(stampsToRemove);
+          }
+        }
+      }
+
+      debugPrint("Updating task with data: $updateData");
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .doc(widget.task.docId)
+          .update(updateData);
+
+      _showSnackBar("✅ Task updated successfully!");
+      if (mounted) Navigator.pop(context, true);
+
+    } catch (e, stackTrace) {
+      debugPrint("❌ Error updating task: $e");
+      debugPrint("📌 Stack trace: $stackTrace");
+      _showSnackBar("❌ Failed to update task: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
 
   void _showSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -316,7 +380,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [Text("Date: $dateStr"), Text("Time: $timeStr")],
+                    children: [
+                      Text("Date: $dateStr"), 
+                      Text("Time: $timeStr")
+                    ],
                   ),
                   TextButton.icon(
                     onPressed: _pickDateTime,
@@ -347,7 +414,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                 leading: const Icon(Icons.notifications),
                 title: const Text("Notification Times"),
                 children: [
-                  ..._notiificationTimes.map((date) {
+                  ..._notificationTimes.map((date) {
                     final id = generateNotificationId(widget.task.docId!, date);
 
                     return ListTile(
@@ -374,12 +441,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
                 child: _isSaving
                     ? const CircularProgressIndicator()
                     : ElevatedButton.icon(
-                      icon: const Icon(Icons.add),
+                      icon: const Icon(Icons.save),
                       label: const Text("Save Changes"),
                       onPressed: _saveChanges,
                     ),
               ),
-                  const SizedBox(height: 24,),
+              const SizedBox(height: 24),
             ],
           ),
         ),
