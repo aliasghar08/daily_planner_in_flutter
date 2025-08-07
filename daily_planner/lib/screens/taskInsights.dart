@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:daily_planner/utils/catalog.dart';
@@ -35,36 +36,278 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         .get();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Analytics: ${widget.task.title}")),
-      body: FutureBuilder<DocumentSnapshot>(
-        future: _taskDataFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(child: Text('Task data not found'));
-          }
-
-          final taskData = snapshot.data!.data() as Map<String, dynamic>;
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: SingleChildScrollView(
-              child: _buildTaskAnalytics(context, taskData),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: Text("Analytics: ${widget.task.title}"),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.refresh),
+          onPressed: () {
+            setState(() {
+              _taskDataFuture = _fetchTaskData();
+            });
+          },
+        ),
+      ],
+    ),
+    body: FutureBuilder<DocumentSnapshot>(
+      future: _taskDataFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text(
+                  "Loading analytics...",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
             ),
           );
-        },
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Error loading data',
+                  style: TextStyle(fontSize: 18, color: Colors.red),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  '${snapshot.error}',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _taskDataFuture = _fetchTaskData();
+                    });
+                  },
+                  child: Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.find_in_page, color: Colors.blue, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Task data not found',
+                  style: TextStyle(fontSize: 18),
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'No analytics available for this task',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final taskData = snapshot.data!.data() as Map<String, dynamic>;
+        final stamps = _parseCompletionStamps(taskData['completionStamps']);
+        final notificationTimes = taskData['notificationTimes'] != null
+            ? _parseNotificationTimes(taskData['notificationTimes'])
+            : <TimeOfDay>[];
+
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                // Existing analytics content
+                _buildTaskAnalytics(context, taskData),
+                
+                // Add chart section header
+                if (stamps.isNotEmpty || notificationTimes.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.insights, color: Theme.of(context).primaryColor),
+                        SizedBox(width: 8),
+                        Text(
+                          'Visual Insights',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                
+                // Daily Task Charts
+                if (widget.task.taskType == 'DailyTask' && stamps.isNotEmpty)
+                  Column(
+                    children: [
+                      _buildAnalyticsCard(
+                        title: "Weekly Completion",
+                        children: [
+                          SizedBox(
+                            height: 220,
+                            child: _buildStreakChart(stamps, Duration(days: 1)),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            "Last 7 days completion status",
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                      if (notificationTimes.isNotEmpty)
+                        _buildAnalyticsCard(
+                          title: "Notification Time Distribution",
+                          children: [
+                            SizedBox(
+                              height: 220,
+                              child: _buildTimeDistributionChart(notificationTimes),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              "When you're most likely to be notified",
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                
+                // Weekly Task Charts
+                if (widget.task.taskType == 'WeeklyTask' && stamps.isNotEmpty)
+                  _buildAnalyticsCard(
+                    title: "Monthly Completion Trend",
+                    children: [
+                      SizedBox(
+                        height: 220,
+                        child: _buildMonthlyTrendChart(stamps),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        "Completion pattern over last 6 months",
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                
+                // Monthly Task Charts
+                if (widget.task.taskType == 'MonthlyTask' && stamps.isNotEmpty)
+                  _buildAnalyticsCard(
+                    title: "Yearly Performance",
+                    children: [
+                      SizedBox(
+                        height: 220,
+                        child: _buildMonthlyTrendChart(stamps),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        "Monthly completion history",
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Widget _buildStreakChart(List<DateTime> stamps, Duration recurrence) {
+  final now = DateTime.now();
+  
+  // Prepare labels for last 7 days
+  final labels = List.generate(7, (i) {
+    final day = now.subtract(Duration(days: 6 - i));
+    return DateFormat.E().format(day);
+  });
+
+  // Prepare completion data
+  final data = List.generate(7, (i) {
+    final day = now.subtract(Duration(days: 6 - i));
+    return stamps.any((s) => 
+      s.year == day.year &&
+      s.month == day.month &&
+      s.day == day.day
+    ) ? 1.0 : 0.0;
+  });
+
+  return BarChart(
+    BarChartData(
+      barGroups: List.generate(7, (i) {
+        return BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: data[i],
+              color: data[i] > 0 ? Colors.green : Colors.grey[300],
+              width: 20,
+              borderRadius: BorderRadius.circular(4),
+            )
+          ],
+        );
+      }),
+      titlesData: FlTitlesData(
+        show: true,
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            getTitlesWidget: (value, meta) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  labels[value.toInt()],
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              );
+            },
+            reservedSize: 30,
+          ),
+        ),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
+        rightTitles: AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
+        topTitles: AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
       ),
-    );
-  }
+      gridData: const FlGridData(show: false),
+      borderData: FlBorderData(show: false),
+    ),
+  );
+}
 
   List<String> _getTimeDistributionList(List<TimeOfDay> times) {
     final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
@@ -81,31 +324,209 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     ];
   }
  
-   Widget _buildNotificationTimesList(BuildContext context, List<TimeOfDay> times) {
-    if (times.isEmpty) return Text('None', style: TextStyle(color: Colors.grey));
-    
-    // Remove duplicates while preserving order
-    final uniqueTimes = times.fold<List<TimeOfDay>>([], (list, time) {
-      if (!list.any((t) => t.hour == time.hour && t.minute == time.minute)) {
-        list.add(time);
-      }
-      return list;
-    });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final time in uniqueTimes)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Text(
-              _formatTimeOfDay(context, time),
-              style: TextStyle(fontSize: 14),
-            ),
+  Widget _buildNotificationTimesList(BuildContext context, List<TimeOfDay> times) {
+  if (times.isEmpty) return Text('None', style: TextStyle(color: Colors.grey));
+
+  // Remove duplicates while preserving order
+  final uniqueTimes = times.fold<List<TimeOfDay>>([], (list, time) {
+    if (!list.any((t) => t.hour == time.hour && t.minute == time.minute)) {
+      list.add(time);
+    }
+    return list;
+  });
+
+  // Get current date for context
+  final now = DateTime.now();
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final time in uniqueTimes)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _formatTimeOfDay(context, time),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                _formatFullDateWithDay(now, time),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
           ),
-      ],
-    );
+        ),
+    ],
+  );
+}
+
+String _formatFullDateWithDay(DateTime date, TimeOfDay time) {
+  // Create a DateTime object using the current date and the notification time
+  final dateTime = DateTime(
+    date.year,
+    date.month,
+    date.day,
+    time.hour,
+    time.minute,
+  );
+
+  return DateFormat('EEEE, MMMM d, y').format(dateTime);
+}
+
+Widget _buildTimeDistributionChart(List<TimeOfDay> times) {
+  if (times.isEmpty) return SizedBox.shrink();
+  
+  final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
+  final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
+  final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
+  final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
+  
+  final total = times.length.toDouble();
+  final sections = [
+    PieChartSectionData(
+      value: morning / total * 100,
+      color: Colors.blue,
+      title: '${(morning/total*100).round()}%',
+      radius: 40,
+    ),
+    PieChartSectionData(
+      value: afternoon / total * 100,
+      color: Colors.orange,
+      title: '${(afternoon/total*100).round()}%',
+      radius: 40,
+    ),
+    PieChartSectionData(
+      value: evening / total * 100,
+      color: Colors.purple,
+      title: '${(evening/total*100).round()}%',
+      radius: 40,
+    ),
+    PieChartSectionData(
+      value: night / total * 100,
+      color: Colors.grey,
+      title: '${(night/total*100).round()}%',
+      radius: 40,
+    ),
+  ];
+
+  return PieChart(
+    PieChartData(
+      sections: sections,
+      centerSpaceRadius: 30,
+    ),
+  );
+}
+
+Widget _buildMonthlyTrendChart(List<DateTime> stamps) {
+  if (stamps.isEmpty) return const SizedBox.shrink();
+
+  final now = DateTime.now();
+  final months = List.generate(6, (i) {
+    final date = DateTime(now.year, now.month - 5 + i);
+    return DateFormat.MMM().format(date);
+  });
+
+  // Group stamps by month
+  final monthlyCounts = <int, int>{};
+  for (final stamp in stamps) {
+    final monthKey = stamp.year * 100 + stamp.month;
+    monthlyCounts[monthKey] = (monthlyCounts[monthKey] ?? 0) + 1;
   }
+
+  // Prepare chart data for last 6 months
+  final chartData = List.generate(6, (i) {
+    final date = DateTime(now.year, now.month - 5 + i);
+    final monthKey = date.year * 100 + date.month;
+    return monthlyCounts[monthKey]?.toDouble() ?? 0.0;
+  });
+
+  // Find max value for scaling
+  final maxValue = chartData.reduce(max) * 1.2;
+
+  return BarChart(
+    BarChartData(
+      alignment: BarChartAlignment.spaceAround,
+      maxY: maxValue > 0 ? maxValue : 5, // Ensure chart has some height
+      barGroups: List.generate(6, (i) {
+        return BarChartGroupData(
+          x: i,
+          barRods: [
+            BarChartRodData(
+              toY: chartData[i],
+              color: _getChartColor(chartData[i]),
+              width: 20,
+              borderRadius: BorderRadius.circular(4),
+            )
+          ],
+        );
+      }),
+      titlesData: FlTitlesData(
+        show: true,
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            getTitlesWidget: (value, meta) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Text(
+                  months[value.toInt()],
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              );
+            },
+            reservedSize: 30,
+          ),
+        ),
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            interval: maxValue > 10 ? 2 : 1,
+            getTitlesWidget: (value, meta) {
+              return Text(
+                value.toInt().toString(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              );
+            },
+            reservedSize: 28,
+          ),
+        ),
+        rightTitles: AxisTitles(),
+        topTitles: AxisTitles(),
+      ),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        horizontalInterval: maxValue > 10 ? 2 : 1,
+      ),
+      borderData: FlBorderData(
+        show: false,
+      ),
+    ),
+  );
+}
+
+Color _getChartColor(double value) {
+  if (value == 0) return Colors.grey.withOpacity(0.3);
+  if (value < 3) return Colors.orange.shade300;
+  if (value < 6) return Colors.blue.shade300;
+  return Colors.green.shade300;
+}
   
 
   Widget _buildTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
