@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/itemdetailedit.dart';
 import 'package:daily_planner/screens/itemdetailpage.dart';
+import 'package:daily_planner/screens/taskInsights.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -41,7 +42,7 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final taskType = widget.item.taskType;
-      
+
       if (taskType != 'oneTime') {
         if (taskType == "DailyTask") {
           await resetDaily(widget.item, completedList);
@@ -76,6 +77,134 @@ class _ItemWidgetState extends State<ItemWidget> {
     return a.year == b.year && a.month == b.month;
   }
 
+  // Future<void> changeCompleted(bool? newStatus) async {
+  //   final previousStatus = isChecked;
+
+  //   setState(() {
+  //     isChecked = newStatus;
+  //     widget.item.isCompleted = newStatus!;
+  //   });
+
+  //   try {
+  //     final uid = FirebaseAuth.instance.currentUser?.uid;
+  //     if (uid == null) throw Exception("User not logged in");
+
+  //     final taskRef = FirebaseFirestore.instance
+  //         .collection('users')
+  //         .doc(uid)
+  //         .collection('tasks')
+  //         .doc(widget.item.docId);
+
+  //     final now = DateTime.now();
+  //     final today = DateTime(now.year, now.month, now.day);
+
+  //     final snapshot = await taskRef.get();
+  //     final currentData = snapshot.data();
+  //     List<Timestamp> updatedStamps = [];
+
+  //     if (currentData != null && currentData['completionStamps'] != null) {
+  //       updatedStamps =
+  //           (currentData['completionStamps'] as List).map((e) {
+  //             if (e is Timestamp) return e;
+  //             if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
+  //             if (e is String) return Timestamp.fromDate(DateTime.parse(e));
+  //             if (e is DateTime) return Timestamp.fromDate(e);
+  //             throw Exception("Invalid completion stamp: $e");
+  //           }).toList();
+  //     }
+
+  //     Map<String, dynamic> updateData = {'isCompleted': newStatus};
+
+  //     if (newStatus == true) {
+  //       final ts = Timestamp.fromDate(now);
+
+  //       // For repeating tasks, only add if no stamp exists in current period
+  //       bool shouldAddStamp = true;
+  //       if (widget.item.taskType != 'oneTime') {
+  //         shouldAddStamp = !updatedStamps.any((stamp) {
+  //           final date = stamp.toDate();
+  //           if (widget.item.taskType == 'DailyTask') {
+  //             return _isSameDay(date, now);
+  //           } else if (widget.item.taskType == 'WeeklyTask') {
+  //             return _isSameWeek(date, now);
+  //           } else if (widget.item.taskType == 'MonthlyTask') {
+  //             return _isSameMonth(date, now);
+  //           }
+  //           return false;
+  //         });
+  //       }
+
+  //       if (shouldAddStamp) {
+  //         updatedStamps.add(ts);
+  //         updateData['completedAt'] = ts;
+  //         updateData['completionStamps'] = updatedStamps;
+  //       }
+
+  //       await NativeAlarmHelper.cancelAlarmById(notificationId);
+  //     } else {
+  //       // Remove ALL stamps in current period
+  //       updatedStamps = updatedStamps.where((stamp) {
+  //         final date = stamp.toDate();
+
+  //         if (widget.item.taskType == 'oneTime') {
+  //           return false; // Remove all for one-time tasks
+  //         } else if (widget.item.taskType == 'DailyTask') {
+  //           return !_isSameDay(date, now);
+  //         } else if (widget.item.taskType == 'WeeklyTask') {
+  //           return !_isSameWeek(date, now);
+  //         } else if (widget.item.taskType == 'MonthlyTask') {
+  //           return !_isSameMonth(date, now);
+  //         }
+  //         return true;
+  //       }).toList();
+
+  //       updateData['completedAt'] = null;
+  //       updateData['completionStamps'] = updatedStamps;
+
+  //       if (widget.item.date.isAfter(DateTime.now())) {
+  //         await NativeAlarmHelper.scheduleAlarmAtTime(
+  //           id: notificationId,
+  //           title: widget.item.title,
+  //           body: widget.item.detail,
+  //           dateTime: widget.item.date,
+  //         );
+  //       }
+  //     }
+
+  //     // Update Firestore
+  //     await taskRef.update(updateData);
+
+  //     // Update local object
+  //     if (widget.item is DailyTask) {
+  //       (widget.item as DailyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     } else if (widget.item is WeeklyTask) {
+  //       (widget.item as WeeklyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     } else if (widget.item is MonthlyTask) {
+  //       (widget.item as MonthlyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     }
+
+  //     // Update local state
+  //     setState(() {
+  //       completedList = updatedStamps.map((ts) => ts.toDate()).toList();
+  //     });
+
+  //     widget.item.completedAt = newStatus == true ? now : null;
+  //     widget.onEditDone?.call();
+  //   } catch (e) {
+  //     setState(() {
+  //       isChecked = previousStatus;
+  //       widget.item.isCompleted = previousStatus!;
+  //     });
+  //     _showSnackbar("❌ Failed to update task: ${e.toString()}");
+  //   }
+  // }
+
   Future<void> changeCompleted(bool? newStatus) async {
     final previousStatus = isChecked;
 
@@ -98,6 +227,10 @@ class _ItemWidgetState extends State<ItemWidget> {
       final today = DateTime(now.year, now.month, now.day);
 
       final snapshot = await taskRef.get();
+      if (!snapshot.exists) {
+        throw Exception("Task document does not exist");
+      }
+
       final currentData = snapshot.data();
       List<Timestamp> updatedStamps = [];
 
@@ -112,52 +245,53 @@ class _ItemWidgetState extends State<ItemWidget> {
             }).toList();
       }
 
-      Map<String, dynamic> updateData = {'isCompleted': newStatus};
+      Map<String, dynamic> updateData = {
+        'isCompleted': newStatus,
+        'completedAt': newStatus == true ? Timestamp.fromDate(now) : null,
+      };
 
       if (newStatus == true) {
-        final ts = Timestamp.fromDate(now);
-        
-        // For repeating tasks, only add if no stamp exists in current period
+        // For recurring tasks, only add if no stamp exists in current period
         bool shouldAddStamp = true;
         if (widget.item.taskType != 'oneTime') {
-          shouldAddStamp = !updatedStamps.any((stamp) {
-            final date = stamp.toDate();
-            if (widget.item.taskType == 'DailyTask') {
-              return _isSameDay(date, now);
-            } else if (widget.item.taskType == 'WeeklyTask') {
-              return _isSameWeek(date, now);
-            } else if (widget.item.taskType == 'MonthlyTask') {
-              return _isSameMonth(date, now);
-            }
-            return false;
-          });
+          shouldAddStamp =
+              !updatedStamps.any((stamp) {
+                final date = stamp.toDate();
+                if (widget.item.taskType == 'DailyTask') {
+                  return _isSameDay(date, now);
+                } else if (widget.item.taskType == 'WeeklyTask') {
+                  return _isSameWeek(date, now);
+                } else if (widget.item.taskType == 'MonthlyTask') {
+                  return _isSameMonth(date, now);
+                }
+                return false;
+              });
         }
 
         if (shouldAddStamp) {
-          updatedStamps.add(ts);
-          updateData['completedAt'] = ts;
+          updatedStamps.add(Timestamp.fromDate(now));
           updateData['completionStamps'] = updatedStamps;
         }
 
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
         // Remove ALL stamps in current period
-        updatedStamps = updatedStamps.where((stamp) {
-          final date = stamp.toDate();
-          
-          if (widget.item.taskType == 'oneTime') {
-            return false; // Remove all for one-time tasks
-          } else if (widget.item.taskType == 'DailyTask') {
-            return !_isSameDay(date, now);
-          } else if (widget.item.taskType == 'WeeklyTask') {
-            return !_isSameWeek(date, now);
-          } else if (widget.item.taskType == 'MonthlyTask') {
-            return !_isSameMonth(date, now);
-          }
-          return true;
-        }).toList();
+        updatedStamps =
+            updatedStamps.where((stamp) {
+              final date = stamp.toDate();
 
-        updateData['completedAt'] = null;
+              if (widget.item.taskType == 'oneTime') {
+                return false; // Remove all for one-time tasks
+              } else if (widget.item.taskType == 'DailyTask') {
+                return !_isSameDay(date, now);
+              } else if (widget.item.taskType == 'WeeklyTask') {
+                return !_isSameWeek(date, now);
+              } else if (widget.item.taskType == 'MonthlyTask') {
+                return !_isSameMonth(date, now);
+              }
+              return true;
+            }).toList();
+
         updateData['completionStamps'] = updatedStamps;
 
         if (widget.item.date.isAfter(DateTime.now())) {
@@ -170,7 +304,7 @@ class _ItemWidgetState extends State<ItemWidget> {
         }
       }
 
-      // Update Firestore
+      // Update Firestore - CRITICAL FIX: Always update the document
       await taskRef.update(updateData);
 
       // Update local object
@@ -218,23 +352,24 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirm Deletion"),
-        content: const Text("Are you sure you want to delete this task?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("Cancel"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("Confirm Deletion"),
+            content: const Text("Are you sure you want to delete this task?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  "Delete",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              "Delete",
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
     );
 
     if (confirm != true) return;
@@ -277,7 +412,9 @@ class _ItemWidgetState extends State<ItemWidget> {
 
   void _showSnackbar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   TextSpan _highlightSearchText(String text, String query) {
@@ -345,7 +482,8 @@ class _ItemWidgetState extends State<ItemWidget> {
       final data = snapshot.data();
       if (data != null && data['completionStamps'] != null) {
         final List<dynamic> stamps = data['completionStamps'];
-        completedList = stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+        completedList =
+            stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
       }
     } catch (e) {
       print("❌ Error loading completion stamps: $e");
@@ -457,17 +595,27 @@ class _ItemWidgetState extends State<ItemWidget> {
                   builder: (context) => ItemDetailPage(task: task),
                 ),
               );
+            } else if (value == 'Analytics') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => AnalyticsPage(task: task)),
+              );
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
-            const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-            const PopupMenuItem(
-              value: 'details',
-              child: Text('📄 Details'),
-            ),
-          ],
+          itemBuilder:
+              (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
+                const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
+                const PopupMenuItem(value: 'share', child: Text('📤 Share')),
+                const PopupMenuItem(
+                  value: 'Analytics',
+                  child: Text(" Analytics"),
+                ),
+                const PopupMenuItem(
+                  value: 'details',
+                  child: Text('📄 Details'),
+                ),
+              ],
         ),
       ),
     );

@@ -333,6 +333,7 @@ class WeeklyTask extends Task {
     );
   }
 
+
   bool shouldResetThisWeek() {
     if (completedAt == null) return true;
 
