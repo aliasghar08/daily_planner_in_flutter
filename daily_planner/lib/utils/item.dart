@@ -77,134 +77,6 @@ class _ItemWidgetState extends State<ItemWidget> {
     return a.year == b.year && a.month == b.month;
   }
 
-  // Future<void> changeCompleted(bool? newStatus) async {
-  //   final previousStatus = isChecked;
-
-  //   setState(() {
-  //     isChecked = newStatus;
-  //     widget.item.isCompleted = newStatus!;
-  //   });
-
-  //   try {
-  //     final uid = FirebaseAuth.instance.currentUser?.uid;
-  //     if (uid == null) throw Exception("User not logged in");
-
-  //     final taskRef = FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('tasks')
-  //         .doc(widget.item.docId);
-
-  //     final now = DateTime.now();
-  //     final today = DateTime(now.year, now.month, now.day);
-
-  //     final snapshot = await taskRef.get();
-  //     final currentData = snapshot.data();
-  //     List<Timestamp> updatedStamps = [];
-
-  //     if (currentData != null && currentData['completionStamps'] != null) {
-  //       updatedStamps =
-  //           (currentData['completionStamps'] as List).map((e) {
-  //             if (e is Timestamp) return e;
-  //             if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
-  //             if (e is String) return Timestamp.fromDate(DateTime.parse(e));
-  //             if (e is DateTime) return Timestamp.fromDate(e);
-  //             throw Exception("Invalid completion stamp: $e");
-  //           }).toList();
-  //     }
-
-  //     Map<String, dynamic> updateData = {'isCompleted': newStatus};
-
-  //     if (newStatus == true) {
-  //       final ts = Timestamp.fromDate(now);
-
-  //       // For repeating tasks, only add if no stamp exists in current period
-  //       bool shouldAddStamp = true;
-  //       if (widget.item.taskType != 'oneTime') {
-  //         shouldAddStamp = !updatedStamps.any((stamp) {
-  //           final date = stamp.toDate();
-  //           if (widget.item.taskType == 'DailyTask') {
-  //             return _isSameDay(date, now);
-  //           } else if (widget.item.taskType == 'WeeklyTask') {
-  //             return _isSameWeek(date, now);
-  //           } else if (widget.item.taskType == 'MonthlyTask') {
-  //             return _isSameMonth(date, now);
-  //           }
-  //           return false;
-  //         });
-  //       }
-
-  //       if (shouldAddStamp) {
-  //         updatedStamps.add(ts);
-  //         updateData['completedAt'] = ts;
-  //         updateData['completionStamps'] = updatedStamps;
-  //       }
-
-  //       await NativeAlarmHelper.cancelAlarmById(notificationId);
-  //     } else {
-  //       // Remove ALL stamps in current period
-  //       updatedStamps = updatedStamps.where((stamp) {
-  //         final date = stamp.toDate();
-
-  //         if (widget.item.taskType == 'oneTime') {
-  //           return false; // Remove all for one-time tasks
-  //         } else if (widget.item.taskType == 'DailyTask') {
-  //           return !_isSameDay(date, now);
-  //         } else if (widget.item.taskType == 'WeeklyTask') {
-  //           return !_isSameWeek(date, now);
-  //         } else if (widget.item.taskType == 'MonthlyTask') {
-  //           return !_isSameMonth(date, now);
-  //         }
-  //         return true;
-  //       }).toList();
-
-  //       updateData['completedAt'] = null;
-  //       updateData['completionStamps'] = updatedStamps;
-
-  //       if (widget.item.date.isAfter(DateTime.now())) {
-  //         await NativeAlarmHelper.scheduleAlarmAtTime(
-  //           id: notificationId,
-  //           title: widget.item.title,
-  //           body: widget.item.detail,
-  //           dateTime: widget.item.date,
-  //         );
-  //       }
-  //     }
-
-  //     // Update Firestore
-  //     await taskRef.update(updateData);
-
-  //     // Update local object
-  //     if (widget.item is DailyTask) {
-  //       (widget.item as DailyTask).completionStamps
-  //         ..clear()
-  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
-  //     } else if (widget.item is WeeklyTask) {
-  //       (widget.item as WeeklyTask).completionStamps
-  //         ..clear()
-  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
-  //     } else if (widget.item is MonthlyTask) {
-  //       (widget.item as MonthlyTask).completionStamps
-  //         ..clear()
-  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
-  //     }
-
-  //     // Update local state
-  //     setState(() {
-  //       completedList = updatedStamps.map((ts) => ts.toDate()).toList();
-  //     });
-
-  //     widget.item.completedAt = newStatus == true ? now : null;
-  //     widget.onEditDone?.call();
-  //   } catch (e) {
-  //     setState(() {
-  //       isChecked = previousStatus;
-  //       widget.item.isCompleted = previousStatus!;
-  //     });
-  //     _showSnackbar("❌ Failed to update task: ${e.toString()}");
-  //   }
-  // }
-
   Future<void> changeCompleted(bool? newStatus) async {
     final previousStatus = isChecked;
 
@@ -227,10 +99,6 @@ class _ItemWidgetState extends State<ItemWidget> {
       final today = DateTime(now.year, now.month, now.day);
 
       final snapshot = await taskRef.get();
-      if (!snapshot.exists) {
-        throw Exception("Task document does not exist");
-      }
-
       final currentData = snapshot.data();
       List<Timestamp> updatedStamps = [];
 
@@ -245,53 +113,52 @@ class _ItemWidgetState extends State<ItemWidget> {
             }).toList();
       }
 
-      Map<String, dynamic> updateData = {
-        'isCompleted': newStatus,
-        'completedAt': newStatus == true ? Timestamp.fromDate(now) : null,
-      };
+      Map<String, dynamic> updateData = {'isCompleted': newStatus};
 
       if (newStatus == true) {
-        // For recurring tasks, only add if no stamp exists in current period
+        final ts = Timestamp.fromDate(now);
+
+        // For repeating tasks, only add if no stamp exists in current period
         bool shouldAddStamp = true;
         if (widget.item.taskType != 'oneTime') {
-          shouldAddStamp =
-              !updatedStamps.any((stamp) {
-                final date = stamp.toDate();
-                if (widget.item.taskType == 'DailyTask') {
-                  return _isSameDay(date, now);
-                } else if (widget.item.taskType == 'WeeklyTask') {
-                  return _isSameWeek(date, now);
-                } else if (widget.item.taskType == 'MonthlyTask') {
-                  return _isSameMonth(date, now);
-                }
-                return false;
-              });
+          shouldAddStamp = !updatedStamps.any((stamp) {
+            final date = stamp.toDate();
+            if (widget.item.taskType == 'DailyTask') {
+              return _isSameDay(date, now);
+            } else if (widget.item.taskType == 'WeeklyTask') {
+              return _isSameWeek(date, now);
+            } else if (widget.item.taskType == 'MonthlyTask') {
+              return _isSameMonth(date, now);
+            }
+            return false;
+          });
         }
 
         if (shouldAddStamp) {
-          updatedStamps.add(Timestamp.fromDate(now));
+          updatedStamps.add(ts);
+          updateData['completedAt'] = ts;
           updateData['completionStamps'] = updatedStamps;
         }
 
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
         // Remove ALL stamps in current period
-        updatedStamps =
-            updatedStamps.where((stamp) {
-              final date = stamp.toDate();
+        updatedStamps = updatedStamps.where((stamp) {
+          final date = stamp.toDate();
 
-              if (widget.item.taskType == 'oneTime') {
-                return false; // Remove all for one-time tasks
-              } else if (widget.item.taskType == 'DailyTask') {
-                return !_isSameDay(date, now);
-              } else if (widget.item.taskType == 'WeeklyTask') {
-                return !_isSameWeek(date, now);
-              } else if (widget.item.taskType == 'MonthlyTask') {
-                return !_isSameMonth(date, now);
-              }
-              return true;
-            }).toList();
+          if (widget.item.taskType == 'oneTime') {
+            return false; // Remove all for one-time tasks
+          } else if (widget.item.taskType == 'DailyTask') {
+            return !_isSameDay(date, now);
+          } else if (widget.item.taskType == 'WeeklyTask') {
+            return !_isSameWeek(date, now);
+          } else if (widget.item.taskType == 'MonthlyTask') {
+            return !_isSameMonth(date, now);
+          }
+          return true;
+        }).toList();
 
+        updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
 
         if (widget.item.date.isAfter(DateTime.now())) {
@@ -304,7 +171,7 @@ class _ItemWidgetState extends State<ItemWidget> {
         }
       }
 
-      // Update Firestore - CRITICAL FIX: Always update the document
+      // Update Firestore
       await taskRef.update(updateData);
 
       // Update local object
@@ -337,6 +204,139 @@ class _ItemWidgetState extends State<ItemWidget> {
       _showSnackbar("❌ Failed to update task: ${e.toString()}");
     }
   }
+
+  // Future<void> changeCompleted(bool? newStatus) async {
+  //   final previousStatus = isChecked;
+
+  //   setState(() {
+  //     isChecked = newStatus;
+  //     widget.item.isCompleted = newStatus!;
+  //   });
+
+  //   try {
+  //     final uid = FirebaseAuth.instance.currentUser?.uid;
+  //     if (uid == null) throw Exception("User not logged in");
+
+  //     final taskRef = FirebaseFirestore.instance
+  //         .collection('users')
+  //         .doc(uid)
+  //         .collection('tasks')
+  //         .doc(widget.item.docId);
+
+  //     final now = DateTime.now();
+  //     final today = DateTime(now.year, now.month, now.day);
+
+  //     final snapshot = await taskRef.get();
+  //     if (!snapshot.exists) {
+  //       throw Exception("Task document does not exist");
+  //     }
+
+  //     final currentData = snapshot.data();
+  //     List<Timestamp> updatedStamps = [];
+
+  //     if (currentData != null && currentData['completionStamps'] != null) {
+  //       updatedStamps =
+  //           (currentData['completionStamps'] as List).map((e) {
+  //             if (e is Timestamp) return e;
+  //             if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
+  //             if (e is String) return Timestamp.fromDate(DateTime.parse(e));
+  //             if (e is DateTime) return Timestamp.fromDate(e);
+  //             throw Exception("Invalid completion stamp: $e");
+  //           }).toList();
+  //     }
+
+  //     Map<String, dynamic> updateData = {
+  //       'isCompleted': newStatus,
+  //       'completedAt': newStatus == true ? Timestamp.fromDate(now) : null,
+  //     };
+
+  //     if (newStatus == true) {
+  //       // For recurring tasks, only add if no stamp exists in current period
+  //       bool shouldAddStamp = true;
+  //       if (widget.item.taskType != 'oneTime') {
+  //         shouldAddStamp =
+  //             !updatedStamps.any((stamp) {
+  //               final date = stamp.toDate();
+  //               if (widget.item.taskType == 'DailyTask') {
+  //                 return _isSameDay(date, now);
+  //               } else if (widget.item.taskType == 'WeeklyTask') {
+  //                 return _isSameWeek(date, now);
+  //               } else if (widget.item.taskType == 'MonthlyTask') {
+  //                 return _isSameMonth(date, now);
+  //               }
+  //               return false;
+  //             });
+  //       }
+
+  //       if (shouldAddStamp) {
+  //         updatedStamps.add(Timestamp.fromDate(now));
+  //         updateData['completionStamps'] = updatedStamps;
+  //       }
+
+  //       await NativeAlarmHelper.cancelAlarmById(notificationId);
+  //     } else {
+  //       // Remove ALL stamps in current period
+  //       updatedStamps =
+  //           updatedStamps.where((stamp) {
+  //             final date = stamp.toDate();
+
+  //             if (widget.item.taskType == 'oneTime') {
+  //               return false; // Remove all for one-time tasks
+  //             } else if (widget.item.taskType == 'DailyTask') {
+  //               return !_isSameDay(date, now);
+  //             } else if (widget.item.taskType == 'WeeklyTask') {
+  //               return !_isSameWeek(date, now);
+  //             } else if (widget.item.taskType == 'MonthlyTask') {
+  //               return !_isSameMonth(date, now);
+  //             }
+  //             return true;
+  //           }).toList();
+
+  //       updateData['completionStamps'] = updatedStamps;
+
+  //       if (widget.item.date.isAfter(DateTime.now())) {
+  //         await NativeAlarmHelper.scheduleAlarmAtTime(
+  //           id: notificationId,
+  //           title: widget.item.title,
+  //           body: widget.item.detail,
+  //           dateTime: widget.item.date,
+  //         );
+  //       }
+  //     }
+
+  //     // Update Firestore - CRITICAL FIX: Always update the document
+  //     await taskRef.update(updateData);
+
+  //     // Update local object
+  //     if (widget.item.taskType == "DailyTask") {
+  //       (widget.item as DailyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     } else if (widget.item.taskType == "WeeklyTask") {
+  //       (widget.item as WeeklyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     } else if (widget.item.taskType == "MonthlyTask") {
+  //       (widget.item as MonthlyTask).completionStamps
+  //         ..clear()
+  //         ..addAll(updatedStamps.map((ts) => ts.toDate()));
+  //     }
+
+  //     // Update local state
+  //     setState(() {
+  //       completedList = updatedStamps.map((ts) => ts.toDate()).toList();
+  //     });
+
+  //     widget.item.completedAt = newStatus == true ? now : null;
+  //     widget.onEditDone?.call();
+  //   } catch (e) {
+  //     setState(() {
+  //       isChecked = previousStatus;
+  //       widget.item.isCompleted = previousStatus!;
+  //     });
+  //     _showSnackbar("❌ Failed to update task: ${e.toString()}");
+  //   }
+  // }
 
   int generateNotificationId(String taskId, DateTime time) {
     return (taskId + time.toIso8601String()).hashCode.abs();

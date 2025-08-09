@@ -36,500 +36,523 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         .get();
   }
 
-@override
-Widget build(BuildContext context) {
-  return Scaffold(
-    appBar: AppBar(
-      title: Text("Analytics: ${widget.task.title}"),
-      actions: [
-        IconButton(
-          icon: Icon(Icons.refresh),
-          onPressed: () {
-            setState(() {
-              _taskDataFuture = _fetchTaskData();
-            });
-          },
-        ),
-      ],
-    ),
-    body: FutureBuilder<DocumentSnapshot>(
-      future: _taskDataFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text(
-                  "Loading analytics...",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          );
-        }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Analytics: ${widget.task.title}"),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                _taskDataFuture = _fetchTaskData();
+              });
+            },
+          ),
+        ],
+      ),
+      body: FutureBuilder<DocumentSnapshot>(
+        future: _taskDataFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    "Loading analytics...",
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.error_outline, color: Colors.red, size: 48),
-                SizedBox(height: 16),
-                Text(
-                  'Error loading data',
-                  style: TextStyle(fontSize: 18, color: Colors.red),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  '${snapshot.error}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-                SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _taskDataFuture = _fetchTaskData();
-                    });
-                  },
-                  child: Text('Retry'),
-                ),
-              ],
-            ),
-          );
-        }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  SizedBox(height: 16),
+                  Text(
+                    'Error loading data',
+                    style: TextStyle(fontSize: 18, color: Colors.red),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _taskDataFuture = _fetchTaskData();
+                      });
+                    },
+                    child: Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
 
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.find_in_page, color: Colors.blue, size: 48),
-                SizedBox(height: 16),
-                Text(
-                  'Task data not found',
-                  style: TextStyle(fontSize: 18),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'No analytics available for this task',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          );
-        }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.find_in_page, color: Colors.blue, size: 48),
+                  SizedBox(height: 16),
+                  Text('Task data not found', style: TextStyle(fontSize: 18)),
+                  SizedBox(height: 8),
+                  Text(
+                    'No analytics available for this task',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
 
-        final taskData = snapshot.data!.data() as Map<String, dynamic>;
-        final stamps = _parseCompletionStamps(taskData['completionStamps']);
-        final notificationTimes = taskData['notificationTimes'] != null
-            ? _parseNotificationTimes(taskData['notificationTimes'])
-            : <TimeOfDay>[];
+          final taskData = snapshot.data!.data() as Map<String, dynamic>;
+          final stamps = _parseCompletionStamps(taskData['completionStamps']);
+          final notificationTimes =
+              taskData['notificationTimes'] != null
+                  ? _parseNotificationTimes(taskData['notificationTimes'])
+                  : <TimeOfDay>[];
 
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                // Existing analytics content
-                _buildTaskAnalytics(context, taskData),
-                
-                // Add chart section header
-                if (stamps.isNotEmpty || notificationTimes.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16.0),
-                    child: Row(
-                      children: [
-                        Icon(Icons.insights, color: Theme.of(context).primaryColor),
-                        SizedBox(width: 8),
-                        Text(
-                          'Visual Insights',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Existing analytics content
+                  _buildTaskAnalytics(context, taskData),
+
+                  // Add chart section header
+                  if (stamps.isNotEmpty || notificationTimes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.insights,
                             color: Theme.of(context).primaryColor,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                
-                // Daily Task Charts
-                if (widget.task.taskType == 'DailyTask' && stamps.isNotEmpty)
-                  Column(
-                    children: [
-                      _buildAnalyticsCard(
-                        title: "Weekly Completion",
-                        children: [
-                          SizedBox(
-                            height: 220,
-                            child: _buildStreakChart(stamps, Duration(days: 1)),
-                          ),
-                          SizedBox(height: 8),
+                          SizedBox(width: 8),
                           Text(
-                            "Last 7 days completion status",
-                            style: TextStyle(fontSize: 12, color: Colors.grey),
-                            textAlign: TextAlign.center,
+                            'Visual Insights',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
                         ],
                       ),
-                      if (notificationTimes.isNotEmpty)
+                    ),
+
+                  // Daily Task Charts
+                  if (widget.task.taskType == 'DailyTask' && stamps.isNotEmpty)
+                    Column(
+                      children: [
                         _buildAnalyticsCard(
-                          title: "Notification Time Distribution",
+                          title: "Weekly Completion",
                           children: [
                             SizedBox(
                               height: 220,
-                              child: _buildTimeDistributionChart(notificationTimes),
+                              child: _buildStreakChart(
+                                stamps,
+                                Duration(days: 1),
+                              ),
                             ),
                             SizedBox(height: 8),
                             Text(
-                              "When you're most likely to be notified",
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                              "Last 7 days completion status",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                           ],
                         ),
-                    ],
+                        if (notificationTimes.isNotEmpty) ...[
+                          _buildAnalyticsCard(
+                            title: "Today's Notifications",
+                            children: [
+                              SizedBox(
+                                height: 220,
+                                child: _buildPendingNotificationsChart(
+                                  notificationTimes,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                "Pending (blue) vs Sent (green) notifications",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 12),
+                              Text(
+                                "Upcoming Notifications:",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              _buildNotificationTimesList(
+                                context,
+                                notificationTimes,
+                              ),
+                            ],
+                          ),
+                        ],
+
+                        if (notificationTimes.isNotEmpty)
+                          _buildAnalyticsCard(
+                            title: "Notification Time Distribution",
+                            children: [
+                              SizedBox(
+                                height: 220,
+                                child: _buildTimeDistributionChart(
+                                  notificationTimes,
+                                ),
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                "When you're most likely to be notified",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                      ],
+                    ),
+
+                  // Weekly Task Charts
+                  if (widget.task.taskType == 'WeeklyTask' && stamps.isNotEmpty)
+                    _buildAnalyticsCard(
+                      title: "Monthly Completion Trend",
+                      children: [
+                        SizedBox(
+                          height: 220,
+                          child: _buildMonthlyTrendChart(stamps),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          "Completion pattern over last 6 months",
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+
+                  // Monthly Task Charts
+                  if (widget.task.taskType == 'MonthlyTask' &&
+                      stamps.isNotEmpty)
+                    _buildAnalyticsCard(
+                      title: "Yearly Performance",
+                      children: [
+                        SizedBox(
+                          height: 220,
+                          child: _buildMonthlyTrendChart(stamps),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          "Monthly completion history",
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStreakChart(List<DateTime> stamps, Duration recurrence) {
+    final now = DateTime.now();
+
+    // Prepare labels for last 7 days
+    final labels = List.generate(7, (i) {
+      final day = now.subtract(Duration(days: 6 - i));
+      return DateFormat.E().format(day);
+    });
+
+    // Prepare completion data
+    final data = List.generate(7, (i) {
+      final day = now.subtract(Duration(days: 6 - i));
+      return stamps.any(
+            (s) =>
+                s.year == day.year && s.month == day.month && s.day == day.day,
+          )
+          ? 1.0
+          : 0.0;
+    });
+
+    return BarChart(
+      BarChartData(
+        barGroups: List.generate(7, (i) {
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: data[i],
+                color: data[i] > 0 ? Colors.blue[300] : Colors.grey[300],
+                width: 20,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          );
+        }),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    labels[value.toInt()],
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                
-                // Weekly Task Charts
-                if (widget.task.taskType == 'WeeklyTask' && stamps.isNotEmpty)
-                  _buildAnalyticsCard(
-                    title: "Monthly Completion Trend",
-                    children: [
-                      SizedBox(
-                        height: 220,
-                        child: _buildMonthlyTrendChart(stamps),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        "Completion pattern over last 6 months",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                
-                // Monthly Task Charts
-                if (widget.task.taskType == 'MonthlyTask' && stamps.isNotEmpty)
-                  _buildAnalyticsCard(
-                    title: "Yearly Performance",
-                    children: [
-                      SizedBox(
-                        height: 220,
-                        child: _buildMonthlyTrendChart(stamps),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        "Monthly completion history",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-              ],
+                );
+              },
+              reservedSize: 30,
             ),
           ),
-        );
-      },
-    ),
-  );
-}
-
-Widget _buildStreakChart(List<DateTime> stamps, Duration recurrence) {
-  final now = DateTime.now();
-  
-  // Prepare labels for last 7 days
-  final labels = List.generate(7, (i) {
-    final day = now.subtract(Duration(days: 6 - i));
-    return DateFormat.E().format(day);
-  });
-
-  // Prepare completion data
-  final data = List.generate(7, (i) {
-    final day = now.subtract(Duration(days: 6 - i));
-    return stamps.any((s) => 
-      s.year == day.year &&
-      s.month == day.month &&
-      s.day == day.day
-    ) ? 1.0 : 0.0;
-  });
-
-  return BarChart(
-    BarChartData(
-      barGroups: List.generate(7, (i) {
-        return BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: data[i],
-              color: data[i] > 0 ? Colors.green : Colors.grey[300],
-              width: 20,
-              borderRadius: BorderRadius.circular(4),
-            )
-          ],
-        );
-      }),
-      titlesData: FlTitlesData(
-        show: true,
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            getTitlesWidget: (value, meta) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  labels[value.toInt()],
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                  ),
-                ),
-              );
-            },
-            reservedSize: 30,
-          ),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-        rightTitles: AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
-        topTitles: AxisTitles(
-          sideTitles: SideTitles(showTitles: false),
-        ),
+        gridData: const FlGridData(show: false),
+        borderData: FlBorderData(show: false),
       ),
-      gridData: const FlGridData(show: false),
-      borderData: FlBorderData(show: false),
-    ),
-  );
-}
+    );
+  }
 
   List<String> _getTimeDistributionList(List<TimeOfDay> times) {
     final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
     final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
     final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
     final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
-    
+
     final total = times.length.toDouble();
     return [
-      'Morning: ${(morning/total*100).round()}%',
-      'Afternoon: ${(afternoon/total*100).round()}%',
-      'Evening: ${(evening/total*100).round()}%',
-      'Night: ${(night/total*100).round()}%',
+      'Morning: ${(morning / total * 100).round()}%',
+      'Afternoon: ${(afternoon / total * 100).round()}%',
+      'Evening: ${(evening / total * 100).round()}%',
+      'Night: ${(night / total * 100).round()}%',
     ];
   }
- 
 
-  Widget _buildNotificationTimesList(BuildContext context, List<TimeOfDay> times) {
-  if (times.isEmpty) return Text('None', style: TextStyle(color: Colors.grey));
+  Widget _buildNotificationTimesList(
+    BuildContext context,
+    List<TimeOfDay> times,
+  ) {
+    if (times.isEmpty)
+      return Text('None', style: TextStyle(color: Colors.grey));
 
-  // Remove duplicates while preserving order
-  final uniqueTimes = times.fold<List<TimeOfDay>>([], (list, time) {
-    if (!list.any((t) => t.hour == time.hour && t.minute == time.minute)) {
-      list.add(time);
-    }
-    return list;
-  });
+    // Remove duplicates while preserving order
+    final uniqueTimes = times.fold<List<TimeOfDay>>([], (list, time) {
+      if (!list.any((t) => t.hour == time.hour && t.minute == time.minute)) {
+        list.add(time);
+      }
+      return list;
+    });
 
-  // Get current date for context
-  final now = DateTime.now();
+    // Get current date for context
+    final now = DateTime.now();
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      for (final time in uniqueTimes)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _formatTimeOfDay(context, time),
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final time in uniqueTimes)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatTimeOfDay(context, time),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                 ),
-              ),
-              SizedBox(height: 2),
-              Text(
-                _formatFullDateWithDay(now, time),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
+                SizedBox(height: 2),
+                Text(
+                  _formatFullDateWithDay(now, time),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-    ],
-  );
-}
-
-String _formatFullDateWithDay(DateTime date, TimeOfDay time) {
-  // Create a DateTime object using the current date and the notification time
-  final dateTime = DateTime(
-    date.year,
-    date.month,
-    date.day,
-    time.hour,
-    time.minute,
-  );
-
-  return DateFormat('EEEE, MMMM d, y').format(dateTime);
-}
-
-Widget _buildTimeDistributionChart(List<TimeOfDay> times) {
-  if (times.isEmpty) return SizedBox.shrink();
-  
-  final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
-  final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
-  final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
-  final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
-  
-  final total = times.length.toDouble();
-  final sections = [
-    PieChartSectionData(
-      value: morning / total * 100,
-      color: Colors.blue,
-      title: '${(morning/total*100).round()}%',
-      radius: 40,
-    ),
-    PieChartSectionData(
-      value: afternoon / total * 100,
-      color: Colors.orange,
-      title: '${(afternoon/total*100).round()}%',
-      radius: 40,
-    ),
-    PieChartSectionData(
-      value: evening / total * 100,
-      color: Colors.purple,
-      title: '${(evening/total*100).round()}%',
-      radius: 40,
-    ),
-    PieChartSectionData(
-      value: night / total * 100,
-      color: Colors.grey,
-      title: '${(night/total*100).round()}%',
-      radius: 40,
-    ),
-  ];
-
-  return PieChart(
-    PieChartData(
-      sections: sections,
-      centerSpaceRadius: 30,
-    ),
-  );
-}
-
-Widget _buildMonthlyTrendChart(List<DateTime> stamps) {
-  if (stamps.isEmpty) return const SizedBox.shrink();
-
-  final now = DateTime.now();
-  final months = List.generate(6, (i) {
-    final date = DateTime(now.year, now.month - 5 + i);
-    return DateFormat.MMM().format(date);
-  });
-
-  // Group stamps by month
-  final monthlyCounts = <int, int>{};
-  for (final stamp in stamps) {
-    final monthKey = stamp.year * 100 + stamp.month;
-    monthlyCounts[monthKey] = (monthlyCounts[monthKey] ?? 0) + 1;
+      ],
+    );
   }
 
-  // Prepare chart data for last 6 months
-  final chartData = List.generate(6, (i) {
-    final date = DateTime(now.year, now.month - 5 + i);
-    final monthKey = date.year * 100 + date.month;
-    return monthlyCounts[monthKey]?.toDouble() ?? 0.0;
-  });
+  String _formatFullDateWithDay(DateTime date, TimeOfDay time) {
+    // Create a DateTime object using the current date and the notification time
+    final dateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
 
-  // Find max value for scaling
-  final maxValue = chartData.reduce(max) * 1.2;
+    return DateFormat('EEEE, MMMM d, y').format(dateTime);
+  }
 
-  return BarChart(
-    BarChartData(
-      alignment: BarChartAlignment.spaceAround,
-      maxY: maxValue > 0 ? maxValue : 5, // Ensure chart has some height
-      barGroups: List.generate(6, (i) {
-        return BarChartGroupData(
-          x: i,
-          barRods: [
-            BarChartRodData(
-              toY: chartData[i],
-              color: _getChartColor(chartData[i]),
-              width: 20,
-              borderRadius: BorderRadius.circular(4),
-            )
-          ],
-        );
-      }),
-      titlesData: FlTitlesData(
-        show: true,
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            getTitlesWidget: (value, meta) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  months[value.toInt()],
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
+  Widget _buildTimeDistributionChart(List<TimeOfDay> times) {
+    if (times.isEmpty) return SizedBox.shrink();
+
+    final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
+    final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
+    final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
+    final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
+
+    final total = times.length.toDouble();
+    final sections = [
+      PieChartSectionData(
+        value: morning / total * 100,
+        color: Colors.blue,
+        title: '${(morning / total * 100).round()}%',
+        radius: 40,
+      ),
+      PieChartSectionData(
+        value: afternoon / total * 100,
+        color: Colors.orange,
+        title: '${(afternoon / total * 100).round()}%',
+        radius: 40,
+      ),
+      PieChartSectionData(
+        value: evening / total * 100,
+        color: Colors.purple,
+        title: '${(evening / total * 100).round()}%',
+        radius: 40,
+      ),
+      PieChartSectionData(
+        value: night / total * 100,
+        color: Colors.grey,
+        title: '${(night / total * 100).round()}%',
+        radius: 40,
+      ),
+    ];
+
+    return PieChart(PieChartData(sections: sections, centerSpaceRadius: 30));
+  }
+
+  Widget _buildMonthlyTrendChart(List<DateTime> stamps) {
+    if (stamps.isEmpty) return const SizedBox.shrink();
+
+    final now = DateTime.now();
+    final months = List.generate(6, (i) {
+      final date = DateTime(now.year, now.month - 5 + i);
+      return DateFormat.MMM().format(date);
+    });
+
+    // Group stamps by month
+    final monthlyCounts = <int, int>{};
+    for (final stamp in stamps) {
+      final monthKey = stamp.year * 100 + stamp.month;
+      monthlyCounts[monthKey] = (monthlyCounts[monthKey] ?? 0) + 1;
+    }
+
+    // Prepare chart data for last 6 months
+    final chartData = List.generate(6, (i) {
+      final date = DateTime(now.year, now.month - 5 + i);
+      final monthKey = date.year * 100 + date.month;
+      return monthlyCounts[monthKey]?.toDouble() ?? 0.0;
+    });
+
+    // Find max value for scaling
+    final maxValue = chartData.reduce(max) * 1.2;
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxValue > 0 ? maxValue : 5, // Ensure chart has some height
+        barGroups: List.generate(6, (i) {
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: chartData[i],
+                color: _getChartColor(chartData[i]),
+                width: 20,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          );
+        }),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(
+                    months[value.toInt()],
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                ),
-              );
-            },
-            reservedSize: 30,
+                );
+              },
+              reservedSize: 30,
+            ),
           ),
-        ),
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            interval: maxValue > 10 ? 2 : 1,
-            getTitlesWidget: (value, meta) {
-              return Text(
-                value.toInt().toString(),
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              );
-            },
-            reservedSize: 28,
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              interval: maxValue > 10 ? 2 : 1,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  value.toInt().toString(),
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                );
+              },
+              reservedSize: 28,
+            ),
           ),
+          rightTitles: AxisTitles(),
+          topTitles: AxisTitles(),
         ),
-        rightTitles: AxisTitles(),
-        topTitles: AxisTitles(),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: maxValue > 10 ? 2 : 1,
+        ),
+        borderData: FlBorderData(show: false),
       ),
-      gridData: FlGridData(
-        show: true,
-        drawVerticalLine: false,
-        horizontalInterval: maxValue > 10 ? 2 : 1,
-      ),
-      borderData: FlBorderData(
-        show: false,
-      ),
-    ),
-  );
-}
+    );
+  }
 
-Color _getChartColor(double value) {
-  if (value == 0) return Colors.grey.withOpacity(0.3);
-  if (value < 3) return Colors.orange.shade300;
-  if (value < 6) return Colors.blue.shade300;
-  return Colors.green.shade300;
-}
-  
+  Color _getChartColor(double value) {
+    if (value == 0) return Colors.grey.withOpacity(0.3);
+    if (value < 3) return Colors.orange.shade300;
+    if (value < 6) return Colors.blue.shade300;
+    return Colors.blue.shade300;
+  }
 
-  Widget _buildTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
+  Widget _buildTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
     if (widget.task.taskType == 'DailyTask') {
       return _buildDailyTaskAnalytics(context, taskData);
     } else if (widget.task.taskType == 'WeeklyTask') {
@@ -541,16 +564,19 @@ Color _getChartColor(double value) {
     }
   }
 
-  Widget _buildOneTimeTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
+  Widget _buildOneTimeTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
     final createdAt = (taskData['createdAt'] as Timestamp).toDate();
-    final completedAt = taskData['completedAt'] != null 
-        ? (taskData['completedAt'] as Timestamp).toDate()
-        : null;
-    
-    final daysToComplete = completedAt != null
-        ? completedAt.difference(createdAt).inDays
-        : null;
-    
+    final completedAt =
+        taskData['completedAt'] != null
+            ? (taskData['completedAt'] as Timestamp).toDate()
+            : null;
+
+    final daysToComplete =
+        completedAt != null ? completedAt.difference(createdAt).inDays : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -559,53 +585,64 @@ Color _getChartColor(double value) {
           children: [
             _buildInfoRow("Type", "One-time"),
             _buildInfoRow("Created", DateFormat.yMMMd().format(createdAt)),
-            _buildInfoRow("Status", completedAt != null 
-                ? "Completed" 
-                : "Pending"),
+            _buildInfoRow(
+              "Status",
+              completedAt != null ? "Completed" : "Pending",
+            ),
             if (completedAt != null) ...[
-              _buildInfoRow("Completed", DateFormat.yMMMd().format(completedAt)),
-              _buildInfoRow("Time to Complete", 
-                  daysToComplete == 0 ? "Same day" : "$daysToComplete days"),
+              _buildInfoRow(
+                "Completed",
+                DateFormat.yMMMd().format(completedAt),
+              ),
+              _buildInfoRow(
+                "Time to Complete",
+                daysToComplete == 0 ? "Same day" : "$daysToComplete days",
+              ),
             ],
           ],
         ),
-        
-        if (taskData['notificationTimes'] != null) 
+
+        if (taskData['notificationTimes'] != null)
           _buildAnalyticsCard(
             title: "Schedule",
             children: [
-              _buildInfoRow("Notification Times", 
-                  _formatNotificationTimes(context, _parseNotificationTimes(taskData['notificationTimes']))),
+              _buildInfoRow(
+                "Notification Times",
+                _formatNotificationTimes(
+                  context,
+                  _parseNotificationTimes(taskData['notificationTimes']),
+                ),
+              ),
             ],
           ),
       ],
     );
   }
 
-  Widget _buildDailyTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
+  Widget _buildDailyTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
     final stamps = _parseCompletionStamps(taskData['completionStamps']);
     final totalCompletions = stamps.length;
     final today = DateTime.now();
     final last7Days = today.subtract(const Duration(days: 7));
     final last30Days = today.subtract(const Duration(days: 30));
-    
+
     final last7Count = stamps.where((d) => d.isAfter(last7Days)).length;
     final last30Count = stamps.where((d) => d.isAfter(last30Days)).length;
-    
+
     final streakInfo = _calculateStreak(stamps, Duration(days: 1));
     final currentStreak = streakInfo['current'] as int;
     final longestStreak = streakInfo['longest'] as int;
-    
-    final notificationTimes = taskData['notificationTimes'] != null 
-        ? _parseNotificationTimes(taskData['notificationTimes'])
-        : null;
-    
-    final timeStats = _calculateTimeStats(
-      context, 
-      stamps, 
-      notificationTimes
-    );
-    
+
+    final notificationTimes =
+        taskData['notificationTimes'] != null
+            ? _parseNotificationTimes(taskData['notificationTimes'])
+            : null;
+
+    final timeStats = _calculateTimeStats(context, stamps, notificationTimes);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -613,62 +650,97 @@ Color _getChartColor(double value) {
           title: "Completion Insights",
           children: [
             _buildInfoRow("Total Completions", "$totalCompletions times"),
-            _buildInfoRow("Current Streak", "$currentStreak days", 
-                good: currentStreak >= 3),
+            _buildInfoRow(
+              "Current Streak",
+              "$currentStreak days",
+              good: currentStreak >= 3,
+            ),
             _buildInfoRow("Longest Streak", "$longestStreak days"),
-            _buildInfoRow("Last 7 Days", "$last7Count/7 days", 
-                good: last7Count >= 5),
-            _buildInfoRow("Last 30 Days", "$last30Count/30 days", 
-                good: last30Count >= 20),
-            _buildInfoRow("Completion Rate", 
-                "${((last30Count / 30) * 100).toStringAsFixed(1)}%"),
+            _buildInfoRow(
+              "Last 7 Days",
+              "$last7Count/7 days",
+              good: last7Count >= 5,
+            ),
+            _buildInfoRow(
+              "Last 30 Days",
+              "$last30Count/30 days",
+              good: last30Count >= 20,
+            ),
+            _buildInfoRow(
+              "Completion Rate",
+              "${((last30Count / 30) * 100).toStringAsFixed(1)}%",
+            ),
           ],
         ),
-        
+
         _buildAnalyticsCard(
           title: "Time Performance",
           children: [
             if (timeStats['average'] != null)
-              _buildInfoRow("Avg Completion Time", timeStats['average'] as String),
+              _buildInfoRow(
+                "Avg Completion Time",
+                timeStats['average'] as String,
+              ),
             if (notificationTimes != null && notificationTimes.isNotEmpty) ...[
               SizedBox(height: 8),
-              Text("Scheduled Times:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                "Scheduled Times:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
             ],
             if (timeStats['onTimeRate'] != null)
-              _buildInfoRow("On Time Rate", "${timeStats['onTimeRate']}%", 
-                  good: (timeStats['onTimeRate'] as int) >= 70),
+              _buildInfoRow(
+                "On Time Rate",
+                "${timeStats['onTimeRate']}%",
+                good: (timeStats['onTimeRate'] as int) >= 70,
+              ),
             if (timeStats['consistency'] != null)
-              _buildInfoRow("Time Consistency", 
-                  "${(timeStats['consistency'] as double).toStringAsFixed(1)}%", 
-                  good: (timeStats['consistency'] as double) >= 80),
+              _buildInfoRow(
+                "Time Consistency",
+                "${(timeStats['consistency'] as double).toStringAsFixed(1)}%",
+                good: (timeStats['consistency'] as double) >= 80,
+              ),
           ],
         ),
-        
+
         if (notificationTimes != null && notificationTimes.isNotEmpty)
           _buildAnalyticsCard(
             title: "Notification Patterns",
             children: [
-              _buildInfoRow("Most Common Time", 
-                  _formatTimeOfDay(context, _findMostCommonTime(notificationTimes))),
+              _buildInfoRow(
+                "Most Common Time",
+                _formatTimeOfDay(
+                  context,
+                  _findMostCommonTime(notificationTimes),
+                ),
+              ),
               SizedBox(height: 8),
-              Text("Time Distribution:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                "Time Distribution:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 4),
-              ..._getTimeDistributionList(notificationTimes).map((part) => 
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: Text(part, style: TextStyle(fontSize: 14)),
-                )
-              ).toList(),
+              ..._getTimeDistributionList(notificationTimes)
+                  .map(
+                    (part) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Text(part, style: TextStyle(fontSize: 14)),
+                    ),
+                  )
+                  .toList(),
             ],
           ),
-        
+
         if (stamps.isNotEmpty)
           _buildAnalyticsCard(
             title: "Recent Activity",
             children: [
-              _buildInfoRow("Last Completed", DateFormat.yMMMd().format(stamps.last)),
+              _buildInfoRow(
+                "Last Completed",
+                DateFormat.yMMMd().format(stamps.last),
+              ),
               _buildInfoRow("Most Active Day", _findMostActiveDay(stamps)),
             ],
           ),
@@ -676,21 +748,25 @@ Color _getChartColor(double value) {
     );
   }
 
-  Widget _buildWeeklyTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
+  Widget _buildWeeklyTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
     final stamps = _parseCompletionStamps(taskData['completionStamps']);
     final totalCompletions = stamps.length;
     final now = DateTime.now();
     final last4Weeks = now.subtract(const Duration(days: 28));
-    
+
     final last4WeeksCount = stamps.where((d) => d.isAfter(last4Weeks)).length;
-    
+
     final streakInfo = _calculateWeeklyStreak(stamps);
     final currentStreak = streakInfo['current'] as int;
     final longestStreak = streakInfo['longest'] as int;
-    
-    final notificationTimes = taskData['notificationTimes'] != null 
-        ? _parseNotificationTimes(taskData['notificationTimes'])
-        : null;
+
+    final notificationTimes =
+        taskData['notificationTimes'] != null
+            ? _parseNotificationTimes(taskData['notificationTimes'])
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -699,66 +775,89 @@ Color _getChartColor(double value) {
           title: "Completion Insights",
           children: [
             _buildInfoRow("Total Completions", "$totalCompletions weeks"),
-            _buildInfoRow("Current Streak", "$currentStreak weeks", 
-                good: currentStreak >= 3),
+            _buildInfoRow(
+              "Current Streak",
+              "$currentStreak weeks",
+              good: currentStreak >= 3,
+            ),
             _buildInfoRow("Longest Streak", "$longestStreak weeks"),
-            _buildInfoRow("Last 4 Weeks", "$last4WeeksCount/4 weeks", 
-                good: last4WeeksCount >= 3),
-            _buildInfoRow("Completion Rate", 
-                "${((last4WeeksCount / 4) * 100).toStringAsFixed(1)}%"),
+            _buildInfoRow(
+              "Last 4 Weeks",
+              "$last4WeeksCount/4 weeks",
+              good: last4WeeksCount >= 3,
+            ),
+            _buildInfoRow(
+              "Completion Rate",
+              "${((last4WeeksCount / 4) * 100).toStringAsFixed(1)}%",
+            ),
           ],
         ),
-        
+
         if (notificationTimes != null && notificationTimes.isNotEmpty)
           _buildAnalyticsCard(
             title: "Notification Schedule",
             children: [
-              Text("Notification Times:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                "Notification Times:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
               SizedBox(height: 8),
-              _buildInfoRow("Most Common Time", 
-                  _formatTimeOfDay(context, _findMostCommonTime(notificationTimes))),
+              _buildInfoRow(
+                "Most Common Time",
+                _formatTimeOfDay(
+                  context,
+                  _findMostCommonTime(notificationTimes),
+                ),
+              ),
             ],
           ),
-        
+
         _buildAnalyticsCard(
           title: "Performance Trends",
           children: [
             _buildInfoRow("Most Active Month", _findMostActiveMonth(stamps)),
-            _buildInfoRow("Quarterly Consistency", 
-                "${_calculateQuarterlyConsistency(stamps).toStringAsFixed(1)}%"),
+            _buildInfoRow(
+              "Quarterly Consistency",
+              "${_calculateQuarterlyConsistency(stamps).toStringAsFixed(1)}%",
+            ),
           ],
         ),
-        
+
         if (stamps.isNotEmpty)
           _buildAnalyticsCard(
             title: "Recent Activity",
             children: [
-              _buildInfoRow("Last Completed", DateFormat.yMMMd().format(stamps.last)),
+              _buildInfoRow(
+                "Last Completed",
+                DateFormat.yMMMd().format(stamps.last),
+              ),
             ],
           ),
       ],
     );
   }
 
-  Widget _buildMonthlyTaskAnalytics(BuildContext context, Map<String, dynamic> taskData) {
+  Widget _buildMonthlyTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
     final stamps = _parseCompletionStamps(taskData['completionStamps']);
     final totalCompletions = stamps.length;
     final now = DateTime.now();
     final currentYear = now.year;
-    
-    final yearlyCompletions = stamps
-        .where((d) => d.year == currentYear)
-        .length;
-    
+
+    final yearlyCompletions = stamps.where((d) => d.year == currentYear).length;
+
     final streakInfo = _calculateMonthlyStreak(stamps);
     final currentStreak = streakInfo['current'] as int;
     final longestStreak = streakInfo['longest'] as int;
-    
-    final notificationTimes = taskData['notificationTimes'] != null 
-        ? _parseNotificationTimes(taskData['notificationTimes'])
-        : null;
+
+    final notificationTimes =
+        taskData['notificationTimes'] != null
+            ? _parseNotificationTimes(taskData['notificationTimes'])
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -767,43 +866,64 @@ Color _getChartColor(double value) {
           title: "Completion Insights",
           children: [
             _buildInfoRow("Total Completions", "$totalCompletions months"),
-            _buildInfoRow("Current Streak", "$currentStreak months", 
-                good: currentStreak >= 3),
+            _buildInfoRow(
+              "Current Streak",
+              "$currentStreak months",
+              good: currentStreak >= 3,
+            ),
             _buildInfoRow("Longest Streak", "$longestStreak months"),
-            _buildInfoRow("This Year", "$yearlyCompletions/${now.month} months", 
-                good: yearlyCompletions >= (now.month * 0.8).round()),
-            _buildInfoRow("Completion Rate", 
-                "${((yearlyCompletions / now.month) * 100).toStringAsFixed(1)}%"),
+            _buildInfoRow(
+              "This Year",
+              "$yearlyCompletions/${now.month} months",
+              good: yearlyCompletions >= (now.month * 0.8).round(),
+            ),
+            _buildInfoRow(
+              "Completion Rate",
+              "${((yearlyCompletions / now.month) * 100).toStringAsFixed(1)}%",
+            ),
           ],
         ),
-        
+
         if (notificationTimes != null && notificationTimes.isNotEmpty)
           _buildAnalyticsCard(
             title: "Notification Schedule",
             children: [
-              Text("Notification Times:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                "Notification Times:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
               SizedBox(height: 8),
-              _buildInfoRow("Most Common Time", 
-                  _formatTimeOfDay(context, _findMostCommonTime(notificationTimes))),
+              _buildInfoRow(
+                "Most Common Time",
+                _formatTimeOfDay(
+                  context,
+                  _findMostCommonTime(notificationTimes),
+                ),
+              ),
             ],
           ),
-        
+
         _buildAnalyticsCard(
           title: "Long-Term Trends",
           children: [
             _buildInfoRow("Most Active Year", _findMostActiveYear(stamps)),
-            _buildInfoRow("Annual Consistency", 
-                "${_calculateAnnualConsistency(stamps).toStringAsFixed(1)}%"),
+            _buildInfoRow(
+              "Annual Consistency",
+              "${_calculateAnnualConsistency(stamps).toStringAsFixed(1)}%",
+            ),
           ],
         ),
-        
+
         if (stamps.isNotEmpty)
           _buildAnalyticsCard(
             title: "Recent Activity",
             children: [
-              _buildInfoRow("Last Completed", DateFormat.yMMMd().format(stamps.last)),
+              _buildInfoRow(
+                "Last Completed",
+                DateFormat.yMMMd().format(stamps.last),
+              ),
             ],
           ),
       ],
@@ -812,7 +932,7 @@ Color _getChartColor(double value) {
 
   List<DateTime> _parseCompletionStamps(dynamic stampsData) {
     if (stampsData == null) return [];
-    
+
     if (stampsData is List) {
       return stampsData.map((stamp) {
         if (stamp is Timestamp) return stamp.toDate();
@@ -821,13 +941,13 @@ Color _getChartColor(double value) {
         throw Exception('Invalid completion stamp format: $stamp');
       }).toList();
     }
-    
+
     return [];
   }
 
   List<TimeOfDay> _parseNotificationTimes(dynamic timesData) {
     if (timesData == null) return [];
-    
+
     if (timesData is List) {
       return timesData.map((time) {
         if (time is Timestamp) {
@@ -837,27 +957,30 @@ Color _getChartColor(double value) {
         if (time is String) {
           // Handle string format if needed
           final parts = time.split(':');
-          return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+          return TimeOfDay(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          );
         }
         throw Exception('Invalid notification time format: $time');
       }).toList();
     }
-    
+
     return [];
   }
 
   Map<String, int> _calculateWeeklyStreak(List<DateTime> stamps) {
     if (stamps.isEmpty) return {'current': 0, 'longest': 0};
-    
+
     stamps.sort();
     final weeks = stamps.map((d) => _getWeekNumber(d)).toSet();
-    
+
     int currentStreak = 0;
     int longestStreak = 0;
     int tempStreak = 0;
-    
+
     final currentWeek = _getWeekNumber(DateTime.now());
-    
+
     for (int week = currentWeek; week >= 1; week--) {
       if (weeks.contains(week)) {
         currentStreak++;
@@ -867,31 +990,31 @@ Color _getChartColor(double value) {
         break;
       }
     }
-    
+
     return {'current': currentStreak, 'longest': longestStreak};
   }
 
   Map<String, int> _calculateMonthlyStreak(List<DateTime> stamps) {
     if (stamps.isEmpty) return {'current': 0, 'longest': 0};
-    
+
     stamps.sort();
     final months = stamps.map((d) => DateTime(d.year, d.month)).toSet();
-    
+
     int currentStreak = 0;
     int longestStreak = 0;
     int tempStreak = 0;
-    
+
     final now = DateTime.now();
     DateTime currentMonth = DateTime(now.year, now.month);
-    
+
     while (months.contains(currentMonth)) {
       currentStreak++;
       tempStreak++;
       if (tempStreak > longestStreak) longestStreak = tempStreak;
-      
+
       currentMonth = DateTime(currentMonth.year, currentMonth.month - 1);
     }
-    
+
     return {'current': currentStreak, 'longest': longestStreak};
   }
 
@@ -901,64 +1024,94 @@ Color _getChartColor(double value) {
     return weekNum;
   }
 
-  Map<String, dynamic> _calculateStreak(
-    List<DateTime> stamps, 
-    Duration recurrence
+  Map<String, int> _calculateStreak(
+    List<DateTime> stamps,
+    Duration recurrence,
   ) {
     if (stamps.isEmpty) return {'current': 0, 'longest': 0};
-    
-    stamps.sort();
-    final dates = stamps.map((d) => DateTime(d.year, d.month, d.day)).toSet();
-    
+
+    // Normalize all dates to midnight (remove time component)
+    final normalizedStamps =
+        stamps.map((d) => DateTime(d.year, d.month, d.day)).toList();
+    normalizedStamps.sort();
+
+    final today = DateTime.now();
+    final todayNormalized = DateTime(today.year, today.month, today.day);
+
     int currentStreak = 0;
     int longestStreak = 0;
-    int tempStreak = 0;
-    final today = DateTime.now();
-    
-    DateTime? prev;
-    for (final date in stamps) {
-      if (prev == null) {
-        tempStreak = 1;
-      } else {
-        final diff = date.difference(prev);
-        tempStreak = (diff.inDays ~/ recurrence.inDays) == 1 
-            ? tempStreak + 1 
-            : 1;
+    int tempStreak = 1; // Start with 1 for the first date
+
+    // 1. Calculate longest streak first
+    for (int i = 1; i < normalizedStamps.length; i++) {
+      final prev = normalizedStamps[i - 1];
+      final current = normalizedStamps[i];
+      final diff = current.difference(prev).inDays;
+
+      if (diff == recurrence.inDays) {
+        // Perfect continuation
+        tempStreak++;
+      } else if (diff > recurrence.inDays) {
+        // Gap detected
+        longestStreak = max(longestStreak, tempStreak);
+        tempStreak = 1; // Reset
       }
-      if (tempStreak > longestStreak) longestStreak = tempStreak;
-      prev = date;
+      // If diff < recurrence.inDays, it's multiple completions in same period
     }
-    
-    DateTime current = today;
-    while (dates.contains(current)) {
-      currentStreak++;
-      current = current.subtract(recurrence);
+    longestStreak = max(longestStreak, tempStreak); // Final check
+
+    // 2. Calculate current streak (working backwards from today)
+    if (normalizedStamps.contains(todayNormalized)) {
+      currentStreak = 1;
+      DateTime checkDate = todayNormalized.subtract(recurrence);
+
+      while (normalizedStamps.contains(checkDate)) {
+        currentStreak++;
+        checkDate = checkDate.subtract(recurrence);
+      }
     }
-    
+    // If not completed today, check yesterday's streak
+    else if (normalizedStamps.isNotEmpty) {
+      DateTime lastDate = normalizedStamps.last;
+      DateTime checkDate = lastDate;
+      currentStreak = 1;
+
+      // Walk backwards through consecutive completions
+      while (normalizedStamps.contains(checkDate.subtract(recurrence))) {
+        currentStreak++;
+        checkDate = checkDate.subtract(recurrence);
+      }
+
+      // Only count as current streak if it reaches to yesterday
+      if (lastDate.difference(todayNormalized).inDays > recurrence.inDays) {
+        currentStreak = 0;
+      }
+    }
+
     return {'current': currentStreak, 'longest': longestStreak};
   }
 
   Map<String, dynamic> _calculateTimeStats(
     BuildContext context,
-    List<DateTime> stamps, 
-    List<TimeOfDay>? notificationTimes
+    List<DateTime> stamps,
+    List<TimeOfDay>? notificationTimes,
   ) {
     if (stamps.isEmpty) return {};
-    
-    final totalMinutes = stamps.fold(0, (sum, stamp) => 
-        sum + stamp.hour * 60 + stamp.minute);
-    final avgMinutes = totalMinutes ~/ stamps.length;
-    final avgTime = TimeOfDay(
-      hour: avgMinutes ~/ 60,
-      minute: avgMinutes % 60,
+
+    final totalMinutes = stamps.fold(
+      0,
+      (sum, stamp) => sum + stamp.hour * 60 + stamp.minute,
     );
-    
+    final avgMinutes = totalMinutes ~/ stamps.length;
+    final avgTime = TimeOfDay(hour: avgMinutes ~/ 60, minute: avgMinutes % 60);
+
     int onTimeCount = 0;
     if (notificationTimes != null && notificationTimes.isNotEmpty) {
-      final scheduledMinutesList = notificationTimes
-          .map((time) => time.hour * 60 + time.minute)
-          .toList();
-      
+      final scheduledMinutesList =
+          notificationTimes
+              .map((time) => time.hour * 60 + time.minute)
+              .toList();
+
       for (final stamp in stamps) {
         final stampMinutes = stamp.hour * 60 + stamp.minute;
         for (final scheduledMinutes in scheduledMinutesList) {
@@ -969,7 +1122,7 @@ Color _getChartColor(double value) {
         }
       }
     }
-    
+
     double totalVariance = 0;
     for (final stamp in stamps) {
       final stampMinutes = stamp.hour * 60 + stamp.minute;
@@ -977,27 +1130,49 @@ Color _getChartColor(double value) {
     }
     final timeDeviation = sqrt(totalVariance / stamps.length);
     final consistency = 100 - (timeDeviation / 60).clamp(0, 100);
-    
+
     return {
       'average': '${_formatTimeOfDay(context, avgTime)} ± 15 min',
-      'onTimeRate': notificationTimes != null && notificationTimes.isNotEmpty
-          ? ((onTimeCount / stamps.length) * 100).round() 
-          : null,
+      'onTimeRate':
+          notificationTimes != null && notificationTimes.isNotEmpty
+              ? ((onTimeCount / stamps.length) * 100).round()
+              : null,
       'consistency': consistency,
     };
   }
 
   TimeOfDay _findMostCommonTime(List<TimeOfDay> times) {
-    final timeCounts = <String, int>{};
-    
+    if (times.isEmpty)
+      return const TimeOfDay(hour: 12, minute: 0); // Default noon
+
+    // 1. More efficient counting using TimeOfDay directly
+    final timeCounts = <TimeOfDay, int>{};
     for (final time in times) {
-      final key = '${time.hour}:${time.minute}';
-      timeCounts[key] = (timeCounts[key] ?? 0) + 1;
+      timeCounts.update(time, (count) => count + 1, ifAbsent: () => 1);
     }
-    
-    final mostCommon = timeCounts.entries.reduce((a, b) => a.value > b.value ? a : b);
-    final parts = mostCommon.key.split(':');
-    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+
+    // 2. Handle ties by choosing the earliest time
+    final maxCount = timeCounts.values.reduce(max);
+    final mostCommonTimes =
+        timeCounts.entries
+            .where((e) => e.value == maxCount)
+            .map((e) => e.key)
+            .toList()
+          ..sort(
+            (a, b) =>
+                a.hour != b.hour
+                    ? a.hour.compareTo(b.hour)
+                    : a.minute.compareTo(b.minute),
+          );
+
+    // 3. Additional statistics
+    final total = times.length;
+    final percentage = (maxCount / total * 100).round();
+
+    // Optional: Print debug info
+    debugPrint('Most common time occurs $maxCount/$total times ($percentage%)');
+
+    return mostCommonTimes.first;
   }
 
   String _analyzeTimeDistribution(List<TimeOfDay> times) {
@@ -1005,60 +1180,59 @@ Color _getChartColor(double value) {
     final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
     final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
     final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
-    
+
     final total = times.length.toDouble();
-    return 'Morning ${(morning/total*100).round()}%, '
-           'Afternoon ${(afternoon/total*100).round()}%, '
-           'Evening ${(evening/total*100).round()}%, '
-           'Night ${(night/total*100).round()}%';
+    return 'Morning ${(morning / total * 100).round()}%, '
+        'Afternoon ${(afternoon / total * 100).round()}%, '
+        'Evening ${(evening / total * 100).round()}%, '
+        'Night ${(night / total * 100).round()}%';
   }
 
   String _findMostActiveDay(List<DateTime> stamps) {
     if (stamps.isEmpty) return 'N/A';
-    
+
     final dayCounts = List.filled(7, 0);
     for (final stamp in stamps) {
       dayCounts[stamp.weekday % 7]++;
     }
-    
+
     final maxIndex = dayCounts.indexOf(dayCounts.reduce(max));
     return DateFormat.EEEE().format(DateTime(2023, 1, maxIndex + 1));
   }
 
   String _findMostActiveMonth(List<DateTime> stamps) {
     if (stamps.isEmpty) return 'N/A';
-    
+
     final monthCounts = List.filled(12, 0);
     for (final stamp in stamps) {
       monthCounts[stamp.month - 1]++;
     }
-    
+
     final maxIndex = monthCounts.indexOf(monthCounts.reduce(max));
     return DateFormat.MMMM().format(DateTime(2023, maxIndex + 1));
   }
 
   String _findMostActiveYear(List<DateTime> stamps) {
     if (stamps.isEmpty) return 'N/A';
-    
+
     final yearCounts = <int, int>{};
     for (final stamp in stamps) {
       yearCounts[stamp.year] = (yearCounts[stamp.year] ?? 0) + 1;
     }
-    
-    final maxYear = yearCounts.entries
-      .reduce((a, b) => a.value > b.value ? a : b)
-      .key;
-    
+
+    final maxYear =
+        yearCounts.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+
     return '$maxYear (${yearCounts[maxYear]} times)';
   }
 
   double _calculateQuarterlyConsistency(List<DateTime> stamps) {
     if (stamps.isEmpty) return 0;
-    
+
     final now = DateTime.now();
     final quarters = <int, int>{};
     int maxPossible = 0;
-    
+
     for (int i = 0; i < 4; i++) {
       final quarterStart = DateTime(now.year, i * 3 + 1);
       if (quarterStart.isBefore(now)) {
@@ -1066,25 +1240,25 @@ Color _getChartColor(double value) {
         quarters[i] = 0;
       }
     }
-    
+
     for (final stamp in stamps) {
       final quarter = ((stamp.month - 1) ~/ 3);
       if (quarters.containsKey(quarter)) {
         quarters[quarter] = (quarters[quarter] ?? 0) + 1;
       }
     }
-    
+
     final completed = quarters.values.where((v) => v > 0).length;
     return (completed / maxPossible) * 100;
   }
 
   double _calculateAnnualConsistency(List<DateTime> stamps) {
     if (stamps.isEmpty) return 0;
-    
+
     final now = DateTime.now();
     final years = stamps.map((s) => s.year).toSet();
     final taskAge = now.year - stamps.first.year + 1;
-    
+
     return (years.length / taskAge) * 100;
   }
 
@@ -1096,13 +1270,13 @@ Color _getChartColor(double value) {
 
   String _formatNotificationTimes(BuildContext context, List<TimeOfDay> times) {
     if (times.isEmpty) return 'None';
-    
+
     final formattedTimes = times
         .map((time) => _formatTimeOfDay(context, time))
         .toSet() // Remove duplicates
         .toList()
         .join(', ');
-    
+
     return formattedTimes;
   }
 
@@ -1119,10 +1293,7 @@ Color _getChartColor(double value) {
           children: [
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             ...children,
@@ -1137,7 +1308,7 @@ Color _getChartColor(double value) {
     if (good != null) {
       color = good ? Colors.green : Colors.orange;
     }
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
@@ -1146,12 +1317,120 @@ Color _getChartColor(double value) {
           Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
           Text(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              color: color,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w500, color: color),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPendingNotificationsChart(List<TimeOfDay> notificationTimes) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Convert TimeOfDay to DateTime for today
+    final todayNotifications =
+        notificationTimes
+            .map(
+              (time) => DateTime(
+                today.year,
+                today.month,
+                today.day,
+                time.hour,
+                time.minute,
+              ),
+            )
+            .toList();
+
+    // Separate pending and sent notifications
+    final pending = todayNotifications.where((dt) => dt.isAfter(now)).toList();
+    final sent = todayNotifications.where((dt) => !dt.isAfter(now)).toList();
+
+    // Create hourly bins
+    final hourlyBins = List.generate(
+      24,
+      (hour) => DateTime(today.year, today.month, today.day, hour),
+    );
+
+    // Prepare chart data
+    final bars =
+        hourlyBins.map((hour) {
+          final nextHour = hour.add(Duration(hours: 1));
+          final pendingCount =
+              pending
+                  .where((dt) => dt.isAfter(hour) && !dt.isAfter(nextHour))
+                  .length;
+          final sentCount =
+              sent
+                  .where((dt) => dt.isAfter(hour) && !dt.isAfter(nextHour))
+                  .length;
+
+          return BarChartGroupData(
+            x: hour.hour,
+            barRods: [
+              BarChartRodData(
+                toY: sentCount.toDouble(),
+                color: Colors.green,
+                width: 12,
+                borderRadius: BorderRadius.zero,
+              ),
+              BarChartRodData(
+                toY: pendingCount.toDouble(),
+                color: Colors.blue,
+                width: 12,
+                borderRadius: BorderRadius.zero,
+              ),
+            ],
+          );
+        }).toList();
+
+    return BarChart(
+      BarChartData(
+        barGroups: bars,
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final hour = value.toInt();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Text(
+                    hour == 0
+                        ? '12AM'
+                        : hour < 12
+                        ? '${hour}AM'
+                        : hour == 12
+                        ? '12PM'
+                        : '${hour - 12}PM',
+                    style: TextStyle(fontSize: 10),
+                  ),
+                );
+              },
+              reservedSize: 30,
+            ),
+          ),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              interval: 1,
+              getTitlesWidget: (value, meta) {
+                return Text(value.toInt().toString());
+              },
+              reservedSize: 28,
+            ),
+          ),
+          rightTitles: AxisTitles(),
+          topTitles: AxisTitles(),
+        ),
+        gridData: FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        alignment: BarChartAlignment.spaceAround,
+        maxY: max(
+          notificationTimes.length.toDouble(),
+          4,
+        ), // Ensure minimum height
       ),
     );
   }

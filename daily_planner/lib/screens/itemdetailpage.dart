@@ -24,39 +24,75 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
   List<DateTime> notificationTimes = [];
+  bool? _currentCompletionStatus;
 
   // Use default system sound instead of custom resource
   final AndroidNotificationDetails _androidDetails =
       const AndroidNotificationDetails(
-        'daily_planner_channel',
-        'Daily Planner Notifications',
-        importance: Importance.max,
-        priority: Priority.high,
-        channelDescription: 'Channel for task reminders',
-        playSound: true,
-        enableLights: true,
-        // Removed custom sound reference to use default system sound
-        enableVibration: true,
-        visibility: NotificationVisibility.public,
-      );
+    'daily_planner_channel',
+    'Daily Planner Notifications',
+    importance: Importance.max,
+    priority: Priority.high,
+    channelDescription: 'Channel for task reminders',
+    playSound: true,
+    enableLights: true,
+    enableVibration: true,
+    visibility: NotificationVisibility.public,
+  );
 
   @override
   void initState() {
     super.initState();
+    _currentCompletionStatus = widget.task.isCompleted;
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _initializeNotifications();
     _checkNotificationChannel();
-    loadCompletionStamps(widget.task).then((loadedList) {
-      setState(() {
-        completedList = loadedList;
-      });
-    });
+    _loadTaskData();
+  }
 
-    loadNotificationTimes(widget.task).then((times) {
-      setState(() {
-        notificationTimes = times;
-      });
-    });
+  Future<void> _loadTaskData() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(widget.task.docId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _currentCompletionStatus = data['isCompleted'] ?? false;
+          
+          if (data['completionStamps'] != null) {
+            final List<dynamic> stamps = data['completionStamps'];
+            completedList = stamps.whereType<Timestamp>()
+                                 .map((ts) => ts.toDate())
+                                 .toList();
+          }
+          
+          if (data['notificationTimes'] != null) {
+            final List<dynamic> times = data['notificationTimes'];
+            notificationTimes = times.whereType<Timestamp>()
+                                    .map((ts) => ts.toDate())
+                                    .toList();
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading task data: $e");
+    }
+  }
+
+  @override
+  void didUpdateWidget(ItemDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task.docId != widget.task.docId) {
+      _loadTaskData();
+    }
   }
 
   Future<void> _checkNotificationChannel() async {
@@ -64,8 +100,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       final channels =
           await flutterLocalNotificationsPlugin
               .resolvePlatformSpecificImplementation<
-                AndroidFlutterLocalNotificationsPlugin
-              >()
+                  AndroidFlutterLocalNotificationsPlugin>()
               ?.getNotificationChannels();
 
       if (channels == null || channels.isEmpty) {
@@ -81,8 +116,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     if (Platform.isAndroid) {
       await flutterLocalNotificationsPlugin
           .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.createNotificationChannel(
             AndroidNotificationChannel(
               _androidDetails.channelId,
@@ -106,10 +140,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       final DarwinInitializationSettings initializationSettingsDarwin =
           DarwinInitializationSettings(
-            requestAlertPermission: true,
-            requestBadgePermission: true,
-            requestSoundPermission: true,
-          );
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
       await flutterLocalNotificationsPlugin.initialize(
         InitializationSettings(
@@ -121,7 +155,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         },
       );
 
-      // Request permissions (for iOS and Android 13+)
       if (Platform.isAndroid) {
         await _requestAndroidPermissions();
       }
@@ -134,8 +167,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     final bool? granted =
         await flutterLocalNotificationsPlugin
             .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >()
+                AndroidFlutterLocalNotificationsPlugin>()
             ?.requestNotificationsPermission();
     debugPrint('Notification permission granted: $granted');
   }
@@ -144,12 +176,12 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     try {
       const AndroidNotificationDetails androidPlatformChannelSpecifics =
           AndroidNotificationDetails(
-            'daily_planner_channel',
-            'Daily Planner Notifications',
-            importance: Importance.max,
-            priority: Priority.high,
-            showWhen: true,
-          );
+        'daily_planner_channel',
+        'Daily Planner Notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+      );
 
       const NotificationDetails platformChannelSpecifics = NotificationDetails(
         android: androidPlatformChannelSpecifics,
@@ -188,7 +220,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       await NativeAlarmHelper.scheduleAlarmAtTime(
         id: id,
-
         title: '🔔 Test Alarm',
         body: 'You tapped the test alarm button!',
         dateTime: time,
@@ -217,8 +248,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       final time = DateTime.now().add(duration);
 
       debugPrint(
-        'Attempting to schedule alarm with ID: $id for ${duration.inSeconds} seconds',
-      );
+          'Attempting to schedule alarm with ID: $id for ${duration.inSeconds} seconds');
 
       final hasPermission = await NativeAlarmHelper.checkExactAlarmPermission();
       if (!hasPermission) {
@@ -274,66 +304,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         SnackBar(content: Text("Failed to cancel notifications: $e")),
       );
     }
-  }
-
-  Future<List<DateTime>> loadCompletionStamps(Task task) async {
-    List<DateTime> completedList = [];
-
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw Exception("User not logged in");
-
-      final taskRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc(task.docId);
-
-      final snapshot = await taskRef.get();
-      final data = snapshot.data();
-
-      if (data != null && data['completionStamps'] != null) {
-        final List<dynamic> stamps = data['completionStamps'];
-        completedList =
-            stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
-      }
-    } catch (e) {
-      debugPrint("Error loading completion stamps: $e");
-    }
-
-    return completedList;
-  }
-
-  Future<List<DateTime>> loadNotificationTimes(Task task) async {
-    List<DateTime> notificationTimes = [];
-
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw Exception("User not logged in");
-
-      final taskRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc(task.docId);
-
-      final snapshot = await taskRef.get();
-      final data = snapshot.data();
-
-      if (data != null && data['notificationTimes'] != null) {
-        final List<dynamic> rawList = data['notificationTimes'];
-
-        // ⛳ Match loadCompletionStamps pattern
-        notificationTimes =
-            rawList.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
-      }
-    } catch (e) {
-      debugPrint("Error loading Notification Times: $e");
-    }
-
-    print("Parsed: $notificationTimes");
-
-    return notificationTimes;
   }
 
   @override
@@ -406,9 +376,11 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     const Icon(Icons.flag),
                     const SizedBox(width: 8),
                     Chip(
-                      label: Text(task.isCompleted ? "Completed" : "Pending"),
-                      backgroundColor:
-                          task.isCompleted ? Colors.green : Colors.red,
+                      label: Text(
+                          _currentCompletionStatus! ? "Completed" : "Pending"),
+                      backgroundColor: _currentCompletionStatus!
+                          ? Colors.green
+                          : Colors.red,
                     ),
                   ],
                 ),
@@ -419,7 +391,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     children: [
                       const Icon(Icons.check_circle_outline),
                       const SizedBox(width: 8),
-
                       if (task.taskType != 'oneTime') ...[
                         Text(
                           "Last Completed: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}",
@@ -440,52 +411,19 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   ExpansionTile(
                     leading: const Icon(Icons.list_alt),
                     title: const Text("See All Completion Times"),
-                    children:
-                        completedList.isEmpty
-                            ? [
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12.0),
-                                child: Center(
-                                  child: Text(
-                                    "No completion times available",
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
-                              ),
-                            ]
-                            : completedList.map((date) {
-                              return ListTile(
-                                leading: const Icon(Icons.check),
-                                title: Text(
-                                  DateFormat(
-                                    'MMM d, yyyy • h:mm a',
-                                  ).format(date),
-                                ),
-                              );
-                            }).toList(),
-                  ),
-                ],
-
-                const SizedBox(height: 24),
-                ExpansionTile(
-                  leading: const Icon(Icons.notifications),
-                  title: const Text("See All Notifcation Times"),
-                  children:
-                      notificationTimes.isEmpty
-                          ? [
+                    children: completedList.isEmpty
+                        ? [
                             const Padding(
-                              padding: EdgeInsetsGeometry.symmetric(
-                                vertical: 12,
-                              ),
+                              padding: EdgeInsets.symmetric(vertical: 12.0),
                               child: Center(
                                 child: Text(
-                                  "No Notification Times available",
+                                  "No completion times available",
                                   style: TextStyle(color: Colors.grey),
                                 ),
                               ),
                             ),
                           ]
-                          : notificationTimes.map((date) {
+                        : completedList.map((date) {
                             return ListTile(
                               leading: const Icon(Icons.check),
                               title: Text(
@@ -493,13 +431,41 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                               ),
                             );
                           }).toList(),
+                  ),
+                ],
+
+                const SizedBox(height: 24),
+                ExpansionTile(
+                  leading: const Icon(Icons.notifications),
+                  title: const Text("See All Notification Times"),
+                  children: notificationTimes.isEmpty
+                      ? [
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12.0),
+                            child: Center(
+                              child: Text(
+                                "No Notification Times available",
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                          ]
+                          
+                      : notificationTimes.map((date) {
+                          return ListTile(
+                            leading: const Icon(Icons.check),
+                            title: Text(
+                              DateFormat('MMM d, yyyy • h:mm a').format(date),
+                            ),
+                          );
+                          
+                        }).toList(),
                 ),
                 const Divider(),
                 const Text(
                   "🔔 Notification Test Buttons",
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
-                // Sound instructions for future reference
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
@@ -517,22 +483,20 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
-                  onPressed:
-                      () => _scheduleAlarm(
-                        const Duration(minutes: 1),
-                        "⏰ Scheduled Alarm",
-                        "This alarm is scheduled for 1 minute later!",
-                      ),
+                  onPressed: () => _scheduleAlarm(
+                    const Duration(minutes: 1),
+                    "⏰ Scheduled Alarm",
+                    "This alarm is scheduled for 1 minute later!",
+                  ),
                   child: const Text("Schedule Alarm (1 min)"),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
-                  onPressed:
-                      () => _scheduleAlarm(
-                        const Duration(seconds: 10),
-                        "⏰ Scheduled Alarm",
-                        "This alarm is scheduled for 10 seconds later!",
-                      ),
+                  onPressed: () => _scheduleAlarm(
+                    const Duration(seconds: 10),
+                    "⏰ Scheduled Alarm",
+                    "This alarm is scheduled for 10 seconds later!",
+                  ),
                   child: const Text("Schedule Alarm (10 seconds)"),
                 ),
                 const SizedBox(height: 8),
@@ -556,21 +520,18 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 else
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children:
-                        task.editHistory.map((edit) {
-                          final formattedEditTime = DateFormat(
-                            'MMM d, yyyy • h:mm a',
-                          ).format(edit.timestamp);
-                          return ListTile(
-                            leading: const Icon(Icons.edit_note),
-                            title: Text(formattedEditTime),
-                            subtitle:
-                                edit.note != null && edit.note!.isNotEmpty
-                                    ? Text(edit.note!)
-                                    : const Text("No note"),
-                            contentPadding: EdgeInsets.zero,
-                          );
-                        }).toList(),
+                    children: task.editHistory.map((edit) {
+                      final formattedEditTime =
+                          DateFormat('MMM d, yyyy • h:mm a').format(edit.timestamp);
+                      return ListTile(
+                        leading: const Icon(Icons.edit_note),
+                        title: Text(formattedEditTime),
+                        subtitle: edit.note != null && edit.note!.isNotEmpty
+                            ? Text(edit.note!)
+                            : const Text("No note"),
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    }).toList(),
                   ),
                 const SizedBox(height: 20),
               ],
