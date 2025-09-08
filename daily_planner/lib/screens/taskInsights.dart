@@ -125,7 +125,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           final notificationTimes =
               taskData['notificationTimes'] != null
                   ? _parseNotificationTimes(taskData['notificationTimes'])
-                  : <TimeOfDay>[];
+                  : <DateTime>[];
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
@@ -219,20 +219,58 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           _buildAnalyticsCard(
                             title: "Notification Time Distribution",
                             children: [
+                              // Convert DateTime to TimeOfDay for the chart
                               SizedBox(
                                 height: 220,
                                 child: _buildTimeDistributionChart(
-                                  notificationTimes,
+                                  notificationTimes
+                                      .map((dt) => TimeOfDay.fromDateTime(dt))
+                                      .toList(),
                                 ),
                               ),
                               SizedBox(height: 8),
+
+                              // Text(
+                              //   "When you're most likely to be notified",
+                              //   style: TextStyle(
+                              //     fontSize: 12,
+                              //     color: Colors.grey,
+                              //   ),
+                              //   textAlign: TextAlign.center,
+                              // ),
                               Text(
-                                "When you're most likely to be notified",
+                                "Notification Time Distribution",
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildLegendItem(
+                                    Colors.blue,
+                                    "Morning (6AM-12PM)",
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildLegendItem(
+                                    Colors.orange,
+                                    "Afternoon (12PM-6PM)",
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildLegendItem(
+                                    Colors.purple,
+                                    "Evening (6PM-12AM)",
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _buildLegendItem(
+                                    Colors.grey,
+                                    "Night (12AM-6AM)",
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -346,6 +384,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
+  List<TimeOfDay> _convertToTimeOfDay(List<DateTime> dateTimes) {
+    return dateTimes.map((dt) => TimeOfDay.fromDateTime(dt)).toList();
+  }
+
   List<String> _getTimeDistributionList(List<TimeOfDay> times) {
     final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
     final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
@@ -363,21 +405,43 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildNotificationTimesList(
     BuildContext context,
-    List<TimeOfDay> times,
+    List<dynamic> rawNotificationTimes, // Accept dynamic list from Firestore
   ) {
-    if (times.isEmpty)
-      return Text('None', style: TextStyle(color: Colors.grey));
+    // Convert rawNotificationTimes to proper List<DateTime>
+    final notificationTimes =
+        rawNotificationTimes.map<DateTime>((e) {
+          if (e is DateTime) {
+            return e;
+          } else if (e is Timestamp) {
+            return e.toDate();
+          } else if (e is Map<String, dynamic>) {
+            // Web Firestore returns {_seconds, _nanoseconds}
+            return DateTime.fromMillisecondsSinceEpoch(
+              (e['_seconds'] ?? 0) * 1000 +
+                  ((e['_nanoseconds'] ?? 0) ~/ 1000000),
+            );
+          } else {
+            debugPrint('Unknown notification time format: $e');
+            return DateTime.now(); // fallback to prevent crash
+          }
+        }).toList();
 
-    // Remove duplicates while preserving order
-    final uniqueTimes = times.fold<List<TimeOfDay>>([], (list, time) {
-      if (!list.any((t) => t.hour == time.hour && t.minute == time.minute)) {
-        list.add(time);
-      }
-      return list;
-    });
+    if (notificationTimes.isEmpty) {
+      return const Text('None', style: TextStyle(color: Colors.grey));
+    }
 
-    // Get current date for context
-    final now = DateTime.now();
+    // Convert to TimeOfDay and remove duplicates
+    final uniqueTimes =
+        notificationTimes
+            .map((dt) => TimeOfDay.fromDateTime(dt))
+            .toSet()
+            .toList()
+          ..sort((a, b) {
+            // Optional: sort times ascending
+            final aMinutes = a.hour * 60 + a.minute;
+            final bMinutes = b.hour * 60 + b.minute;
+            return aMinutes.compareTo(bMinutes);
+          });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -390,11 +454,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               children: [
                 Text(
                   _formatTimeOfDay(context, time),
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
                 Text(
-                  _formatFullDateWithDay(now, time),
+                  _getNextOccurrenceText(time),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -402,6 +469,23 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
       ],
     );
+  }
+
+  String _getNextOccurrenceText(TimeOfDay time) {
+    final now = DateTime.now();
+    DateTime next = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+
+    if (next.isBefore(now)) {
+      next = next.add(Duration(days: 1));
+    }
+
+    return DateFormat('EEEE, MMMM d, y').format(next);
   }
 
   String _formatFullDateWithDay(DateTime date, TimeOfDay time) {
@@ -641,7 +725,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ? _parseNotificationTimes(taskData['notificationTimes'])
             : null;
 
-    final timeStats = _calculateTimeStats(context, stamps, notificationTimes);
+    final timeStats = _calculateTimeStats(context, stamps, notificationTimes!);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -681,7 +765,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 "Avg Completion Time",
                 timeStats['average'] as String,
               ),
-            if (notificationTimes != null && notificationTimes.isNotEmpty) ...[
+            if (notificationTimes.isNotEmpty) ...[
               SizedBox(height: 8),
               Text(
                 "Scheduled Times:",
@@ -705,7 +789,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ],
         ),
 
-        if (notificationTimes != null && notificationTimes.isNotEmpty)
+        if (notificationTimes.isNotEmpty)
           _buildAnalyticsCard(
             title: "Notification Patterns",
             children: [
@@ -722,7 +806,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 4),
-              ..._getTimeDistributionList(notificationTimes)
+              ..._getTimeDistributionList(
+                    _convertToTimeOfDay(notificationTimes),
+                  )
                   .map(
                     (part) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2.0),
@@ -945,23 +1031,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return [];
   }
 
-  List<TimeOfDay> _parseNotificationTimes(dynamic timesData) {
+  List<DateTime> _parseNotificationTimes(dynamic timesData) {
     if (timesData == null) return [];
 
     if (timesData is List) {
       return timesData.map((time) {
-        if (time is Timestamp) {
-          final dt = time.toDate();
-          return TimeOfDay(hour: dt.hour, minute: dt.minute);
-        }
-        if (time is String) {
-          // Handle string format if needed
-          final parts = time.split(':');
-          return TimeOfDay(
-            hour: int.parse(parts[0]),
-            minute: int.parse(parts[1]),
-          );
-        }
+        if (time is Timestamp) return time.toDate();
+        if (time is DateTime) return time;
+        if (time is String) return DateTime.parse(time);
         throw Exception('Invalid notification time format: $time');
       }).toList();
     }
@@ -1094,7 +1171,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Map<String, dynamic> _calculateTimeStats(
     BuildContext context,
     List<DateTime> stamps,
-    List<TimeOfDay>? notificationTimes,
+    List<DateTime> notificationTimes,
   ) {
     if (stamps.isEmpty) return {};
 
@@ -1106,7 +1183,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final avgTime = TimeOfDay(hour: avgMinutes ~/ 60, minute: avgMinutes % 60);
 
     int onTimeCount = 0;
-    if (notificationTimes != null && notificationTimes.isNotEmpty) {
+    if (notificationTimes.isNotEmpty) {
       final scheduledMinutesList =
           notificationTimes
               .map((time) => time.hour * 60 + time.minute)
@@ -1134,24 +1211,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return {
       'average': '${_formatTimeOfDay(context, avgTime)} ± 15 min',
       'onTimeRate':
-          notificationTimes != null && notificationTimes.isNotEmpty
+          notificationTimes.isNotEmpty
               ? ((onTimeCount / stamps.length) * 100).round()
               : null,
       'consistency': consistency,
     };
   }
 
-  TimeOfDay _findMostCommonTime(List<TimeOfDay> times) {
+  TimeOfDay _findMostCommonTime(List<DateTime> times) {
     if (times.isEmpty)
       return const TimeOfDay(hour: 12, minute: 0); // Default noon
 
-    // 1. More efficient counting using TimeOfDay directly
+    // Count by hour and minute
     final timeCounts = <TimeOfDay, int>{};
     for (final time in times) {
-      timeCounts.update(time, (count) => count + 1, ifAbsent: () => 1);
+      final timeOfDay = TimeOfDay.fromDateTime(time);
+      timeCounts.update(timeOfDay, (count) => count + 1, ifAbsent: () => 1);
     }
 
-    // 2. Handle ties by choosing the earliest time
+    // Handle ties by choosing the earliest time
     final maxCount = timeCounts.values.reduce(max);
     final mostCommonTimes =
         timeCounts.entries
@@ -1164,13 +1242,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     ? a.hour.compareTo(b.hour)
                     : a.minute.compareTo(b.minute),
           );
-
-    // 3. Additional statistics
-    final total = times.length;
-    final percentage = (maxCount / total * 100).round();
-
-    // Optional: Print debug info
-    debugPrint('Most common time occurs $maxCount/$total times ($percentage%)');
 
     return mostCommonTimes.first;
   }
@@ -1268,11 +1339,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return DateFormat.jm().format(dt);
   }
 
-  String _formatNotificationTimes(BuildContext context, List<TimeOfDay> times) {
+  String _formatNotificationTimes(BuildContext context, List<DateTime> times) {
     if (times.isEmpty) return 'None';
 
     final formattedTimes = times
-        .map((time) => _formatTimeOfDay(context, time))
+        .map((time) => DateFormat.jm().format(time))
         .toSet() // Remove duplicates
         .toList()
         .join(', ');
@@ -1324,29 +1395,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget _buildPendingNotificationsChart(List<TimeOfDay> notificationTimes) {
+  Widget _buildPendingNotificationsChart(List<DateTime> notificationTimes) {
+    print(notificationTimes);
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // Convert TimeOfDay to DateTime for today
-    final todayNotifications =
-        notificationTimes
-            .map(
-              (time) => DateTime(
-                today.year,
-                today.month,
-                today.day,
-                time.hour,
-                time.minute,
-              ),
-            )
-            .toList();
+    // Ensure it's a proper List<DateTime>
+    final times = notificationTimes.whereType<DateTime>().toList();
 
     // Separate pending and sent notifications
-    final pending = todayNotifications.where((dt) => dt.isAfter(now)).toList();
-    final sent = todayNotifications.where((dt) => !dt.isAfter(now)).toList();
+    final pending = times.where((dt) => dt.isAfter(now)).toList();
+    final sent = times.where((dt) => !dt.isAfter(now)).toList();
 
-    // Create hourly bins
+    // Create hourly bins (0 → 23 hours of today)
     final hourlyBins = List.generate(
       24,
       (hour) => DateTime(today.year, today.month, today.day, hour),
@@ -1355,15 +1417,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     // Prepare chart data
     final bars =
         hourlyBins.map((hour) {
-          final nextHour = hour.add(Duration(hours: 1));
+          final nextHour = hour.add(const Duration(hours: 1));
+
           final pendingCount =
               pending
-                  .where((dt) => dt.isAfter(hour) && !dt.isAfter(nextHour))
+                  .where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour))
                   .length;
           final sentCount =
               sent
-                  .where((dt) => dt.isAfter(hour) && !dt.isAfter(nextHour))
+                  .where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour))
                   .length;
+
+          debugPrint(
+            "Hour ${hour.hour}: sent=$sentCount, pending=$pendingCount (total=${sentCount + pendingCount})",
+          );
 
           return BarChartGroupData(
             x: hour.hour,
@@ -1384,6 +1451,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           );
         }).toList();
 
+    // Determine max Y value dynamically
+    final maxY = bars
+        .map(
+          (barGroup) => barGroup.barRods
+              .map((rod) => rod.toY)
+              .reduce((a, b) => a > b ? a : b),
+        )
+        .fold<double>(0, (prev, curr) => prev > curr ? prev : curr);
+
+    // Adaptive interval for left axis (as double)
+    final interval = max((maxY / 4).ceilToDouble(), 1.0);
+
     return BarChart(
       BarChartData(
         barGroups: bars,
@@ -1392,46 +1471,83 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              interval: 3, // Show every 3 hours
               getTitlesWidget: (value, meta) {
                 final hour = value.toInt();
-                return Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    hour == 0
-                        ? '12AM'
-                        : hour < 12
-                        ? '${hour}AM'
-                        : hour == 12
-                        ? '12PM'
-                        : '${hour - 12}PM',
-                    style: TextStyle(fontSize: 10),
-                  ),
-                );
+                switch (hour) {
+                  case 0:
+                    return const Text("12AM", style: TextStyle(fontSize: 10));
+                  case 3:
+                    return const Text("3AM", style: TextStyle(fontSize: 10));
+                  case 6:
+                    return const Text("6AM", style: TextStyle(fontSize: 10));
+                  case 9:
+                    return const Text("9AM", style: TextStyle(fontSize: 10));
+                  case 12:
+                    return const Text("12PM", style: TextStyle(fontSize: 10));
+                  case 15:
+                    return const Text("3PM", style: TextStyle(fontSize: 10));
+                  case 18:
+                    return const Text("6PM", style: TextStyle(fontSize: 10));
+                  case 21:
+                    return const Text("9PM", style: TextStyle(fontSize: 10));
+                  default:
+                    return const SizedBox.shrink();
+                }
               },
-              reservedSize: 30,
+              reservedSize: 36,
             ),
           ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 1,
+              interval: interval, // ✅ Now a double
               getTitlesWidget: (value, meta) {
                 return Text(value.toInt().toString());
               },
               reservedSize: 28,
             ),
           ),
-          rightTitles: AxisTitles(),
-          topTitles: AxisTitles(),
+          rightTitles: const AxisTitles(),
+          topTitles: const AxisTitles(),
         ),
         gridData: FlGridData(show: false),
         borderData: FlBorderData(show: false),
         alignment: BarChartAlignment.spaceAround,
-        maxY: max(
-          notificationTimes.length.toDouble(),
-          4,
-        ), // Ensure minimum height
+        maxY: max(maxY * 1.2, 4), // 20% padding, minimum 4
       ),
     );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+      ],
+    );
+  }
+
+  DateTime _getNextOccurrence(DateTime notificationTime) {
+    final now = DateTime.now();
+    final time = TimeOfDay.fromDateTime(notificationTime);
+    DateTime next = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
+
+    if (next.isBefore(now)) {
+      next = next.add(Duration(days: 1));
+    }
+
+    return next;
   }
 }

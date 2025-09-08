@@ -1,7 +1,5 @@
 import 'dart:io' show Platform, exit;
-import 'dart:isolate';
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
-import 'package:daily_planner/utils/permissionHandler.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -33,12 +31,12 @@ Future<void> initializeTimeZones() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await initializeTimeZones();
+  //  await initializeTimeZones();
   await NativeAlarmHelper.initialize();
 
   try {
     await _initializeCoreServices();
-    await _initializeAndroidServices();
+    // await _initializeAndroidServices();
     // await BatteryOptimizationHelper.promptDisableBatteryOptimization();
     runApp(const MyApp());
   } catch (e, stack) {
@@ -57,13 +55,6 @@ Future<void> main() async {
   if (!kIsWeb && Platform.isAndroid) {}
 }
 
-// Future<void> requestBatteryOptimizationDisable() async {
-//   final alreadyDisabled = await DisableBatteryOptimization.isBatteryOptimizationDisabled;
-//   if (!alreadyDisabled!) {
-//     await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
-//   }
-// }
-
 Future<void> _initializeCoreServices() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   tz.initializeTimeZones();
@@ -76,25 +67,6 @@ Future<void> _initializeCoreServices() async {
   await ThemePreferences.loadTheme();
 }
 
-// Future<void> ensureOptimizationsDisabled() async {
-//   // ① Native battery optimization
-//   bool? nativeDisabled =
-//       await DisableBatteryOptimization.isBatteryOptimizationDisabled;
-//   if (!nativeDisabled!) {
-//     await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
-//   }
-
-//   // ② Manufacturer-specific optimization (optional but recommended)
-//   bool? manDisabled =
-//       await DisableBatteryOptimization
-//           .isManufacturerBatteryOptimizationDisabled;
-//   if (!manDisabled!) {
-//     await DisableBatteryOptimization.showDisableManufacturerBatteryOptimizationSettings(
-//       "Disable Manufacturer Battery Optimization",
-//       "Please follow steps to exempt this app for consistent reminders.",
-//     );
-//   }
-// }
 
 Future<void> _initializeAndroidServices() async {
   await Permission.notification.request();
@@ -185,8 +157,11 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     if (!kIsWeb && Platform.isAndroid) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        BatteryOptimizationHelper.promptDisableBatteryOptimization();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          BatteryOptimizationHelper.promptDisableBatteryOptimization();
+        }
       });
     }
   }
