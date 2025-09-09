@@ -58,7 +58,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCIQJb6DHJ6WTw8Vwd04Vjf5Z380uIHWkw',
-    appId: '1:777337977048:android:792f4ba50ada24169a3fad',
+    appId: '1:777337977048:android:67aedd047367337c9a3fad',
     messagingSenderId: '777337977048',
     projectId: 'daily-planner-593d8',
     storageBucket: 'daily-planner-593d8.firebasestorage.app',

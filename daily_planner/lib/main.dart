@@ -21,7 +21,7 @@ import 'firebase_options.dart';
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 Future<void> initializeTimeZones() async {
-  tz.initializeTimeZones();
+  // tz.initializeTimeZones();
 
   final String tzName = await FlutterTimezone.getLocalTimezone();
 

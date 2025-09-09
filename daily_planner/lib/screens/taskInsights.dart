@@ -230,14 +230,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               ),
                               SizedBox(height: 8),
 
-                              // Text(
-                              //   "When you're most likely to be notified",
-                              //   style: TextStyle(
-                              //     fontSize: 12,
-                              //     color: Colors.grey,
-                              //   ),
-                              //   textAlign: TextAlign.center,
-                              // ),
                               Text(
                                 "Notification Time Distribution",
                                 style: TextStyle(
@@ -248,8 +240,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 4),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                              Wrap(
                                 children: [
                                   _buildLegendItem(
                                     Colors.blue,
@@ -426,45 +417,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           }
         }).toList();
 
-    if (notificationTimes.isEmpty) {
+    // Filter only upcoming notifications
+    final upcomingTimes =
+        notificationTimes.where((dt) => dt.isAfter(DateTime.now())).toList();
+
+    if (upcomingTimes.isEmpty) {
       return const Text('None', style: TextStyle(color: Colors.grey));
     }
 
-    // Convert to TimeOfDay and remove duplicates
-    final uniqueTimes =
-        notificationTimes
-            .map((dt) => TimeOfDay.fromDateTime(dt))
-            .toSet()
-            .toList()
-          ..sort((a, b) {
-            // Optional: sort times ascending
-            final aMinutes = a.hour * 60 + a.minute;
-            final bMinutes = b.hour * 60 + b.minute;
-            return aMinutes.compareTo(bMinutes);
-          });
+    // Remove exact duplicates and sort ascending
+    final uniqueTimes = upcomingTimes.toSet().toList()..sort();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final time in uniqueTimes)
+        for (final dt in uniqueTimes)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _formatTimeOfDay(context, time),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _getNextOccurrenceText(time),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
+            child: Text(
+              // Show full date + time with day of week
+              DateFormat('EEEE, MMM d, y – hh:mm a').format(dt),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
             ),
           ),
       ],
