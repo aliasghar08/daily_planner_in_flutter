@@ -18,7 +18,6 @@ const taskTypeLabels = {
   'MonthlyTask': 'Monthly Tasks',
 };
 
-
 class MyHome extends StatefulWidget {
   const MyHome({super.key});
 
@@ -34,61 +33,157 @@ class _MyHomeState extends State<MyHome> {
   String searchQuery = "";
   bool _serviceStarted = false;
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   FirebaseAuth.instance.authStateChanges().listen((newUser) {
+  //     user = newUser;
+  //     if (user != null) {
+  //       fetchTasksFromFirestore(user!);
+  //       maybeRequestAlarmPermission();
+  //     }
+  //   });
+
+  //   _searchController.addListener(() {
+  //     setState(() {
+  //       searchQuery = _searchController.text.trim().toLowerCase();
+  //     });
+  //   });
+  // }
+
   @override
-  void initState() {
-    super.initState();
-    FirebaseAuth.instance.authStateChanges().listen((newUser) {
-      user = newUser;
-      if (user != null) {
-        fetchTasksFromFirestore(user!);
-        maybeRequestAlarmPermission();
-      }
-    });
+void initState() {
+  super.initState();
 
-    _searchController.addListener(() {
-      setState(() {
-        searchQuery = _searchController.text.trim().toLowerCase();
-      });
-    });
-  }
-
-  Future<void> fetchTasksFromFirestore(User user) async {
-    setState(() => isLoading = true);
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .collection('tasks')
-              .orderBy('date')
-              .get();
-
-      final loadedTasks =
-          snapshot.docs
-              .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-              .toList();
-
-      if (mounted) {
-        setState(() {
-          tasks = loadedTasks;
-          isLoading = false;
-        });
-
-        // Start foreground service only once
-        if (!_serviceStarted) {
-          _startForegroundService();
-          _serviceStarted = true;
-        }
-      }
-    } catch (e) {
-      debugPrint("Firestore error: $e");
-      if (mounted) setState(() => isLoading = false);
+  FirebaseAuth.instance.authStateChanges().listen((newUser) {
+    user = newUser;
+    if (user != null) {
+      fetchTasksFromFirestore(user!); // async, non-blocking
+      maybeRequestAlarmPermission();
     }
+  });
+
+  _searchController.addListener(() {
+    setState(() {
+      searchQuery = _searchController.text.trim().toLowerCase();
+    });
+  });
+}
+
+
+//   Future<void> fetchTasksFromFirestore(User user) async {
+//   if (!mounted) return;
+
+//   List<Task> allTasks = [];
+
+//   // Try cache first
+//   try {
+//     final cachedSnapshot = await FirebaseFirestore.instance
+//         .collection('users')
+//         .doc(user.uid)
+//         .collection('tasks')
+//         .orderBy('date')
+//         .get(const GetOptions(source: Source.cache));
+
+//     allTasks = cachedSnapshot.docs
+//         .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+//         .toList();
+
+//   } catch (e) {
+//     debugPrint("Error fetching from cache: $e");
+//   }
+
+//   if (mounted) {
+//     setState(() {
+//       tasks = allTasks;
+//       isLoading = false; // UI ready immediately
+//     });
+//   }
+
+//   // Try server in background (if online)
+//   try {
+//     final serverSnapshot = await FirebaseFirestore.instance
+//         .collection('users')
+//         .doc(user.uid)
+//         .collection('tasks')
+//         .orderBy('date')
+//         .get(const GetOptions(source: Source.server));
+
+//     final serverTasks = serverSnapshot.docs
+//         .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+//         .toList();
+
+//     if (mounted) {
+//       setState(() {
+//         tasks = serverTasks; // update with fresh data
+//       });
+
+//       if (!_serviceStarted) {
+//         _startForegroundService();
+//         _serviceStarted = true;
+//       }
+//     }
+//   } catch (e) {
+//     debugPrint("Server fetch failed (offline or network issue): $e");
+//   }
+// }
+
+Future<void> fetchTasksFromFirestore(User user) async {
+  if (!mounted) return;
+
+  List<Task> allTasks = [];
+
+  // 1. Load cached tasks first (works offline)
+  try {
+    final cachedSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('tasks')
+        .orderBy('date')
+        .get(const GetOptions(source: Source.cache));
+
+    allTasks = cachedSnapshot.docs
+        .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+        .toList();
+  } catch (e) {
+    debugPrint("Error loading cached tasks: $e");
   }
+
+  if (mounted) {
+    setState(() {
+      tasks = allTasks;
+      isLoading = false; // show UI immediately
+    });
+  }
+
+  // 2. Fetch from server in background (if online)
+  try {
+    final serverSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('tasks')
+        .orderBy('date')
+        .get(const GetOptions(source: Source.server));
+
+    final serverTasks = serverSnapshot.docs
+        .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+        .toList();
+
+    if (mounted) {
+      setState(() {
+        tasks = serverTasks; // update UI with fresh data
+      });
+    }
+  } catch (e) {
+    debugPrint("Server fetch failed (offline?): $e");
+  }
+}
+
+
 
   Future<void> _startForegroundService() async {
     try {
-    //  await NativeAlarmHelper.startForegroundService();
+      //  await NativeAlarmHelper.startForegroundService();
       debugPrint("Foreground service started.");
     } catch (e) {
       debugPrint("Error starting foreground service: $e");
@@ -169,86 +264,90 @@ class _MyHomeState extends State<MyHome> {
   }
 
   Widget buildTaskList(TaskFilter filter) {
-  final filtered = getFilteredTasks(filter);
-  if (isLoading) {
-    return const Center(child: CircularProgressIndicator());
-  }
+    final filtered = getFilteredTasks(filter);
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-  if (filtered.isEmpty) {
+    if (filtered.isEmpty) {
+      return Column(
+        children: [
+          buildSearchBar(),
+          const Expanded(child: Center(child: Text("No tasks found."))),
+        ],
+      );
+    }
+
+    // Group tasks by type
+    Map<String, List<Task>> groupedTasks = {
+      "One-Time Tasks": [],
+      "Daily Tasks": [],
+      "Weekly Tasks": [],
+      "Monthly Tasks": [],
+    };
+
+    for (var task in filtered) {
+      switch (task.taskType) {
+        case "oneTime":
+          groupedTasks["One-Time Tasks"]!.add(task);
+          break;
+        case "DailyTask":
+          groupedTasks["Daily Tasks"]!.add(task);
+          break;
+        case "WeeklyTask":
+          groupedTasks["Weekly Tasks"]!.add(task);
+          break;
+        case "MonthlyTask":
+          groupedTasks["Monthly Tasks"]!.add(task);
+          break;
+      }
+    }
+
     return Column(
       children: [
         buildSearchBar(),
-        const Expanded(child: Center(child: Text("No tasks found."))),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async => fetchTasksFromFirestore(user!),
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 100),
+              children:
+                  groupedTasks.entries
+                      .where((entry) => entry.value.isNotEmpty)
+                      .map((entry) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              child: Text(
+                                entry.key,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            ...entry.value.map(
+                              (task) => ItemWidget(
+                                item: task,
+                                onEditDone:
+                                    () => fetchTasksFromFirestore(user!),
+                              ),
+                            ),
+                          ],
+                        );
+                      })
+                      .toList(),
+            ),
+          ),
+        ),
       ],
     );
   }
-
-  // Group tasks by type
-  Map<String, List<Task>> groupedTasks = {
-    "One-Time Tasks": [],
-    "Daily Tasks": [],
-    "Weekly Tasks": [],
-    "Monthly Tasks": [],
-  };
-
-  for (var task in filtered) {
-    switch (task.taskType) {
-      case "oneTime":
-        groupedTasks["One-Time Tasks"]!.add(task);
-        break;
-      case "DailyTask":
-        groupedTasks["Daily Tasks"]!.add(task);
-        break;
-      case "WeeklyTask":
-        groupedTasks["Weekly Tasks"]!.add(task);
-        break;
-      case "MonthlyTask":
-        groupedTasks["Monthly Tasks"]!.add(task);
-        break;
-    }
-  }
-
-  return Column(
-    children: [
-      buildSearchBar(),
-      Expanded(
-        child: RefreshIndicator(
-          onRefresh: () async => fetchTasksFromFirestore(user!),
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: 100),
-            children: groupedTasks.entries
-                .where((entry) => entry.value.isNotEmpty)
-                .map((entry) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Text(
-                      entry.key,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  ...entry.value.map(
-                    (task) => ItemWidget(
-                      item: task,
-                      onEditDone: () => fetchTasksFromFirestore(user!),
-                    ),
-                  ),
-                ],
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
 
   Future<void> _navigateToAddTask() async {
     final added = await Navigator.push(
@@ -316,3 +415,4 @@ class _MyHomeState extends State<MyHome> {
     );
   }
 }
+

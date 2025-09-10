@@ -83,269 +83,513 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return (taskId + notificationTime.toIso8601String()).hashCode.abs();
   }
 
-  Future<void> _addTask() async {
-    final title = _titleController.text.trim();
-    final detail = _detailController.text.trim();
-    final now = DateTime.now();
+  // Future<void> _addTask() async {
+  //   final title = _titleController.text.trim();
+  //   final detail = _detailController.text.trim();
+  //   final now = DateTime.now();
 
-    if (title.isEmpty) {
-      FocusScope.of(context).unfocus();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Title cannot be empty.")),
-      );
-      return;
-    }
+  //   if (title.isEmpty) {
+  //     FocusScope.of(context).unfocus();
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text("⚠️ Title cannot be empty.")),
+  //     );
+  //     return;
+  //   }
 
-    if (_selectedDate.isBefore(now)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("⚠️ Please choose a future date and time."),
-        ),
-      );
-      return;
-    }
+  //   if (_selectedDate.isBefore(now)) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text("⚠️ Please choose a future date and time."),
+  //       ),
+  //     );
+  //     return;
+  //   }
 
-    if (_isSaving) return;
+  //   if (_isSaving) return;
 
-    setState(() {
-      _isSaving = true;
-    });
+  //   setState(() {
+  //     _isSaving = true;
+  //   });
 
-    try {
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ No internet connection. Please try again later."),
-          ),
-        );
-        return;
-      }
+  //   try {
+  //     final connectivityResult = await Connectivity().checkConnectivity();
+  //     if (connectivityResult == ConnectivityResult.none) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text("❌ No internet connection. Please try again later."),
+  //         ),
+  //       );
+  //       return;
+  //     }
 
-      if (_isCompleted && _selectedDate.isAfter(now)) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder:
-              (context) => AlertDialog(
-                title: const Text("Mark as Completed?"),
-                content: const Text(
-                  "This task is set in the future. Are you sure you want to mark it as completed?",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text("No"),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text("Yes"),
-                  ),
-                ],
-              ),
-        );
-        if (confirm != true) {
-          setState(() {
-            _isSaving = false;
-          });
-          return;
-        }
-      }
+  //     if (_isCompleted && _selectedDate.isAfter(now)) {
+  //       final confirm = await showDialog<bool>(
+  //         context: context,
+  //         builder:
+  //             (context) => AlertDialog(
+  //               title: const Text("Mark as Completed?"),
+  //               content: const Text(
+  //                 "This task is set in the future. Are you sure you want to mark it as completed?",
+  //               ),
+  //               actions: [
+  //                 TextButton(
+  //                   onPressed: () => Navigator.pop(context, false),
+  //                   child: const Text("No"),
+  //                 ),
+  //                 ElevatedButton(
+  //                   onPressed: () => Navigator.pop(context, true),
+  //                   child: const Text("Yes"),
+  //                 ),
+  //               ],
+  //             ),
+  //       );
+  //       if (confirm != true) {
+  //         setState(() {
+  //           _isSaving = false;
+  //         });
+  //         return;
+  //       }
+  //     }
 
-      // final uid = FirebaseAuth.instance.currentUser!.uid;
+  //     // final uid = FirebaseAuth.instance.currentUser!.uid;
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ You must be logged in to add tasks."),
-          ),
-        );
-        setState(() {
-          _isSaving = false;
-        });
-        return;
-      }
-      final uid = user.uid;
+  //     final user = FirebaseAuth.instance.currentUser;
+  //     if (user == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text("❌ You must be logged in to add tasks."),
+  //         ),
+  //       );
+  //       setState(() {
+  //         _isSaving = false;
+  //       });
+  //       return;
+  //     }
+  //     final uid = user.uid;
 
-      final newTaskRef =
-          FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('tasks')
-              .doc();
+  //     final newTaskRef =
+  //         FirebaseFirestore.instance
+  //             .collection('users')
+  //             .doc(uid)
+  //             .collection('tasks')
+  //             .doc();
 
-      final taskId = now.millisecondsSinceEpoch;
-      final notificationId = taskId % 100000;
+  //     final taskId = now.millisecondsSinceEpoch;
+  //     final notificationId = taskId % 100000;
 
-      Task newTask;
+  //     Task newTask;
 
-      switch (_selectedType) {
-        case TaskType.oneTime:
-          newTask = Task(
-            docId: newTaskRef.id,
-            id: taskId,
-            title: title,
-            detail: detail,
-            date: _selectedDate,
-            isCompleted: _isCompleted,
-            createdAt: now,
-            completedAt: _isCompleted ? now : null,
-            taskType: _selectedType.name,
-            notificationTimes: _notificationTimes,
-          );
-          break;
+  //     switch (_selectedType) {
+  //       case TaskType.oneTime:
+  //         newTask = Task(
+  //           docId: newTaskRef.id,
+  //           id: taskId,
+  //           title: title,
+  //           detail: detail,
+  //           date: _selectedDate,
+  //           isCompleted: _isCompleted,
+  //           createdAt: now,
+  //           completedAt: _isCompleted ? now : null,
+  //           taskType: _selectedType.name,
+  //           notificationTimes: _notificationTimes,
+  //         );
+  //         break;
 
-        case TaskType.daily:
-          newTask = DailyTask(
-            docId: newTaskRef.id,
-            id: taskId,
-            title: title,
-            detail: detail,
-            date: _selectedDate,
-            isCompleted: _isCompleted,
-            createdAt: now,
-            completedAt: _isCompleted ? now : null,
-            completionStamps: _isCompleted ? [now] : [],
-            notificationTimes: _notificationTimes,
-          );
-          break;
+  //       case TaskType.daily:
+  //         newTask = DailyTask(
+  //           docId: newTaskRef.id,
+  //           id: taskId,
+  //           title: title,
+  //           detail: detail,
+  //           date: _selectedDate,
+  //           isCompleted: _isCompleted,
+  //           createdAt: now,
+  //           completedAt: _isCompleted ? now : null,
+  //           completionStamps: _isCompleted ? [now] : [],
+  //           notificationTimes: _notificationTimes,
+  //         );
+  //         break;
 
-        case TaskType.weekly:
-          newTask = WeeklyTask(
-            docId: newTaskRef.id,
-            id: taskId,
-            title: title,
-            detail: detail,
-            date: _selectedDate,
-            isCompleted: _isCompleted,
-            createdAt: now,
-            completedAt: _isCompleted ? now : null,
-            completionStamps: _isCompleted ? [now] : [],
-            notificationTimes: _notificationTimes,
-          );
-          break;
+  //       case TaskType.weekly:
+  //         newTask = WeeklyTask(
+  //           docId: newTaskRef.id,
+  //           id: taskId,
+  //           title: title,
+  //           detail: detail,
+  //           date: _selectedDate,
+  //           isCompleted: _isCompleted,
+  //           createdAt: now,
+  //           completedAt: _isCompleted ? now : null,
+  //           completionStamps: _isCompleted ? [now] : [],
+  //           notificationTimes: _notificationTimes,
+  //         );
+  //         break;
 
-        case TaskType.monthly:
-          final dayOfMonth = _selectedDate.day;
-          newTask = MonthlyTask(
-            docId: newTaskRef.id,
-            id: taskId,
-            title: title,
-            detail: detail,
-            date: _selectedDate,
-            isCompleted: _isCompleted,
-            createdAt: now,
-            completedAt: _isCompleted ? now : null,
-            dayOfMonth: dayOfMonth,
-            completionStamps: _isCompleted ? [now] : [],
-            notificationTimes:
-                _notificationTimes, // Fixed typo in parameter name
-          );
-          break;
-      }
+  //       case TaskType.monthly:
+  //         final dayOfMonth = _selectedDate.day;
+  //         newTask = MonthlyTask(
+  //           docId: newTaskRef.id,
+  //           id: taskId,
+  //           title: title,
+  //           detail: detail,
+  //           date: _selectedDate,
+  //           isCompleted: _isCompleted,
+  //           createdAt: now,
+  //           completedAt: _isCompleted ? now : null,
+  //           dayOfMonth: dayOfMonth,
+  //           completionStamps: _isCompleted ? [now] : [],
+  //           notificationTimes:
+  //               _notificationTimes, // Fixed typo in parameter name
+  //         );
+  //         break;
+  //     }
 
-      await newTaskRef.set(newTask.toMap());
+  //     await newTaskRef.set(newTask.toMap());
 
-      if (!_isCompleted) {
-        if (_notificationTimes.isEmpty) {
-          final fallbackTime = newTask.date.subtract(
-            const Duration(minutes: 15),
-          );
-          if (fallbackTime.isAfter(now)) {
-            final fallbackId = _generateNotificationId(
-              newTaskRef.id,
-              fallbackTime,
-            );
-            await NativeAlarmHelper.scheduleAlarmAtTime(
-              id: fallbackId,
-              title: 'Upcoming Task',
-              body:
-                  '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-              dateTime: fallbackTime,
-            );
+  //     if (!_isCompleted) {
+  //       if (_notificationTimes.isEmpty) {
+  //         final fallbackTime = newTask.date.subtract(
+  //           const Duration(minutes: 15),
+  //         );
+  //         if (fallbackTime.isAfter(now)) {
+  //           final fallbackId = _generateNotificationId(
+  //             newTaskRef.id,
+  //             fallbackTime,
+  //           );
+  //           await NativeAlarmHelper.scheduleAlarmAtTime(
+  //             id: fallbackId,
+  //             title: 'Upcoming Task',
+  //             body:
+  //                 '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+  //             dateTime: fallbackTime,
+  //           );
 
-            _notificationTimes.add(fallbackTime);
+  //           _notificationTimes.add(fallbackTime);
 
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  "✅ Notification scheduled at ${DateFormat.yMd().add_jm().format(fallbackTime)} (ID: $fallbackId)",
-                ),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  "ℹ️ Default notification time too close. No notification scheduled.",
-                ),
-              ),
-            );
-          }
-        } else {
-          int scheduledCount = 0;
-          for (final notiTime in _notificationTimes) {
-            if (notiTime.isAfter(now)) {
-              final notiId = _generateNotificationId(newTaskRef.id, notiTime);
-              await NativeAlarmHelper.scheduleAlarmAtTime(
-                id: notiId,
-                title: 'Task Reminder',
-                body:
-                    '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-                dateTime: notiTime,
-              );
-              scheduledCount++;
-            }
-          }
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             SnackBar(
+  //               content: Text(
+  //                 "✅ Notification scheduled at ${DateFormat.yMd().add_jm().format(fallbackTime)} (ID: $fallbackId)",
+  //               ),
+  //             ),
+  //           );
+  //         } else {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(
+  //               content: Text(
+  //                 "ℹ️ Default notification time too close. No notification scheduled.",
+  //               ),
+  //             ),
+  //           );
+  //         }
+  //       } else {
+  //         int scheduledCount = 0;
+  //         for (final notiTime in _notificationTimes) {
+  //           if (notiTime.isAfter(now)) {
+  //             final notiId = _generateNotificationId(newTaskRef.id, notiTime);
+  //             await NativeAlarmHelper.scheduleAlarmAtTime(
+  //               id: notiId,
+  //               title: 'Task Reminder',
+  //               body:
+  //                   '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+  //               dateTime: notiTime,
+  //             );
+  //             scheduledCount++;
+  //           }
+  //         }
 
-          if (scheduledCount > 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text("✅ $scheduledCount notification(s) scheduled."),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("ℹ️ No future notifications scheduled."),
-              ),
-            );
-          }
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "ℹ️ Task is marked completed. No notification scheduled.",
-            ),
-          ),
-        );
-      }
+  //         if (scheduledCount > 0) {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             SnackBar(
+  //               content: Text("✅ $scheduledCount notification(s) scheduled."),
+  //             ),
+  //           );
+  //         } else {
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             const SnackBar(
+  //               content: Text("ℹ️ No future notifications scheduled."),
+  //             ),
+  //           );
+  //         }
+  //       }
+  //     } else {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(
+  //           content: Text(
+  //             "ℹ️ Task is marked completed. No notification scheduled.",
+  //           ),
+  //         ),
+  //       );
+  //     }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Task '${newTask.title}' added.")),
-      );
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text("✅ Task '${newTask.title}' added.")),
+  //     );
 
-      if (mounted) {
-        Navigator.pop(context, true);
-      }
-    } catch (e, stack) {
-      debugPrint("❌ Error adding task: $e");
-      debugPrint("Stack trace:\n$stack");
+  //     if (mounted) {
+  //       Navigator.pop(context, true);
+  //     }
+  //   } catch (e, stack) {
+  //     debugPrint("❌ Error adding task: $e");
+  //     debugPrint("Stack trace:\n$stack");
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("❌ Failed to add task. Please try again."),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
-    }
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(
+  //         content: Text("❌ Failed to add task. Please try again."),
+  //       ),
+  //     );
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() {
+  //         _isSaving = false;
+  //       });
+  //     }
+  //   }
+  // }
+
+//   Future<void> _addTask() async {
+//   final title = _titleController.text.trim();
+//   final detail = _detailController.text.trim();
+//   final now = DateTime.now();
+
+//   if (title.isEmpty) {
+//     FocusScope.of(context).unfocus();
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       const SnackBar(content: Text("⚠️ Title cannot be empty.")),
+//     );
+//     return;
+//   }
+
+//   if (_selectedDate.isBefore(now)) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       const SnackBar(
+//         content: Text("⚠️ Please choose a future date and time."),
+//       ),
+//     );
+//     return;
+//   }
+
+//   if (_isSaving) return;
+
+//   setState(() {
+//     _isSaving = true;
+//   });
+
+//   try {
+//     final user = FirebaseAuth.instance.currentUser;
+//     if (user == null) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(
+//           content: Text("❌ You must be logged in to add tasks."),
+//         ),
+//       );
+//       return;
+//     }
+
+//     final uid = user.uid;
+//     final newTaskRef =
+//         FirebaseFirestore.instance.collection('users').doc(uid).collection('tasks').doc();
+
+//     final taskId = now.millisecondsSinceEpoch;
+
+//     Task newTask;
+
+//     switch (_selectedType) {
+//       case TaskType.oneTime:
+//         newTask = Task(
+//           docId: newTaskRef.id,
+//           id: taskId,
+//           title: title,
+//           detail: detail,
+//           date: _selectedDate,
+//           isCompleted: _isCompleted,
+//           createdAt: now,
+//           completedAt: _isCompleted ? now : null,
+//           taskType: _selectedType.name,
+//           notificationTimes: _notificationTimes,
+//         );
+//         break;
+
+//       case TaskType.daily:
+//         newTask = DailyTask(
+//           docId: newTaskRef.id,
+//           id: taskId,
+//           title: title,
+//           detail: detail,
+//           date: _selectedDate,
+//           isCompleted: _isCompleted,
+//           createdAt: now,
+//           completedAt: _isCompleted ? now : null,
+//           completionStamps: _isCompleted ? [now] : [],
+//           notificationTimes: _notificationTimes,
+//         );
+//         break;
+
+//       case TaskType.weekly:
+//         newTask = WeeklyTask(
+//           docId: newTaskRef.id,
+//           id: taskId,
+//           title: title,
+//           detail: detail,
+//           date: _selectedDate,
+//           isCompleted: _isCompleted,
+//           createdAt: now,
+//           completedAt: _isCompleted ? now : null,
+//           completionStamps: _isCompleted ? [now] : [],
+//           notificationTimes: _notificationTimes,
+//         );
+//         break;
+
+//       case TaskType.monthly:
+//         final dayOfMonth = _selectedDate.day;
+//         newTask = MonthlyTask(
+//           docId: newTaskRef.id,
+//           id: taskId,
+//           title: title,
+//           detail: detail,
+//           date: _selectedDate,
+//           isCompleted: _isCompleted,
+//           createdAt: now,
+//           completedAt: _isCompleted ? now : null,
+//           dayOfMonth: dayOfMonth,
+//           completionStamps: _isCompleted ? [now] : [],
+//           notificationTimes: _notificationTimes,
+//         );
+//         break;
+//     }
+
+//     // Firestore will handle offline writes automatically
+//     await newTaskRef.set(newTask.toMap());
+
+//     // Check connectivity to show proper SnackBar
+//     final connectivityResult = await Connectivity().checkConnectivity();
+//     if (connectivityResult == ConnectivityResult.none) {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         const SnackBar(
+//           content: Text("✅ Task added offline. Will sync when internet is back."),
+//         ),
+//       );
+//     } else {
+//       ScaffoldMessenger.of(context).showSnackBar(
+//         SnackBar(content: Text("✅ Task '${newTask.title}' added.")),
+//       );
+//     }
+
+//     if (mounted) {
+//       Navigator.pop(context, true);
+//     }
+//   } catch (e, stack) {
+//     debugPrint("❌ Error adding task: $e\n$stack");
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       const SnackBar(content: Text("❌ Failed to add task. Please try again.")),
+//     );
+//   } finally {
+//     if (mounted) {
+//       setState(() {
+//         _isSaving = false; // stops CircularProgressIndicator
+//       });
+//     }
+//   }
+// }
+
+Future<void> _addTask() async {
+  final title = _titleController.text.trim();
+  final detail = _detailController.text.trim();
+  final now = DateTime.now();
+
+  if (title.isEmpty) {
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("⚠️ Title cannot be empty.")),
+    );
+    return;
   }
+
+  if (_selectedDate.isBefore(now)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("⚠️ Please choose a future date and time."),
+      ),
+    );
+    return;
+  }
+
+  if (_isSaving) return;
+
+  setState(() {
+    _isSaving = true;
+  });
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ You must be logged in to add tasks."),
+        ),
+      );
+      setState(() => _isSaving = false);
+      return;
+    }
+
+    final uid = user.uid;
+    final newTaskRef =
+        FirebaseFirestore.instance.collection('users').doc(uid).collection('tasks').doc();
+
+    final taskId = now.millisecondsSinceEpoch;
+
+    Task newTask = Task(
+      docId: newTaskRef.id,
+      id: taskId,
+      title: title,
+      detail: detail,
+      date: _selectedDate,
+      isCompleted: _isCompleted,
+      createdAt: now,
+      completedAt: _isCompleted ? now : null,
+      taskType: _selectedType.name,
+      notificationTimes: _notificationTimes,
+    );
+
+    // Immediately pop the screen for smooth UX
+    if (mounted) Navigator.pop(context, true);
+
+    // Firestore offline write
+    await newTaskRef.set(newTask.toMap(), SetOptions(merge: true));
+
+    // Optional: Schedule notifications
+    for (final notiTime in _notificationTimes) {
+      if (notiTime.isAfter(now)) {
+        final notiId = _generateNotificationId(newTaskRef.id, notiTime);
+        await NativeAlarmHelper.scheduleAlarmAtTime(
+          id: notiId,
+          title: 'Task Reminder',
+          body: '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+          dateTime: notiTime,
+        );
+      }
+    }
+
+    // Show offline/online status after writing
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      debugPrint("✅ Task added offline. Will sync later.");
+    } else {
+      debugPrint("✅ Task '${newTask.title}' added online.");
+    }
+  } catch (e, stack) {
+    debugPrint("❌ Error adding task: $e\n$stack");
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("❌ Failed to add task. Please try again.")),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isSaving = false);
+  }
+}
+
+
 
   Future<void> _pickNotificationTime() async {
     final now = DateTime.now();

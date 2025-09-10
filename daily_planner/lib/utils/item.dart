@@ -65,13 +65,18 @@ class _ItemWidgetState extends State<ItemWidget> {
     return aUtc == bUtc;
   }
 
-  bool _isSameWeek(DateTime a, DateTime b) {
-    final aUtc = DateTime.utc(a.year, a.month, a.day);
-    final bUtc = DateTime.utc(b.year, b.month, b.day);
-    final aStart = aUtc.subtract(Duration(days: aUtc.weekday - 1));
-    final bStart = bUtc.subtract(Duration(days: bUtc.weekday - 1));
-    return aStart == bStart;
-  }
+  int _weekNumber(DateTime d) {
+  final startOfYear = DateTime(d.year, 1, 1);
+  final dayOfYear = d.toLocal().difference(startOfYear).inDays + 1;
+  return ((dayOfYear - d.weekday + 10) / 7).floor();
+}
+
+bool _isSameWeek(DateTime date1, DateTime date2) {
+  date1 = date1.toLocal();
+  date2 = date2.toLocal();
+  return date1.year == date2.year && _weekNumber(date1) == _weekNumber(date2);
+}
+
 
   bool _isSameMonth(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month;
