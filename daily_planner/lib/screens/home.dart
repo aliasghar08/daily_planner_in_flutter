@@ -32,154 +32,81 @@ class _MyHomeState extends State<MyHome> {
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = "";
   bool _serviceStarted = false;
-
-  // @override
-  // void initState() {
-  //   super.initState();
-  //   FirebaseAuth.instance.authStateChanges().listen((newUser) {
-  //     user = newUser;
-  //     if (user != null) {
-  //       fetchTasksFromFirestore(user!);
-  //       maybeRequestAlarmPermission();
-  //     }
-  //   });
-
-  //   _searchController.addListener(() {
-  //     setState(() {
-  //       searchQuery = _searchController.text.trim().toLowerCase();
-  //     });
-  //   });
-  // }
+  bool _authChecking = true; // Added to track auth state
 
   @override
-void initState() {
-  super.initState();
+  void initState() {
+    super.initState();
 
-  FirebaseAuth.instance.authStateChanges().listen((newUser) {
-    user = newUser;
-    if (user != null) {
-      fetchTasksFromFirestore(user!); // async, non-blocking
-      maybeRequestAlarmPermission();
+    FirebaseAuth.instance.authStateChanges().listen((newUser) {
+      setState(() {
+        user = newUser;
+        _authChecking = false; // Auth check complete
+      });
+      
+      if (user != null) {
+        fetchTasksFromFirestore(user!); // async, non-blocking
+        maybeRequestAlarmPermission();
+      }
+    });
+
+    _searchController.addListener(() {
+      setState(() {
+        searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+  }
+
+  Future<void> fetchTasksFromFirestore(User user) async {
+    if (!mounted) return;
+
+    List<Task> allTasks = [];
+
+    // 1. Load cached tasks first (works offline)
+    try {
+      final cachedSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .orderBy('date')
+          .get(const GetOptions(source: Source.cache));
+
+      allTasks = cachedSnapshot.docs
+          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+          .toList();
+    } catch (e) {
+      debugPrint("Error loading cached tasks: $e");
     }
-  });
-
-  _searchController.addListener(() {
-    setState(() {
-      searchQuery = _searchController.text.trim().toLowerCase();
-    });
-  });
-}
-
-
-//   Future<void> fetchTasksFromFirestore(User user) async {
-//   if (!mounted) return;
-
-//   List<Task> allTasks = [];
-
-//   // Try cache first
-//   try {
-//     final cachedSnapshot = await FirebaseFirestore.instance
-//         .collection('users')
-//         .doc(user.uid)
-//         .collection('tasks')
-//         .orderBy('date')
-//         .get(const GetOptions(source: Source.cache));
-
-//     allTasks = cachedSnapshot.docs
-//         .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-//         .toList();
-
-//   } catch (e) {
-//     debugPrint("Error fetching from cache: $e");
-//   }
-
-//   if (mounted) {
-//     setState(() {
-//       tasks = allTasks;
-//       isLoading = false; // UI ready immediately
-//     });
-//   }
-
-//   // Try server in background (if online)
-//   try {
-//     final serverSnapshot = await FirebaseFirestore.instance
-//         .collection('users')
-//         .doc(user.uid)
-//         .collection('tasks')
-//         .orderBy('date')
-//         .get(const GetOptions(source: Source.server));
-
-//     final serverTasks = serverSnapshot.docs
-//         .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-//         .toList();
-
-//     if (mounted) {
-//       setState(() {
-//         tasks = serverTasks; // update with fresh data
-//       });
-
-//       if (!_serviceStarted) {
-//         _startForegroundService();
-//         _serviceStarted = true;
-//       }
-//     }
-//   } catch (e) {
-//     debugPrint("Server fetch failed (offline or network issue): $e");
-//   }
-// }
-
-Future<void> fetchTasksFromFirestore(User user) async {
-  if (!mounted) return;
-
-  List<Task> allTasks = [];
-
-  // 1. Load cached tasks first (works offline)
-  try {
-    final cachedSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('tasks')
-        .orderBy('date')
-        .get(const GetOptions(source: Source.cache));
-
-    allTasks = cachedSnapshot.docs
-        .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-        .toList();
-  } catch (e) {
-    debugPrint("Error loading cached tasks: $e");
-  }
-
-  if (mounted) {
-    setState(() {
-      tasks = allTasks;
-      isLoading = false; // show UI immediately
-    });
-  }
-
-  // 2. Fetch from server in background (if online)
-  try {
-    final serverSnapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .collection('tasks')
-        .orderBy('date')
-        .get(const GetOptions(source: Source.server));
-
-    final serverTasks = serverSnapshot.docs
-        .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-        .toList();
 
     if (mounted) {
       setState(() {
-        tasks = serverTasks; // update UI with fresh data
+        tasks = allTasks;
+        isLoading = false; // show UI immediately
       });
     }
-  } catch (e) {
-    debugPrint("Server fetch failed (offline?): $e");
+
+    // 2. Fetch from server in background (if online)
+    try {
+      final serverSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('tasks')
+          .orderBy('date')
+          .get(const GetOptions(source: Source.server));
+
+      final serverTasks = serverSnapshot.docs
+          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          tasks = serverTasks; // update UI with fresh data
+        });
+      }
+    } catch (e) {
+      debugPrint("Server fetch failed (offline?): $e");
+    }
   }
-}
-
-
 
   Future<void> _startForegroundService() async {
     try {
@@ -378,41 +305,52 @@ Future<void> fetchTasksFromFirestore(User user) async {
           ),
         ),
         drawer: MyDrawer(user: user),
-        body:
-            user == null
-                ? Center(
+        body: _authChecking
+            ? const Scaffold(
+                body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("🔒 Please login to view your tasks"),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushReplacementNamed(context, '/login');
-                        },
-                        child: const Text("Login"),
-                      ),
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text("Checking authentication..."),
                     ],
                   ),
-                )
-                : TabBarView(
-                  children: [
-                    buildTaskList(TaskFilter.all),
-                    buildTaskList(TaskFilter.completed),
-                    buildTaskList(TaskFilter.incomplete),
-                    buildTaskList(TaskFilter.overdue),
-                  ],
                 ),
+              )
+            : user == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("🔒 Please login to view your tasks"),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text("Login"),
+                        ),
+                      ],
+                    ),
+                  )
+                : TabBarView(
+                    children: [
+                      buildTaskList(TaskFilter.all),
+                      buildTaskList(TaskFilter.completed),
+                      buildTaskList(TaskFilter.incomplete),
+                      buildTaskList(TaskFilter.overdue),
+                    ],
+                  ),
         floatingActionButton:
             user == null
                 ? null
                 : FloatingActionButton.extended(
-                  onPressed: _navigateToAddTask,
-                  icon: const Icon(Icons.add),
-                  label: const Text("Add Task"),
-                ),
+                    onPressed: _navigateToAddTask,
+                    icon: const Icon(Icons.add),
+                    label: const Text("Add Task"),
+                  ),
       ),
     );
   }
 }
-

@@ -15,6 +15,7 @@ import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/changePass.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -22,8 +23,21 @@ final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase & timezone
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Initialize Firebase with offline persistence
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    
+    // Enable Firestore offline persistence
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } catch (e) {
+    debugPrint("Firebase initialization error: $e");
+    // Continue anyway - we'll use offline capabilities
+  }
+
+  // Initialize timezone and alarm helper
   tz.initializeTimeZones();
   await NativeAlarmHelper.initialize();
 
@@ -99,7 +113,11 @@ class _MyAppState extends State<MyApp> {
   Future<void> _asyncInit() async {
     // Firestore reset & theme loading
     try {
-      await resetAllTasksIfNeeded();
+      // Make resetAllTasksIfNeeded non-blocking - this is the key change
+      resetAllTasksIfNeeded().catchError((e) {
+        debugPrint("resetAllTasksIfNeeded failed: $e");
+      });
+      
       await ThemePreferences.loadTheme();
     } catch (e) {
       debugPrint("Initialization failed inside MyApp: $e");
@@ -141,20 +159,57 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  User? user;
+  bool _isCheckingAuth = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAuthState();
+  }
+
+  Future<void> _checkAuthState() async {
+    try {
+      // First try to get current user from cache (works offline)
+      user = FirebaseAuth.instance.currentUser;
+      
+      // Listen for auth changes (will update when online)
+      FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
+        if (mounted) {
+          setState(() {
+            user = newUser;
+            _isCheckingAuth = false;
+          });
+        }
+      });
+
+      // Set a timeout to prevent hanging
+      await Future.delayed(const Duration(seconds: 3));
+    } catch (e) {
+      debugPrint("Auth check error: $e");
+    } finally {
+      if (mounted && _isCheckingAuth) {
+        setState(() => _isCheckingAuth = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return snapshot.hasData ? const MyHome() : const LoginPage();
-      },
-    );
+    if (_isCheckingAuth) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return user != null ? const MyHome() : const LoginPage();
   }
 }
