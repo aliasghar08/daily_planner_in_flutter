@@ -307,7 +307,7 @@ class _MyHomeState extends State<MyHome> {
       return _buildEmptyState(filter);
     }
 
-    // Group tasks by type
+    // Group tasks by type for ALL filters, not just TaskFilter.all
     final Map<String, List<Task>> groupedTasks = {
       "One-Time Tasks": [],
       "Daily Tasks": [],
@@ -329,6 +329,9 @@ class _MyHomeState extends State<MyHome> {
         case "MonthlyTask":
           groupedTasks["Monthly Tasks"]!.add(task);
           break;
+        default:
+          // Handle any unexpected task types by adding to One-Time
+          groupedTasks["One-Time Tasks"]!.add(task);
       }
     }
 
@@ -535,21 +538,25 @@ class _MyHomeState extends State<MyHome> {
           elevation: 0,
           bottom: TabBar(
             isScrollable: true,
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.normal,
+              fontSize: 14,
+            ),
+            labelColor: Theme.of(context).colorScheme.onPrimary,
+            unselectedLabelColor: Colors.grey.shade700,
             indicatorSize: TabBarIndicatorSize.tab,
             indicator: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.primary.withOpacity(0.8),
-                ],
-              ),
+              color: Theme.of(context).colorScheme.primary,
               borderRadius: BorderRadius.circular(8),
             ),
             tabs: const [
-              Tab(text: "All Tasks"),
+              Tab(text: "All"),
               Tab(text: "Completed"),
-              Tab(text: "Pending"),
+              Tab(text: "Incomplete"),
               Tab(text: "Overdue"),
             ],
           ),
