@@ -21,6 +21,32 @@ extension TaskTypeExtension on TaskType {
         return "Monthly";
     }
   }
+
+  IconData get icon {
+    switch (this) {
+      case TaskType.oneTime:
+        return Icons.push_pin;
+      case TaskType.daily:
+        return Icons.loop;
+      case TaskType.weekly:
+        return Icons.calendar_today;
+      case TaskType.monthly:
+        return Icons.date_range;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case TaskType.oneTime:
+        return Colors.blue;
+      case TaskType.daily:
+        return Colors.green;
+      case TaskType.weekly:
+        return Colors.orange;
+      case TaskType.monthly:
+        return Colors.purple;
+    }
+  }
 }
 
 class AddTaskPage extends StatefulWidget {
@@ -77,7 +103,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
   String formatDate(DateTime date) => DateFormat.yMMMd().format(date);
   String formatTime(DateTime date) => DateFormat.jm().format(date);
 
-  // Generate unique notification ID based on task ID and notification time
   int _generateNotificationId(String taskId, DateTime notificationTime) {
     return (taskId + notificationTime.toIso8601String()).hashCode.abs();
   }
@@ -90,7 +115,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (title.isEmpty) {
       FocusScope.of(context).unfocus();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Title cannot be empty.")),
+        const SnackBar(
+          content: Text("⚠️ Title cannot be empty."),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -99,6 +127,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("⚠️ Please choose a future date and time."),
+          backgroundColor: Colors.orange,
         ),
       );
       return;
@@ -116,6 +145,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("❌ You must be logged in to add tasks."),
+            backgroundColor: Colors.red,
           ),
         );
         setState(() => _isSaving = false);
@@ -130,7 +160,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       Task newTask;
 
-      // Restored switch statement to handle different task types
       switch (_selectedType) {
         case TaskType.oneTime:
           newTask = Task(
@@ -195,13 +224,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
           break;
       }
 
-      // Debug print to verify task type creation
       debugPrint("Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}");
 
-      // Firestore offline write
       await newTaskRef.set(newTask.toMap());
 
-      // Schedule notifications for future times
       int scheduledCount = 0;
       for (final notiTime in _notificationTimes) {
         if (notiTime.isAfter(now)) {
@@ -221,23 +247,25 @@ class _AddTaskPageState extends State<AddTaskPage> {
         debugPrint("✅ $scheduledCount notification(s) scheduled.");
       }
 
-      // Check connectivity and show appropriate message
       final connectivityResult = await Connectivity().checkConnectivity();
       if (connectivityResult == ConnectivityResult.none) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("✅ Task added offline. Will sync when internet is back."),
+            backgroundColor: Colors.green,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("✅ Task '${newTask.title}' added.")),
+          SnackBar(
+            content: Text("✅ Task '${newTask.title}' added."),
+            backgroundColor: Colors.green,
+          ),
         );
       }
 
       debugPrint("✅ Task '${newTask.title}' of type ${_selectedType.name} successfully added to Firestore");
 
-      // Only navigate back after successful save
       if (mounted) {
         Navigator.pop(context, true);
       }
@@ -247,7 +275,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("❌ Failed to add task. Please try again.")),
+          const SnackBar(
+            content: Text("❌ Failed to add task. Please try again."),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -286,6 +317,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("❌ Notification time must be in the future."),
+          backgroundColor: Colors.red,
         ),
       );
       return;
@@ -295,18 +327,19 @@ class _AddTaskPageState extends State<AddTaskPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("❌ Notification time must be before task time."),
+          backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    // Check for duplicate notification times
     if (_notificationTimes.any(
       (time) => time.isAtSameMomentAs(newNotificationTime),
     )) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("❌ This notification time is already added."),
+          backgroundColor: Colors.red,
         ),
       );
       return;
@@ -318,121 +351,367 @@ class _AddTaskPageState extends State<AddTaskPage> {
     });
   }
 
+  Widget _buildTaskTypeInfo() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _selectedType.color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _selectedType.color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(_selectedType.icon, color: _selectedType.color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _getTaskTypeDescription(),
+              style: TextStyle(
+                color: _selectedType.color,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTaskTypeDescription() {
+    switch (_selectedType) {
+      case TaskType.oneTime:
+        return "This task will occur only once";
+      case TaskType.daily:
+        return "This task will repeat every day";
+      case TaskType.weekly:
+        return "This task will repeat every week";
+      case TaskType.monthly:
+        return "This task will repeat every month";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedDate = formatDate(_selectedDate);
     final formattedTime = formatTime(_selectedDate);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Add Task")),
+      appBar: AppBar(
+        title: const Text(
+          "Add New Task",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        elevation: 0,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: "Title"),
-              ),
-              TextField(
-                controller: _detailController,
-                decoration: const InputDecoration(labelText: "Detail"),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<TaskType>(
-                value: _selectedType,
-                decoration: const InputDecoration(labelText: "Task Type"),
-                items:
-                    TaskType.values.map((type) {
-                      return DropdownMenuItem(
-                        value: type,
-                        child: Text(type.label),
-                      );
-                    }).toList(),
-                onChanged: (type) {
-                  if (type != null) {
-                    setState(() {
-                      _selectedType = type;
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 10),
-              if (_selectedType == TaskType.weekly)
-                const Text("📆 This task will repeat weekly."),
-              if (_selectedType == TaskType.monthly)
-                const Text("📅 This task will repeat monthly."),
-              if (_selectedType == TaskType.daily)
-                const Text("🔁 This task will repeat daily."),
-              if (_selectedType == TaskType.oneTime)
-                const Text("📌 This task will occur only once."),
-              const SizedBox(height: 12),
-
-              Row(
-                children: [
-                  Expanded(child: Text("Date: $formattedDate")),
-                  Expanded(child: Text("Time: $formattedTime")),
-                  TextButton(
-                    onPressed: _pickDateTime,
-                    child: const Text("Change"),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text("🔔 Notifications:"),
-                  TextButton(
-                    onPressed: _pickNotificationTime,
-                    child: const Text("Add Notification Time"),
-                  ),
-                ],
-              ),
-              if (_notificationTimes.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children:
-                      _notificationTimes.map((time) {
-                        return ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            "• ${DateFormat.yMd().add_jm().format(time)}",
+              // Task Type Selection
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Task Type",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<TaskType>(
+                        value: _selectedType,
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () {
-                              setState(() {
-                                _notificationTimes.remove(time);
-                              });
-                            },
-                          ),
-                        );
-                      }).toList(),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        items: TaskType.values.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Row(
+                              children: [
+                                Icon(type.icon, color: type.color, size: 20),
+                                const SizedBox(width: 12),
+                                Text(
+                                  type.label,
+                                  style: TextStyle(color: type.color),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (type) {
+                          if (type != null) {
+                            setState(() {
+                              _selectedType = type;
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _buildTaskTypeInfo(),
+                    ],
+                  ),
                 ),
-
-              SwitchListTile(
-                title: const Text("Completed"),
-                value: _isCompleted,
-                onChanged: (val) {
-                  setState(() {
-                    _isCompleted = val;
-                  });
-                },
               ),
+
               const SizedBox(height: 20),
-              _isSaving
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add Task"),
-                    onPressed: _addTask,
+
+              // Task Details
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Task Details",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _titleController,
+                        decoration: InputDecoration(
+                          labelText: "Title",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.title),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _detailController,
+                        decoration: InputDecoration(
+                          labelText: "Description",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.description),
+                        ),
+                        maxLines: 3,
+                      ),
+                    ],
                   ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Date & Time Selection
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Date & Time",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildInfoChip(
+                              Icons.calendar_today,
+                              formattedDate,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildInfoChip(
+                              Icons.access_time,
+                              formattedTime,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _pickDateTime,
+                          icon: const Icon(Icons.edit_calendar),
+                          label: const Text("Change Date & Time"),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Notifications Section
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Notifications",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_notificationTimes.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            "No notifications added",
+                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                          ),
+                        )
+                      else
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _notificationTimes.map((time) {
+                            return Chip(
+                              label: Text(DateFormat.yMd().add_jm().format(time)),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() {
+                                  _notificationTimes.remove(time);
+                                });
+                              },
+                              backgroundColor: Colors.blue.withOpacity(0.1),
+                            );
+                          }).toList(),
+                        ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _pickNotificationTime,
+                          icon: const Icon(Icons.add_alert),
+                          label: const Text("Add Notification"),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Completion Status
+              Card(
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                        color: _isCompleted ? Colors.green : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          "Mark as completed",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                      Switch(
+                        value: _isCompleted,
+                        onChanged: (val) {
+                          setState(() {
+                            _isCompleted = val;
+                          });
+                        },
+                        activeColor: Colors.green,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 30),
+
+              // Save Button
+              _isSaving
+                  ? const Center(child: CircularProgressIndicator())
+                  : SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add_task, size: 24),
+                        label: const Text(
+                          "Add Task",
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: _addTask,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _selectedType.color,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildInfoChip(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: Colors.grey[800]),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
