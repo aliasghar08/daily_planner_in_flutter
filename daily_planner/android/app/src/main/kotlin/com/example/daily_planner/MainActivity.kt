@@ -99,6 +99,8 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    
+
     private fun canScheduleExactAlarms(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
