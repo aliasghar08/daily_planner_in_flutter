@@ -218,13 +218,13 @@ class _MyHomeState extends State<MyHome> {
           // NEW: Task count indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "Showing 0 of ${getTaskCount(TaskFilter.all)} tasks",
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
+            // child: Text(
+            //   "Showing 0 of ${getTaskCount(TaskFilter.all)} tasks",
+            //   style: TextStyle(
+            //     fontSize: 14,
+            //     color: Colors.grey[600],
+            //   ),
+            // ),
           ),
           const Expanded(child: Center(child: Text("No tasks found."))),
         ],
@@ -262,14 +262,14 @@ class _MyHomeState extends State<MyHome> {
         // NEW: Task count indicator
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          // child: Text(
+          //   "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
+          //   style: TextStyle(
+          //     fontSize: 14,
+          //     color: Colors.grey[600],
+          //     fontWeight: FontWeight.w500,
+          //   ),
+          // ),
         ),
         Expanded(
           child: RefreshIndicator(
@@ -371,14 +371,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.blue,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.all)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.all)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -394,14 +394,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.green,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.completed)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.completed)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -417,14 +417,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.orange,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.incomplete)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.incomplete)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -440,14 +440,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.red,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.overdue)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.overdue)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
