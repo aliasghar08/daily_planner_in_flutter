@@ -43,7 +43,7 @@ class _MyHomeState extends State<MyHome> {
         user = newUser;
         _authChecking = false; // Auth check complete
       });
-      
+
       if (user != null) {
         fetchTasksFromFirestore(user!); // async, non-blocking
         maybeRequestAlarmPermission();
@@ -71,9 +71,10 @@ class _MyHomeState extends State<MyHome> {
           .orderBy('date')
           .get(const GetOptions(source: Source.cache));
 
-      allTasks = cachedSnapshot.docs
-          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-          .toList();
+      allTasks =
+          cachedSnapshot.docs
+              .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+              .toList();
     } catch (e) {
       debugPrint("Error loading cached tasks: $e");
     }
@@ -94,9 +95,10 @@ class _MyHomeState extends State<MyHome> {
           .orderBy('date')
           .get(const GetOptions(source: Source.server));
 
-      final serverTasks = serverSnapshot.docs
-          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-          .toList();
+      final serverTasks =
+          serverSnapshot.docs
+              .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+              .toList();
 
       if (mounted) {
         setState(() {
@@ -218,13 +220,13 @@ class _MyHomeState extends State<MyHome> {
           // NEW: Task count indicator
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "Showing 0 of ${getTaskCount(TaskFilter.all)} tasks",
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
+            // child: Text(
+            //   "Showing 0 of ${getTaskCount(TaskFilter.all)} tasks",
+            //   style: TextStyle(
+            //     fontSize: 14,
+            //     color: Colors.grey[600],
+            //   ),
+            // ),
           ),
           const Expanded(child: Center(child: Text("No tasks found."))),
         ],
@@ -260,17 +262,17 @@ class _MyHomeState extends State<MyHome> {
       children: [
         buildSearchBar(),
         // NEW: Task count indicator
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        // Container(
+        //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        //   // child: Text(
+        //   //   "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
+        //   //   style: TextStyle(
+        //   //     fontSize: 14,
+        //   //     color: Colors.grey[600],
+        //   //     fontWeight: FontWeight.w500,
+        //   //   ),
+        //   // ),
+        // ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async => fetchTasksFromFirestore(user!),
@@ -289,7 +291,8 @@ class _MyHomeState extends State<MyHome> {
                                 vertical: 12,
                               ),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     entry.key,
@@ -305,7 +308,9 @@ class _MyHomeState extends State<MyHome> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: getFilterColor(filter).withOpacity(0.1),
+                                      color: getFilterColor(
+                                        filter,
+                                      ).withOpacity(0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -371,14 +376,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.blue,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.all)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.all)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -394,14 +399,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.green,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.completed)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.completed)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -417,14 +422,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.orange,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.incomplete)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.incomplete)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -440,14 +445,14 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.red,
                         shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${getTaskCount(TaskFilter.overdue)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      // child: Text(
+                      //   '${getTaskCount(TaskFilter.overdue)}',
+                      //   style: const TextStyle(
+                      //     fontSize: 12,
+                      //     color: Colors.white,
+                      //     fontWeight: FontWeight.bold,
+                      //   ),
+                      // ),
                     ),
                   ],
                 ),
@@ -456,51 +461,52 @@ class _MyHomeState extends State<MyHome> {
           ),
         ),
         drawer: MyDrawer(user: user),
-        body: _authChecking
-            ? const Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text("Checking authentication..."),
-                    ],
-                  ),
-                ),
-              )
-            : user == null
-                ? Center(
+        body:
+            _authChecking
+                ? const Scaffold(
+                  body: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text("🔒 Please login to view your tasks"),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.pushReplacementNamed(context, '/login');
-                          },
-                          child: const Text("Login"),
-                        ),
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text("Checking authentication..."),
                       ],
                     ),
-                  )
-                : TabBarView(
+                  ),
+                )
+                : user == null
+                ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      buildTaskList(TaskFilter.all),
-                      buildTaskList(TaskFilter.completed),
-                      buildTaskList(TaskFilter.incomplete),
-                      buildTaskList(TaskFilter.overdue),
+                      const Text("🔒 Please login to view your tasks"),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pushReplacementNamed(context, '/login');
+                        },
+                        child: const Text("Login"),
+                      ),
                     ],
                   ),
+                )
+                : TabBarView(
+                  children: [
+                    buildTaskList(TaskFilter.all),
+                    buildTaskList(TaskFilter.completed),
+                    buildTaskList(TaskFilter.incomplete),
+                    buildTaskList(TaskFilter.overdue),
+                  ],
+                ),
         floatingActionButton:
             user == null
                 ? null
                 : FloatingActionButton.extended(
-                    onPressed: _navigateToAddTask,
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add Task"),
-                  ),
+                  onPressed: _navigateToAddTask,
+                  icon: const Icon(Icons.add),
+                  label: const Text("Add Task"),
+                ),
       ),
     );
   }

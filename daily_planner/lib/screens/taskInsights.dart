@@ -9,7 +9,7 @@ import 'dart:math';
 class AnalyticsPage extends StatefulWidget {
   final Task task;
 
-  const AnalyticsPage({Key? key, required this.task}) : super(key: key);
+  const AnalyticsPage({super.key, required this.task});
 
   @override
   _AnalyticsPageState createState() => _AnalyticsPageState();
@@ -437,7 +437,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             child: Text(
               // Show full date + time with day of week
               DateFormat('EEEE, MMM d, y – hh:mm a').format(dt),
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.blue),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.blue,
+              ),
             ),
           ),
       ],
@@ -631,6 +635,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ? (taskData['completedAt'] as Timestamp).toDate()
             : null;
 
+    // FIX: Handle null case for daysToComplete
     final daysToComplete =
         completedAt != null ? completedAt.difference(createdAt).inDays : null;
 
@@ -780,15 +785,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ),
               SizedBox(height: 4),
               ..._getTimeDistributionList(
-                    _convertToTimeOfDay(notificationTimes),
-                  )
-                  .map(
-                    (part) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2.0),
-                      child: Text(part, style: TextStyle(fontSize: 14)),
-                    ),
-                  )
-                  .toList(),
+                _convertToTimeOfDay(notificationTimes),
+              ).map(
+                (part) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Text(part, style: TextStyle(fontSize: 14)),
+                ),
+              ),
             ],
           ),
 
@@ -1192,8 +1195,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   TimeOfDay _findMostCommonTime(List<DateTime> times) {
-    if (times.isEmpty)
+    if (times.isEmpty) {
       return const TimeOfDay(hour: 12, minute: 0); // Default noon
+    }
 
     // Count by hour and minute
     final timeCounts = <TimeOfDay, int>{};
