@@ -262,7 +262,6 @@ class _MyHomeState extends State<MyHome> {
       children: [
         buildSearchBar(),
         // NEW: Task count indicator
-<<<<<<< HEAD
         // Container(
         //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         //   // child: Text(
@@ -274,19 +273,6 @@ class _MyHomeState extends State<MyHome> {
         //   //   ),
         //   // ),
         // ),
-=======
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          // child: Text(
-          //   "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
-          //   style: TextStyle(
-          //     fontSize: 14,
-          //     color: Colors.grey[600],
-          //     fontWeight: FontWeight.w500,
-          //   ),
-          // ),
-        ),
->>>>>>> ee4e30c349f5fcac0448ef2a16a202cc783629ee
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async => fetchTasksFromFirestore(user!),
