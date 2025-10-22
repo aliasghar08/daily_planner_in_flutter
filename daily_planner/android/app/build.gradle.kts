@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.daily_planner"
-        minSdk = flutter.minSdkVersion                     // Hardcoded minSdk
+        minSdk = 24         
         targetSdk = 36
         versionCode = flutterVersionCode
         versionName = flutterVersionName
