@@ -1,4 +1,4 @@
-import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -154,7 +154,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       final uid = user.uid;
       final newTaskRef =
-          FirebaseFirestore.instance.collection('users').doc(uid).collection('tasks').doc();
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('tasks')
+              .doc();
 
       final taskId = now.millisecondsSinceEpoch;
 
@@ -224,7 +228,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
           break;
       }
 
-      debugPrint("Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}");
+      debugPrint(
+        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}",
+      );
 
       await newTaskRef.set(newTask.toMap());
 
@@ -232,11 +238,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
       for (final notiTime in _notificationTimes) {
         if (notiTime.isAfter(now)) {
           final notiId = _generateNotificationId(newTaskRef.id, notiTime);
-          await NativeAlarmHelper.scheduleAlarmAtTime(
-            id: notiId,
+          await PushNotifications().scheduleNotification(
             title: 'Task Reminder',
-            body: '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-            dateTime: notiTime,
+            body:
+                '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
+            scheduledTime: newTask.date,
+            payload: "This notification was scheduled at $notiTime",
+            channelId: "GENERAL_NOTIFICATIONS",
+            channelName: "GENERAL NOTIFICATIONS",
           );
           scheduledCount++;
           debugPrint("Scheduled notification ID: $notiId for time: $notiTime");
@@ -251,7 +260,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
       if (connectivityResult == ConnectivityResult.none) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("✅ Task added offline. Will sync when internet is back."),
+            content: Text(
+              "✅ Task added offline. Will sync when internet is back.",
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -264,7 +275,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
         );
       }
 
-      debugPrint("✅ Task '${newTask.title}' of type ${_selectedType.name} successfully added to Firestore");
+      debugPrint(
+        "✅ Task '${newTask.title}' of type ${_selectedType.name} successfully added to Firestore",
+      );
 
       if (mounted) {
         Navigator.pop(context, true);
@@ -272,7 +285,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     } catch (e, stack) {
       debugPrint("❌ Error adding task: $e");
       debugPrint("Stack trace:\n$stack");
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -434,23 +447,30 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                          ),
                         ),
-                        items: TaskType.values.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Row(
-                              children: [
-                                Icon(type.icon, color: type.color, size: 20),
-                                const SizedBox(width: 12),
-                                Text(
-                                  type.label,
-                                  style: TextStyle(color: type.color),
+                        items:
+                            TaskType.values.map((type) {
+                              return DropdownMenuItem(
+                                value: type,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      type.icon,
+                                      color: type.color,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      type.label,
+                                      style: TextStyle(color: type.color),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                              );
+                            }).toList(),
                         onChanged: (type) {
                           if (type != null) {
                             setState(() {
@@ -589,25 +609,31 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           padding: EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             "No notifications added",
-                            style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
                         )
                       else
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _notificationTimes.map((time) {
-                            return Chip(
-                              label: Text(DateFormat.yMd().add_jm().format(time)),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              onDeleted: () {
-                                setState(() {
-                                  _notificationTimes.remove(time);
-                                });
-                              },
-                              backgroundColor: Colors.blue.withOpacity(0.1),
-                            );
-                          }).toList(),
+                          children:
+                              _notificationTimes.map((time) {
+                                return Chip(
+                                  label: Text(
+                                    DateFormat.yMd().add_jm().format(time),
+                                  ),
+                                  deleteIcon: const Icon(Icons.close, size: 16),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _notificationTimes.remove(time);
+                                    });
+                                  },
+                                  backgroundColor: Colors.blue.withOpacity(0.1),
+                                );
+                              }).toList(),
                         ),
                       const SizedBox(height: 12),
                       SizedBox(
@@ -636,7 +662,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   child: Row(
                     children: [
                       Icon(
-                        _isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                        _isCompleted
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
                         color: _isCompleted ? Colors.green : Colors.grey,
                       ),
                       const SizedBox(width: 12),
@@ -666,24 +694,27 @@ class _AddTaskPageState extends State<AddTaskPage> {
               _isSaving
                   ? const Center(child: CircularProgressIndicator())
                   : SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.add_task, size: 24),
-                        label: const Text(
-                          "Add Task",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.add_task, size: 24),
+                      label: const Text(
+                        "Add Task",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
-                        onPressed: _addTask,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _selectedType.color,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      ),
+                      onPressed: _addTask,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectedType.color,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),
+                  ),
             ],
           ),
         ),

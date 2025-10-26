@@ -1,11 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/screens/add_medication_page.dart';
 import 'package:daily_planner/screens/additemPage.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:daily_planner/utils/drawer.dart';
 import 'package:daily_planner/utils/item.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+// Add these imports for medication
 
 enum TaskFilter { all, completed, incomplete, overdue }
 
@@ -33,6 +37,9 @@ class _MyHomeState extends State<MyHome> {
   String searchQuery = "";
   bool _serviceStarted = false;
   bool _authChecking = true; // Added to track auth state
+
+  // Add Medication Manager
+  final MedicationManager _medicationManager = MedicationManager();
 
   @override
   void initState() {
@@ -110,14 +117,14 @@ class _MyHomeState extends State<MyHome> {
     }
   }
 
-  Future<void> _startForegroundService() async {
-    try {
-      //  await NativeAlarmHelper.startForegroundService();
-      debugPrint("Foreground service started.");
-    } catch (e) {
-      debugPrint("Error starting foreground service: $e");
-    }
-  }
+  // Future<void> _startForegroundService() async {
+  //   try {
+  //     //  await NativeAlarmHelper.startForegroundService();
+  //     debugPrint("Foreground service started.");
+  //   } catch (e) {
+  //     debugPrint("Error starting foreground service: $e");
+  //   }
+  // }
 
   Future<void> maybeRequestAlarmPermission() async {
     final hasPermission = await NativeAlarmHelper.checkExactAlarmPermission();
@@ -353,6 +360,62 @@ class _MyHomeState extends State<MyHome> {
     }
   }
 
+  // NEW: Navigate to Add Medication Page
+  Future<void> _navigateToAddMedication() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder:
+            (_) => AddMedicationPage(medicationManager: _medicationManager),
+      ),
+    );
+    // You can refresh medication data here if needed
+  }
+
+  // NEW: Show options for FAB
+  void _showAddOptions() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              const Text(
+                'Add New Item',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.task, color: Colors.blue),
+                title: const Text('Add Task'),
+                subtitle: const Text('Create a new task or reminder'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _navigateToAddTask();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.medication, color: Colors.green),
+                title: const Text('Add Medication'),
+                subtitle: const Text('Schedule medication or vitamins'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _navigateToAddMedication();
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -502,10 +565,10 @@ class _MyHomeState extends State<MyHome> {
         floatingActionButton:
             user == null
                 ? null
-                : FloatingActionButton.extended(
-                  onPressed: _navigateToAddTask,
-                  icon: const Icon(Icons.add),
-                  label: const Text("Add Task"),
+                : FloatingActionButton(
+                  onPressed: _showAddOptions,
+                  tooltip: 'Add Task or Medication',
+                  child: const Icon(Icons.add),
                 ),
       ),
     );

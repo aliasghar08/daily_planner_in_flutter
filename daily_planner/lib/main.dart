@@ -1,4 +1,4 @@
-import 'dart:io' show Platform, exit;
+import 'dart:io' show Platform;
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -7,7 +7,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/reset_task.dart';
 import 'package:daily_planner/utils/thememode.dart';
 import 'package:daily_planner/screens/home.dart';
@@ -25,8 +24,10 @@ Future<void> main() async {
 
   // Initialize Firebase with offline persistence
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
     // Enable Firestore offline persistence
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
@@ -39,7 +40,7 @@ Future<void> main() async {
 
   // Initialize timezone and alarm helper
   tz.initializeTimeZones();
-  await NativeAlarmHelper.initialize();
+  // await NativeAlarmHelper.initialize();
 
   // Call runApp immediately to avoid splash hang
   runApp(const MyApp());
@@ -54,14 +55,14 @@ Future<void> main() async {
 Future<void> _initializeAndroidServices() async {
   await Permission.notification.request();
 
-  final hasExact = await NativeAlarmHelper.checkExactAlarmPermission();
-  if (!hasExact) {
-    await NativeAlarmHelper.requestExactAlarmPermission();
-    await Future.delayed(const Duration(milliseconds: 500));
-  }
-  if (await NativeAlarmHelper.checkExactAlarmPermission()) {
-    await NativeAlarmHelper.schedulePermissionDummyAlarm();
-  }
+  // final hasExact = await NativeAlarmHelper.checkExactAlarmPermission();
+  // if (!hasExact) {
+  //   await NativeAlarmHelper.requestExactAlarmPermission();
+  //   await Future.delayed(const Duration(milliseconds: 500));
+  // }
+  // if (await NativeAlarmHelper.checkExactAlarmPermission()) {
+  //   await NativeAlarmHelper.schedulePermissionDummyAlarm();
+  // }
 
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
   final iosInit = DarwinInitializationSettings(
@@ -117,7 +118,7 @@ class _MyAppState extends State<MyApp> {
       resetAllTasksIfNeeded().catchError((e) {
         debugPrint("resetAllTasksIfNeeded failed: $e");
       });
-      
+
       await ThemePreferences.loadTheme();
     } catch (e) {
       debugPrint("Initialization failed inside MyApp: $e");
@@ -131,9 +132,7 @@ class _MyAppState extends State<MyApp> {
     if (!_initialized) {
       // Show spinner while async init is happening
       return const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
@@ -180,7 +179,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     try {
       // First try to get current user from cache (works offline)
       user = FirebaseAuth.instance.currentUser;
-      
+
       // Listen for auth changes (will update when online)
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
         if (mounted) {
@@ -205,9 +204,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   Widget build(BuildContext context) {
     if (_isCheckingAuth) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return user != null ? const MyHome() : const LoginPage();

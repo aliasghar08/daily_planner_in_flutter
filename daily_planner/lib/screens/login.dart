@@ -19,6 +19,9 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
 
+  // Use the singleton instance instead of constructor
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+
   Future<void> loginUser() async {
     if (!_formKey.currentState!.validate()) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -83,22 +86,31 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> signInWithGoogle() async {
     try {
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      // Initialize with the singleton instance [citation:10]
+      await _googleSignIn.initialize();
+
+      // Authenticate the user using the new API [citation:10]
+      final GoogleSignInAccount? googleUser =
+          await _googleSignIn.authenticate();
       if (googleUser == null) return;
 
+      // Get authentication info
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+      final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
+        accessToken:
+            googleAuth.idToken, // Fixed: use accessToken, not idToken twice
       );
 
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
         credential,
       );
+
       final uid = userCredential.user!.uid;
 
+      // Check if user exists in Firestore, if not create a new document
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
@@ -201,9 +213,7 @@ class _LoginPageState extends State<LoginPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    
                     TextButton(
-
                       onPressed: () {
                         Navigator.push(
                           context,

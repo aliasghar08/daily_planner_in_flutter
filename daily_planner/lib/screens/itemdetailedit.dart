@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:daily_planner/utils/catalog.dart';
@@ -18,9 +18,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
   late TextEditingController _detailController;
   late TextEditingController _editNoteController;
 
-  final ValueNotifier<DateTime> _selectedDateNotifier = ValueNotifier(DateTime.now());
+  final ValueNotifier<DateTime> _selectedDateNotifier = ValueNotifier(
+    DateTime.now(),
+  );
   final ValueNotifier<bool> _isCompletedNotifier = ValueNotifier(false);
-  final ValueNotifier<List<DateTime>> _notificationTimesNotifier = ValueNotifier([]);
+  final ValueNotifier<List<DateTime>> _notificationTimesNotifier =
+      ValueNotifier([]);
 
   bool _isSaving = false;
 
@@ -59,20 +62,22 @@ class _EditTaskPageState extends State<EditTaskPage> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return notificationTimes;
 
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc(task.docId)
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('tasks')
+              .doc(task.docId)
+              .get();
 
       final data = snapshot.data();
       if (data != null && data['notificationTimes'] != null) {
         final List<dynamic> rawList = data['notificationTimes'];
-        notificationTimes = rawList
-            .whereType<Timestamp>()
-            .map((ts) => ts.toDate().toLocal())
-            .toList();
+        notificationTimes =
+            rawList
+                .whereType<Timestamp>()
+                .map((ts) => ts.toDate().toLocal())
+                .toList();
       }
     } catch (e) {
       debugPrint("Error loading Notification Times: $e");
@@ -137,12 +142,17 @@ class _EditTaskPageState extends State<EditTaskPage> {
       _showSnackBar("❌ Notification must be before task time");
       return;
     }
-    if (_notificationTimesNotifier.value.any((t) => t.isAtSameMomentAs(newTime))) {
+    if (_notificationTimesNotifier.value.any(
+      (t) => t.isAtSameMomentAs(newTime),
+    )) {
       _showSnackBar("❌ Notification already added");
       return;
     }
 
-    _notificationTimesNotifier.value = [..._notificationTimesNotifier.value, newTime]..sort();
+    _notificationTimesNotifier.value = [
+      ..._notificationTimesNotifier.value,
+      newTime,
+    ]..sort();
   }
 
   void removeNotificationTime(DateTime time) {
@@ -150,10 +160,16 @@ class _EditTaskPageState extends State<EditTaskPage> {
         _notificationTimesNotifier.value.where((t) => t != time).toList();
   }
 
-  bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
   bool _isSameWeek(DateTime a, DateTime b) =>
-      a.subtract(Duration(days: a.weekday - 1)).difference(b.subtract(Duration(days: b.weekday - 1))).inDays == 0;
-  bool _isSameMonth(DateTime a, DateTime b) => a.year == b.year && a.month == b.month;
+      a
+          .subtract(Duration(days: a.weekday - 1))
+          .difference(b.subtract(Duration(days: b.weekday - 1)))
+          .inDays ==
+      0;
+  bool _isSameMonth(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month;
 
   Future<void> _saveChanges() async {
     if (_isSaving) return;
@@ -180,21 +196,41 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
       // Prepare Alarm IDs
       final oldTimes = widget.task.notificationTimes ?? [];
-      final oldIds = {for (var t in oldTimes) generateNotificationId(widget.task.docId!, t)};
-      final newIds = {for (var t in finalTimes) generateNotificationId(widget.task.docId!, t)};
+      final oldIds = {
+        for (var t in oldTimes) generateNotificationId(widget.task.docId!, t),
+      };
+      final newIds = {
+        for (var t in finalTimes) generateNotificationId(widget.task.docId!, t),
+      };
 
       // Cancel and schedule alarms
-      final cancelFutures = oldIds.difference(newIds).map(NativeAlarmHelper.cancelAlarmById);
+      final cancelFutures = oldIds
+          .difference(newIds)
+          .map(
+            PushNotifications().cancelNotification(newIds as int)
+                as Function(int e),
+          );
       final scheduleFutures = finalTimes
-          .where((t) => t.isAfter(now) && !oldTimes.any((o) => o.isAtSameMomentAs(t)))
-          .map((t) => NativeAlarmHelper.scheduleAlarmAtTime(
-                id: generateNotificationId(widget.task.docId!, t),
-                title: 'Reminder: $newTitle',
-                body: '$newTitle is due at ${DateFormat.jm().format(selectedDate)}',
-                dateTime: t,
-              ));
+          .where(
+            (t) =>
+                t.isAfter(now) && !oldTimes.any((o) => o.isAtSameMomentAs(t)),
+          )
+          .map(
+            (t) => PushNotifications().scheduleNotification(
+              // id: generateNotificationId(widget.task.docId!, t),
+              title: 'Reminder: $newTitle',
+              body:
+                  '$newTitle is due at ${DateFormat.jm().format(selectedDate)}',
+              //dateTime: t,
+              scheduledTime: t,
+              payload:
+                  "This notifcation is due at ${DateFormat.jm().format(selectedDate)}",
+            ),
+          );
 
-      await Future.wait([...cancelFutures, ...scheduleFutures]);
+      await Future.wait(
+        [...cancelFutures, ...scheduleFutures] as Iterable<Future>,
+      );
 
       // Prepare Firestore update
       final updateData = <String, dynamic>{
@@ -202,14 +238,16 @@ class _EditTaskPageState extends State<EditTaskPage> {
         'detail': _detailController.text.trim(),
         'date': Timestamp.fromDate(selectedDate.toUtc()),
         'isCompleted': isCompleted,
-        'notificationTimes': finalTimes.map((dt) => Timestamp.fromDate(dt.toUtc())).toList(),
+        'notificationTimes':
+            finalTimes.map((dt) => Timestamp.fromDate(dt.toUtc())).toList(),
         'editHistory': FieldValue.arrayUnion([
           {
             'timestamp': Timestamp.now(),
-            'note': _editNoteController.text.trim().isEmpty
-                ? null
-                : _editNoteController.text.trim(),
-          }
+            'note':
+                _editNoteController.text.trim().isEmpty
+                    ? null
+                    : _editNoteController.text.trim(),
+          },
         ]),
       };
 
@@ -228,18 +266,24 @@ class _EditTaskPageState extends State<EditTaskPage> {
       if (widget.task.taskType == 'oneTime') {
         updateData['completionStamps'] = isCompleted ? [nowStamp] : [];
       } else if (widget.task.taskType != null) {
-        final stampsInPeriod = currentStamps.where((ts) {
-          final dt = ts.toDate().toLocal();
-          if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
-          if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);
-          if (widget.task.taskType == 'MonthlyTask') return _isSameMonth(dt, now);
-          return false;
-        }).toList();
+        final stampsInPeriod =
+            currentStamps.where((ts) {
+              final dt = ts.toDate().toLocal();
+              if (widget.task.taskType == 'DailyTask')
+                return _isSameDay(dt, now);
+              if (widget.task.taskType == 'WeeklyTask')
+                return _isSameWeek(dt, now);
+              if (widget.task.taskType == 'MonthlyTask')
+                return _isSameMonth(dt, now);
+              return false;
+            }).toList();
 
         if (isCompleted && stampsInPeriod.isEmpty) {
           updateData['completionStamps'] = FieldValue.arrayUnion([nowStamp]);
         } else if (!isCompleted && stampsInPeriod.isNotEmpty) {
-          updateData['completionStamps'] = FieldValue.arrayRemove(stampsInPeriod);
+          updateData['completionStamps'] = FieldValue.arrayRemove(
+            stampsInPeriod,
+          );
         }
       }
 
@@ -264,10 +308,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(SnackBar(
-        content: Text(message),
-        backgroundColor: message.contains("❌") ? Colors.red : Colors.green,
-      ));
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: message.contains("❌") ? Colors.red : Colors.green,
+        ),
+      );
   }
 
   String _getTaskTypeLabel() {
@@ -349,7 +395,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
                           color: _getTaskTypeColor().withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(_getTaskTypeIcon(), color: _getTaskTypeColor()),
+                        child: Icon(
+                          _getTaskTypeIcon(),
+                          color: _getTaskTypeColor(),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -496,7 +545,9 @@ class _EditTaskPageState extends State<EditTaskPage> {
                         valueListenable: _isCompletedNotifier,
                         builder: (_, isCompleted, __) {
                           return Icon(
-                            isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+                            isCompleted
+                                ? Icons.check_circle
+                                : Icons.radio_button_unchecked,
                             color: isCompleted ? Colors.green : Colors.grey,
                             size: 28,
                           );
@@ -506,16 +557,21 @@ class _EditTaskPageState extends State<EditTaskPage> {
                       const Expanded(
                         child: Text(
                           "Mark as completed",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                       ValueListenableBuilder<bool>(
                         valueListenable: _isCompletedNotifier,
-                        builder: (_, value, __) => Switch(
-                          value: value,
-                          onChanged: (val) => _isCompletedNotifier.value = val,
-                          activeColor: Colors.green,
-                        ),
+                        builder:
+                            (_, value, __) => Switch(
+                              value: value,
+                              onChanged:
+                                  (val) => _isCompletedNotifier.value = val,
+                              activeColor: Colors.green,
+                            ),
                       ),
                     ],
                   ),
@@ -543,10 +599,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                       const SizedBox(height: 8),
                       Text(
                         "Why did you update this task?",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -608,23 +661,42 @@ class _EditTaskPageState extends State<EditTaskPage> {
                                 height: times.length > 3 ? 200 : null,
                                 child: ListView.builder(
                                   shrinkWrap: true,
-                                  physics: times.length > 3 ? null : const NeverScrollableScrollPhysics(),
+                                  physics:
+                                      times.length > 3
+                                          ? null
+                                          : const NeverScrollableScrollPhysics(),
                                   itemCount: times.length,
                                   itemBuilder: (_, index) {
                                     final time = times[index];
                                     return Card(
-                                      margin: const EdgeInsets.symmetric(vertical: 4),
+                                      margin: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
                                       elevation: 1,
                                       child: ListTile(
-                                        leading: Icon(Icons.notifications_active, color: _getTaskTypeColor()),
-                                        title: Text(
-                                          DateFormat('MMM d, yyyy').format(time),
-                                          style: const TextStyle(fontWeight: FontWeight.w500),
+                                        leading: Icon(
+                                          Icons.notifications_active,
+                                          color: _getTaskTypeColor(),
                                         ),
-                                        subtitle: Text(DateFormat('h:mm a').format(time)),
+                                        title: Text(
+                                          DateFormat(
+                                            'MMM d, yyyy',
+                                          ).format(time),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          DateFormat('h:mm a').format(time),
+                                        ),
                                         trailing: IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          onPressed: () => removeNotificationTime(time),
+                                          icon: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red,
+                                          ),
+                                          onPressed:
+                                              () =>
+                                                  removeNotificationTime(time),
                                         ),
                                       ),
                                     );
@@ -658,24 +730,27 @@ class _EditTaskPageState extends State<EditTaskPage> {
               _isSaving
                   ? const Center(child: CircularProgressIndicator())
                   : SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.save, size: 24),
-                        label: const Text(
-                          "Save Changes",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.save, size: 24),
+                      label: const Text(
+                        "Save Changes",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
-                        onPressed: _saveChanges,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _getTaskTypeColor(),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      ),
+                      onPressed: _saveChanges,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _getTaskTypeColor(),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                     ),
+                  ),
 
               const SizedBox(height: 20),
             ],

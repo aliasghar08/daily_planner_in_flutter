@@ -1,4 +1,3 @@
-import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,7 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('notifications_enabled', val);
 
     if (val) {
-      await NativeAlarmHelper.requestExactAlarmPermission();
+      //await NativeAlarmHelper.requestExactAlarmPermission();
     }
   }
 
@@ -57,7 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() => _selectedLanguage = lang);
     await prefs.setString('language', lang);
-    Navigator.pop(context); 
+    Navigator.pop(context);
   }
 
   void _showLanguageDialog() {
