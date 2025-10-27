@@ -45,23 +45,5 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- Background Modes for Notifications -->
-<key>UIBackgroundModes</key>
-<array>
-    <string>fetch</string>
-    <string>remote-notification</string>
-</array>
-
-<!-- Notification Permission Descriptions -->
-<key>NSUserNotificationUsageDescription</key>
-<string>This app uses notifications to remind you about your tasks.</string>
-
-<key>NSLocationWhenInUseUsageDescription</key>
-<string>We use your location to trigger some task reminders (if location-based reminders are used).</string>
-
-<!-- Required for notification banners -->
-<key>NSUserNotificationAlertStyle</key>
-<string>alert</string>
-
 </dict>
 </plist>
