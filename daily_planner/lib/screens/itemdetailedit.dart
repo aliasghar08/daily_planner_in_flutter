@@ -26,6 +26,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
       ValueNotifier([]);
 
   bool _isSaving = false;
+  late List<DateTime> _oldNotificationTimes;
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     _selectedDateNotifier.value = widget.task.date;
     _isCompletedNotifier.value = widget.task.isCompleted;
+    _oldNotificationTimes = widget.task.notificationTimes ?? [];
 
     loadNotificationTimes(widget.task).then((times) {
       _notificationTimesNotifier.value = times;
@@ -62,22 +64,20 @@ class _EditTaskPageState extends State<EditTaskPage> {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return notificationTimes;
 
-      final snapshot =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('tasks')
-              .doc(task.docId)
-              .get();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(task.docId)
+          .get();
 
       final data = snapshot.data();
       if (data != null && data['notificationTimes'] != null) {
         final List<dynamic> rawList = data['notificationTimes'];
-        notificationTimes =
-            rawList
-                .whereType<Timestamp>()
-                .map((ts) => ts.toDate().toLocal())
-                .toList();
+        notificationTimes = rawList
+            .whereType<Timestamp>()
+            .map((ts) => ts.toDate().toLocal())
+            .toList();
       }
     } catch (e) {
       debugPrint("Error loading Notification Times: $e");
@@ -195,42 +195,35 @@ class _EditTaskPageState extends State<EditTaskPage> {
       }
 
       // Prepare Alarm IDs
-      final oldTimes = widget.task.notificationTimes ?? [];
       final oldIds = {
-        for (var t in oldTimes) generateNotificationId(widget.task.docId!, t),
+        for (var t in _oldNotificationTimes)
+          generateNotificationId(widget.task.docId!, t),
       };
       final newIds = {
-        for (var t in finalTimes) generateNotificationId(widget.task.docId!, t),
+        for (var t in finalTimes)
+          generateNotificationId(widget.task.docId!, t),
       };
 
-      // Cancel and schedule alarms
-      final cancelFutures = oldIds
-          .difference(newIds)
-          .map(
-            PushNotifications().cancelNotification(newIds as int)
-                as Function(int e),
-          );
-      final scheduleFutures = finalTimes
-          .where(
-            (t) =>
-                t.isAfter(now) && !oldTimes.any((o) => o.isAtSameMomentAs(t)),
-          )
-          .map(
-            (t) => PushNotifications().scheduleNotification(
-              // id: generateNotificationId(widget.task.docId!, t),
-              title: 'Reminder: $newTitle',
-              body:
-                  '$newTitle is due at ${DateFormat.jm().format(selectedDate)}',
-              //dateTime: t,
-              scheduledTime: t,
-              payload:
-                  "This notifcation is due at ${DateFormat.jm().format(selectedDate)}",
-            ),
-          );
+      // Cancel removed notifications
+      final removedIds = oldIds.difference(newIds);
+      for (final id in removedIds) {
+        await PushNotifications().cancelNotification(id);
+      }
 
-      await Future.wait(
-        [...cancelFutures, ...scheduleFutures] as Iterable<Future>,
-      );
+      // Schedule new notifications
+      for (final time in finalTimes) {
+        if (time.isAfter(now) &&
+            !_oldNotificationTimes.any((oldTime) => oldTime.isAtSameMomentAs(time))) {
+          await PushNotifications().scheduleNotification(
+            id: generateNotificationId(widget.task.docId!, time),
+            title: 'Reminder: $newTitle',
+            body: '$newTitle is due at ${DateFormat.jm().format(selectedDate)}',
+            scheduledTime: time,
+            payload:
+                "This notification is due at ${DateFormat.jm().format(selectedDate)}",
+          );
+        }
+      }
 
       // Prepare Firestore update
       final updateData = <String, dynamic>{
@@ -240,23 +233,29 @@ class _EditTaskPageState extends State<EditTaskPage> {
         'isCompleted': isCompleted,
         'notificationTimes':
             finalTimes.map((dt) => Timestamp.fromDate(dt.toUtc())).toList(),
-        'editHistory': FieldValue.arrayUnion([
-          {
-            'timestamp': Timestamp.now(),
-            'note':
-                _editNoteController.text.trim().isEmpty
-                    ? null
-                    : _editNoteController.text.trim(),
-          },
-        ]),
       };
 
+      // Add edit history if there's a note
+      final editNote = _editNoteController.text.trim();
+      if (editNote.isNotEmpty) {
+        updateData['editHistory'] = FieldValue.arrayUnion([
+          {
+            'timestamp': Timestamp.now(),
+            'note': editNote,
+          },
+        ]);
+      }
+
       // Task Type Info
-      if (widget.task is DailyTask) updateData['taskType'] = 'DailyTask';
-      if (widget.task is WeeklyTask) updateData['taskType'] = 'WeeklyTask';
-      if (widget.task is MonthlyTask) {
+      if (widget.task.taskType == "DailyTask") {
+        updateData['taskType'] = 'DailyTask';
+      } else if (widget.task.taskType == "WeeklyTask") {
+        updateData['taskType'] = 'WeeklyTask';
+      } else if (widget.task.taskType == "MonthlyTask") {
         updateData['taskType'] = 'MonthlyTask';
         updateData['dayOfMonth'] = (widget.task as MonthlyTask).dayOfMonth;
+      } else {
+        updateData['taskType'] = 'oneTime';
       }
 
       // Completion Stamps
@@ -265,25 +264,19 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
       if (widget.task.taskType == 'oneTime') {
         updateData['completionStamps'] = isCompleted ? [nowStamp] : [];
-      } else if (widget.task.taskType != null) {
-        final stampsInPeriod =
-            currentStamps.where((ts) {
-              final dt = ts.toDate().toLocal();
-              if (widget.task.taskType == 'DailyTask')
-                return _isSameDay(dt, now);
-              if (widget.task.taskType == 'WeeklyTask')
-                return _isSameWeek(dt, now);
-              if (widget.task.taskType == 'MonthlyTask')
-                return _isSameMonth(dt, now);
-              return false;
-            }).toList();
+      } else {
+        final stampsInPeriod = currentStamps.where((ts) {
+          final dt = ts.toDate().toLocal();
+          if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
+          if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);
+          if (widget.task.taskType == 'MonthlyTask') return _isSameMonth(dt, now);
+          return false;
+        }).toList();
 
         if (isCompleted && stampsInPeriod.isEmpty) {
           updateData['completionStamps'] = FieldValue.arrayUnion([nowStamp]);
         } else if (!isCompleted && stampsInPeriod.isNotEmpty) {
-          updateData['completionStamps'] = FieldValue.arrayRemove(
-            stampsInPeriod,
-          );
+          updateData['completionStamps'] = FieldValue.arrayRemove(stampsInPeriod);
         }
       }
 
@@ -298,7 +291,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
       if (mounted) Navigator.pop(context, true);
     } catch (e, stack) {
       debugPrint("❌ Error updating task: $e\n$stack");
-      _showSnackBar("❌ Failed to update task: $e");
+      _showSnackBar("❌ Failed to update task: ${e.toString()}");
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -321,11 +314,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
     switch (taskType) {
       case 'oneTime':
         return 'One-Time Task';
-      case 'daily':
+      case 'DailyTask':
         return 'Daily Task';
-      case 'weekly':
+      case 'WeeklyTask':
         return 'Weekly Task';
-      case 'monthly':
+      case 'MonthlyTask':
         return 'Monthly Task';
       default:
         return 'Task';
@@ -337,11 +330,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
     switch (taskType) {
       case 'oneTime':
         return Icons.push_pin;
-      case 'daily':
+      case 'DailyTask':
         return Icons.loop;
-      case 'weekly':
+      case 'WeeklyTask':
         return Icons.calendar_today;
-      case 'monthly':
+      case 'MonthlyTask':
         return Icons.date_range;
       default:
         return Icons.task;
@@ -353,11 +346,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
     switch (taskType) {
       case 'oneTime':
         return Colors.blue;
-      case 'daily':
+      case 'DailyTask':
         return Colors.green;
-      case 'weekly':
+      case 'WeeklyTask':
         return Colors.orange;
-      case 'monthly':
+      case 'MonthlyTask':
         return Colors.purple;
       default:
         return Colors.grey;
@@ -565,13 +558,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
                       ),
                       ValueListenableBuilder<bool>(
                         valueListenable: _isCompletedNotifier,
-                        builder:
-                            (_, value, __) => Switch(
-                              value: value,
-                              onChanged:
-                                  (val) => _isCompletedNotifier.value = val,
-                              activeColor: Colors.green,
-                            ),
+                        builder: (_, value, __) => Switch(
+                          value: value,
+                          onChanged: (val) => _isCompletedNotifier.value = val,
+                          activeColor: Colors.green,
+                        ),
                       ),
                     ],
                   ),
@@ -661,10 +652,9 @@ class _EditTaskPageState extends State<EditTaskPage> {
                                 height: times.length > 3 ? 200 : null,
                                 child: ListView.builder(
                                   shrinkWrap: true,
-                                  physics:
-                                      times.length > 3
-                                          ? null
-                                          : const NeverScrollableScrollPhysics(),
+                                  physics: times.length > 3
+                                      ? null
+                                      : const NeverScrollableScrollPhysics(),
                                   itemCount: times.length,
                                   itemBuilder: (_, index) {
                                     final time = times[index];
@@ -694,9 +684,8 @@ class _EditTaskPageState extends State<EditTaskPage> {
                                             Icons.delete,
                                             color: Colors.red,
                                           ),
-                                          onPressed:
-                                              () =>
-                                                  removeNotificationTime(time),
+                                          onPressed: () =>
+                                              removeNotificationTime(time),
                                         ),
                                       ),
                                     );
@@ -730,27 +719,27 @@ class _EditTaskPageState extends State<EditTaskPage> {
               _isSaving
                   ? const Center(child: CircularProgressIndicator())
                   : SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.save, size: 24),
-                      label: const Text(
-                        "Save Changes",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.save, size: 24),
+                        label: const Text(
+                          "Save Changes",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      onPressed: _saveChanges,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _getTaskTypeColor(),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        onPressed: _saveChanges,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _getTaskTypeColor(),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
               const SizedBox(height: 20),
             ],

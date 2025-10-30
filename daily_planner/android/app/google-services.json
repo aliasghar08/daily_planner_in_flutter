@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "777337977048-j16obl6r7ejgg4gp4g6g8vbukaesu54c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.daily_planner",
+            "certificate_hash": "4b26399a10165a6db9c25bf375b42281404830bd"
+          }
+        },
+        {
           "client_id": "777337977048-c27q0hjrp8epvon0srnq8mq149nkm746.apps.googleusercontent.com",
           "client_type": 3
         }

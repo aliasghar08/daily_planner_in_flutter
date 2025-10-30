@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/timezone.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 class PushNotifications {
   static final PushNotifications _instance = PushNotifications._internal();
@@ -34,7 +34,6 @@ class PushNotifications {
       _onNotificationActionController.stream;
 
   bool _isInitialized = false;
-  int _notificationId = 0;
 
   /// Initialize the notification service
   Future<void> initialize() async {
@@ -74,8 +73,6 @@ class PushNotifications {
     await _localNotifications.initialize(
       settings,
       onDidReceiveNotificationResponse: _onDidReceiveNotificationResponse,
-      onDidReceiveBackgroundNotificationResponse:
-          _onDidReceiveBackgroundNotificationResponse,
     );
 
     // Create notification channels
@@ -86,11 +83,12 @@ class PushNotifications {
   Future<void> _createNotificationChannels() async {
     const AndroidNotificationChannel generalChannel =
         AndroidNotificationChannel(
-          'general_channel',
-          'General Notifications',
-          description: 'General notifications channel',
+          'daily_planner_channel',
+          'Daily Planner Notifications',
+          description: 'Task reminders and notifications',
           importance: Importance.max,
           playSound: true,
+          enableVibration: true,
         );
 
     const AndroidNotificationChannel scheduledChannel =
@@ -100,6 +98,7 @@ class PushNotifications {
           description: 'Scheduled reminders and alerts',
           importance: Importance.high,
           playSound: true,
+          enableVibration: true,
         );
 
     await _localNotifications
@@ -117,6 +116,9 @@ class PushNotifications {
 
   /// Setup Firebase messaging handlers
   Future<void> _setupFirebaseMessaging() async {
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
     // Foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _onMessageController.add(message);
@@ -201,28 +203,32 @@ class PushNotifications {
 
   // ============ LOCAL NOTIFICATION SCHEDULING ============
 
-  /// Schedule a local notification
-  Future<int> scheduleNotification({
+  /// Schedule a local notification with a specific ID
+  Future<bool> scheduleNotification({
+    required int id, // CHANGED: Now required external ID
     required String title,
     required String body,
     required DateTime scheduledTime,
     String? payload,
-    String? channelId = 'scheduled_channel',
-    String? channelName = 'Scheduled Notifications',
+    String? channelId = 'daily_planner_channel',
   }) async {
     try {
-      final int notificationId = _generateNotificationId();
+      // Validate ID is positive (required by some systems)
+      if (id <= 0) {
+        print('Error: Notification ID must be positive, got: $id');
+        return false;
+      }
 
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
-            channelId!,
-            channelName!,
-            channelDescription: 'Scheduled notifications',
-            importance: Importance.high,
-            priority: Priority.high,
-            playSound: true,
-            timeoutAfter: 0,
-          );
+        channelId!,
+        'Daily Planner Notifications',
+        channelDescription: 'Task reminders and notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -236,43 +242,50 @@ class PushNotifications {
       );
 
       await _localNotifications.zonedSchedule(
-        notificationId,
+        id, // Use the provided external ID
         title,
         body,
-        TZDateTime.from(scheduledTime, _localNotifications as Location),
+        tz.TZDateTime.from(scheduledTime, tz.local),
         details,
         payload: payload,
         androidScheduleMode: AndroidScheduleMode.exact,
       );
 
-      print('Scheduled notification ID: $notificationId for $scheduledTime');
-      return notificationId;
+      print('Scheduled notification with ID: $id for $scheduledTime');
+      return true;
     } catch (e) {
-      print('Error scheduling notification: $e');
-      return -1;
+      print('Error scheduling notification with ID $id: $e');
+      return false;
     }
   }
 
-  /// Schedule a repeating local notification
-  Future<int> scheduleRepeatingNotification({
+  /// Schedule a repeating local notification with specific ID
+  Future<bool> scheduleRepeatingNotification({
+    required int id, // CHANGED: Now required external ID
     required String title,
     required String body,
     required DateTime firstDate,
     required RepeatInterval repeatInterval,
     String? payload,
-    String? channelId = 'scheduled_channel',
+    String? channelId = 'daily_planner_channel',
   }) async {
     try {
-      final int notificationId = _generateNotificationId();
+      // Validate ID is positive
+      if (id <= 0) {
+        print('Error: Notification ID must be positive, got: $id');
+        return false;
+      }
 
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
-            channelId!,
-            'Repeating Notifications',
-            channelDescription: 'Repeating scheduled notifications',
-            importance: Importance.high,
-            priority: Priority.high,
-          );
+        channelId!,
+        'Daily Planner Notifications',
+        channelDescription: 'Repeating task reminders',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -286,42 +299,70 @@ class PushNotifications {
       );
 
       await _localNotifications.periodicallyShow(
-        notificationId,
+        id, // Use the provided external ID
         title,
         body,
         repeatInterval,
         details,
-        payload: payload,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: payload, androidScheduleMode: AndroidScheduleMode.exact,
       );
 
-      print('Scheduled repeating notification ID: $notificationId');
-      return notificationId;
+      print('Scheduled repeating notification with ID: $id');
+      return true;
     } catch (e) {
-      print('Error scheduling repeating notification: $e');
-      return -1;
+      print('Error scheduling repeating notification with ID $id: $e');
+      return false;
     }
   }
 
-  /// Show immediate local notification
-  Future<int> showNotification({
+  /// Debug method to print all pending notifications
+Future<void> debugPrintScheduledNotifications() async {
+  try {
+    final pending = await getPendingNotifications();
+    print('=== SCHEDULED NOTIFICATIONS (${pending.length}) ===');
+    
+    if (pending.isEmpty) {
+      print('No scheduled notifications found.');
+      return;
+    }
+    
+    for (final notification in pending) {
+      print('ID: ${notification.id}');
+      print('Title: ${notification.title}');
+      print('Body: ${notification.body}');
+      print('Payload: ${notification.payload}');
+      print('---');
+    }
+  } catch (e) {
+    print('Error debugging notifications: $e');
+  }
+}
+
+  /// Show immediate local notification with specific ID
+  Future<bool> showNotification({
+    required int id, // CHANGED: Now required external ID
     required String title,
     required String body,
     String? payload,
-    String? channelId = 'general_channel',
+    String? channelId = 'daily_planner_channel',
   }) async {
     try {
-      final int notificationId = _generateNotificationId();
+      // Validate ID is positive
+      if (id <= 0) {
+        print('Error: Notification ID must be positive, got: $id');
+        return false;
+      }
 
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
-            channelId!,
-            'General Notifications',
-            channelDescription: 'General notifications',
-            importance: Importance.max,
-            priority: Priority.high,
-            playSound: true,
-          );
+        channelId!,
+        'Daily Planner Notifications',
+        channelDescription: 'Task reminders and notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -335,18 +376,18 @@ class PushNotifications {
       );
 
       await _localNotifications.show(
-        notificationId,
+        id, // Use the provided external ID
         title,
         body,
         details,
         payload: payload,
       );
 
-      print('Shown notification ID: $notificationId');
-      return notificationId;
+      print('Shown notification with ID: $id');
+      return true;
     } catch (e) {
-      print('Error showing notification: $e');
-      return -1;
+      print('Error showing notification with ID $id: $e');
+      return false;
     }
   }
 
@@ -358,7 +399,7 @@ class PushNotifications {
       await _localNotifications.cancel(notificationId);
       print('Cancelled notification ID: $notificationId');
     } catch (e) {
-      print('Error cancelling notification: $e');
+      print('Error cancelling notification ID $notificationId: $e');
     }
   }
 
@@ -400,7 +441,7 @@ class PushNotifications {
       final pending = await getPendingNotifications();
       return pending.any((notification) => notification.id == notificationId);
     } catch (e) {
-      print('Error checking notification schedule: $e');
+      print('Error checking notification schedule for ID $notificationId: $e');
       return false;
     }
   }
@@ -417,27 +458,26 @@ class PushNotifications {
       // First cancel the existing notification
       await cancelNotification(notificationId);
 
-      // If new time is provided, reschedule it
+      // If new time is provided, reschedule it with the same ID
       if (newScheduledTime != null) {
-        await scheduleNotification(
+        return await scheduleNotification(
+          id: notificationId, // Use the same ID
           title: newTitle ?? 'Updated Notification',
           body: newBody ?? 'Notification content updated',
           scheduledTime: newScheduledTime,
           payload: newPayload,
         );
       } else {
-        // Just show updated notification immediately
-        await showNotification(
+        // Just show updated notification immediately with the same ID
+        return await showNotification(
+          id: notificationId, // Use the same ID
           title: newTitle ?? 'Updated Notification',
           body: newBody ?? 'Notification content updated',
           payload: newPayload,
         );
       }
-
-      print('Updated notification ID: $notificationId');
-      return true;
     } catch (e) {
-      print('Error updating notification: $e');
+      print('Error updating notification ID $notificationId: $e');
       return false;
     }
   }
@@ -468,17 +508,22 @@ class PushNotifications {
 
   // ============ UTILITY METHODS ============
 
-  /// Show local notification for FCM message
+  /// Show local notification for FCM message (uses hash-based ID)
   Future<void> _showLocalNotification(RemoteMessage message) async {
     try {
+      // For FCM messages, we'll use a hash-based ID since we don't control these
+      final int notificationId = message.hashCode.abs();
+
       final AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
-            'general_channel',
-            'General Notifications',
-            channelDescription: 'General notifications channel',
-            importance: Importance.max,
-            priority: Priority.high,
-          );
+        'daily_planner_channel',
+        'Daily Planner Notifications',
+        channelDescription: 'Task reminders and notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+      );
 
       final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -492,20 +537,15 @@ class PushNotifications {
       );
 
       await _localNotifications.show(
-        message.hashCode,
-        message.notification?.title ?? 'Notification',
-        message.notification?.body ?? '',
+        notificationId,
+        message.notification?.title ?? 'Daily Planner',
+        message.notification?.body ?? 'New notification',
         details,
         payload: message.data.toString(),
       );
     } catch (e) {
       print('Error showing local notification: $e');
     }
-  }
-
-  /// Generate unique notification ID
-  int _generateNotificationId() {
-    return DateTime.now().millisecondsSinceEpoch.remainder(100000);
   }
 
   /// Set foreground notification presentation options
@@ -528,30 +568,14 @@ class PushNotifications {
 
   // ============ NOTIFICATION HANDLERS ============
 
-  static void _onDidReceiveLocalNotification(
-    int id,
-    String? title,
-    String? body,
-    String? payload,
-  ) {
-    print('Received local notification: $title - $body');
-  }
-
   static void _onDidReceiveNotificationResponse(NotificationResponse response) {
-    print('Notification tapped: ${response.payload}');
-    // You can handle notification tap actions here
+    print('Notification tapped: ID=${response.id}, Payload=${response.payload}');
+    // Handle notification tap actions here
     _instance._onNotificationActionController.add({
       'action': 'tap',
       'payload': response.payload,
       'id': response.id,
     });
-  }
-
-  static void _onDidReceiveBackgroundNotificationResponse(
-    NotificationResponse response,
-  ) {
-    print('Background notification tapped: ${response.payload}');
-    // Handle background notification taps
   }
 
   /// Check if service is initialized
@@ -572,7 +596,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   print('Handling background message: ${message.messageId}');
 
-  // You can show local notification for background messages
+  // Show local notification for background messages
   final PushNotifications notifications = PushNotifications();
   await notifications._showLocalNotification(message);
 }

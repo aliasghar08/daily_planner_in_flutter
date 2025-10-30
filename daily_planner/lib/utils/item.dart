@@ -3,6 +3,7 @@ import 'package:daily_planner/screens/itemdetailedit.dart';
 import 'package:daily_planner/screens/itemdetailpage.dart';
 import 'package:daily_planner/screens/taskInsights.dart';
 import 'package:daily_planner/utils/catalog.dart';
+import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +28,7 @@ class ItemWidget extends StatefulWidget {
 class _ItemWidgetState extends State<ItemWidget> {
   bool? isChecked;
   List<DateTime> completedList = [];
+  final PushNotifications _pushNotifications = PushNotifications(); // Create instance
 
   @override
   void initState() {
@@ -55,7 +57,10 @@ class _ItemWidgetState extends State<ItemWidget> {
     });
   }
 
-  int get notificationId => widget.item.id.hashCode & 0x7FFFFFFF;
+  // Generate notification ID using task docId and time
+  int generateNotificationId(String taskId, DateTime time) {
+    return (taskId + time.toIso8601String()).hashCode.abs() & 0x7FFFFFFF;
+  }
 
   // Helper functions for period comparisons
   bool _isSameDay(DateTime a, DateTime b) {
@@ -144,35 +149,8 @@ class _ItemWidgetState extends State<ItemWidget> {
           updateData['completionStamps'] = updatedStamps;
         }
 
-        //   await NativeAlarmHelper.cancelAlarmById(notificationId);
-        // } else {
-        //   // Remove ALL stamps in current period
-        //   updatedStamps = updatedStamps.where((stamp) {
-        //     final date = stamp.toDate();
-
-        //     if (widget.item.taskType == 'oneTime') {
-        //       return false; // Remove all for one-time tasks
-        //     } else if (widget.item.taskType == 'DailyTask') {
-        //       return !_isSameDay(date, now);
-        //     } else if (widget.item.taskType == 'WeeklyTask') {
-        //       return !_isSameWeek(date, now);
-        //     } else if (widget.item.taskType == 'MonthlyTask') {
-        //       return !_isSameMonth(date, now);
-        //     }
-        //     return true;
-        //   }).toList();
-
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
-
-        // if (widget.item.date.isAfter(DateTime.now())) {
-        //   await NativeAlarmHelper.scheduleAlarmAtTime(
-        //     id: notificationId,
-        //     title: widget.item.title,
-        //     body: widget.item.detail,
-        //     dateTime: widget.item.date,
-        //   );
-        // }
       }
 
       // Update Firestore
@@ -209,10 +187,6 @@ class _ItemWidgetState extends State<ItemWidget> {
     }
   }
 
-  int generateNotificationId(String taskId, DateTime time) {
-    return (taskId + time.toIso8601String()).hashCode.abs();
-  }
-
   Future<void> deleteTask(Task task) async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -223,24 +197,23 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text("Confirm Deletion"),
-            content: const Text("Are you sure you want to delete this task?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text("Confirm Deletion"),
+        content: const Text("Are you sure you want to delete this task?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text("Cancel"),
           ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(
+              "Delete",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
 
     if (confirm != true) return;
@@ -252,20 +225,10 @@ class _ItemWidgetState extends State<ItemWidget> {
     );
 
     try {
-      // Cancel all notifications - FIXED: Use docId instead of task.id
-      if (task.notificationTimes != null &&
-          task.notificationTimes!.isNotEmpty) {
-        for (final time in task.notificationTimes!) {
-          final id = generateNotificationId(task.docId!, time);
-          //await NativeAlarmHelper.cancelAlarmById(id);
-        }
-      } else {
-        // Use docId for fallback ID generation
-        final fallbackId = generateNotificationId(task.docId!, task.date);
-        // await NativeAlarmHelper.cancelAlarmById(fallbackId);
-      }
+      // Cancel all notifications using PushNotifications class
+      await _cancelAllTaskNotifications(task);
 
-      // Delete from Firestore :cite[1]:cite[3]
+      // Delete from Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -283,11 +246,42 @@ class _ItemWidgetState extends State<ItemWidget> {
     }
   }
 
+  // New method to cancel all notifications for a task using PushNotifications class
+  Future<void> _cancelAllTaskNotifications(Task task) async {
+    try {
+      // Ensure PushNotifications is initialized
+      if (!_pushNotifications.isInitialized) {
+        await _pushNotifications.initialize();
+      }
+
+      List<int> notificationIds = [];
+
+      // Cancel notifications for all scheduled notification times
+      if (task.notificationTimes != null && task.notificationTimes!.isNotEmpty) {
+        for (final time in task.notificationTimes!) {
+          final id = generateNotificationId(task.docId!, time);
+          notificationIds.add(id);
+        }
+      } else {
+        // Cancel the main task notification
+        final mainId = generateNotificationId(task.docId!, task.date);
+        notificationIds.add(mainId);
+      }
+
+      // Cancel all notifications using the PushNotifications class
+      if (notificationIds.isNotEmpty) {
+        await _pushNotifications.cancelNotifications(notificationIds);
+        debugPrint("Cancelled ${notificationIds.length} notifications for task: ${task.title}");
+      }
+    } catch (e) {
+      debugPrint("Error cancelling notifications: $e");
+      // Don't throw here - we still want to delete the task even if notification cancellation fails
+    }
+  }
+
   void _showSnackbar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   TextSpan _highlightSearchText(String text, String query) {
@@ -475,20 +469,19 @@ class _ItemWidgetState extends State<ItemWidget> {
               );
             }
           },
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-                const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
-                const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-                const PopupMenuItem(
-                  value: 'Analytics',
-                  child: Text("📈 Analytics"),
-                ),
-                const PopupMenuItem(
-                  value: 'details',
-                  child: Text('📄 Details'),
-                ),
-              ],
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
+            const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
+            const PopupMenuItem(value: 'share', child: Text('📤 Share')),
+            const PopupMenuItem(
+              value: 'Analytics',
+              child: Text("📈 Analytics"),
+            ),
+            const PopupMenuItem(
+              value: 'details',
+              child: Text('📄 Details'),
+            ),
+          ],
         ),
       ),
     );

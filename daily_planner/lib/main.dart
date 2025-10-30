@@ -1,10 +1,12 @@
 import 'dart:io' show Platform;
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
+import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:daily_planner/utils/reset_task.dart';
@@ -18,6 +20,56 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+// Global navigator key for notifications
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// Background message handler (must be top-level)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("Handling a background message: ${message.messageId}");
+
+  // Show notification when app is in background/terminated
+  if (message.notification != null) {
+    await _showNotification(
+      title: message.notification!.title ?? 'Daily Planner',
+      body: message.notification!.body ?? 'New notification',
+    );
+  }
+}
+
+// Show notification helper
+Future<void> _showNotification({
+  required String title,
+  required String body,
+}) async {
+  const AndroidNotificationDetails androidPlatformChannelSpecifics =
+      AndroidNotificationDetails(
+        'daily_planner_channel',
+        'Daily Planner Notifications',
+        channelDescription: 'Channel for task reminders and notifications',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+      );
+
+  const NotificationDetails platformChannelSpecifics = NotificationDetails(
+    android: androidPlatformChannelSpecifics,
+    iOS: DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    ),
+  );
+
+  await flutterLocalNotificationsPlugin.show(
+    DateTime.now().millisecondsSinceEpoch.remainder(100000),
+    title,
+    body,
+    platformChannelSpecifics,
+  );
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +90,9 @@ Future<void> main() async {
     // Continue anyway - we'll use offline capabilities
   }
 
+  // Initialize FCM and notifications
+  await _initializeFCM();
+
   // Initialize timezone and alarm helper
   tz.initializeTimeZones();
   // await NativeAlarmHelper.initialize();
@@ -45,24 +100,170 @@ Future<void> main() async {
   // Call runApp immediately to avoid splash hang
   runApp(const MyApp());
 
+  await testNotificationSystem();
+
   // Perform async initializations in background
   if (!kIsWeb && Platform.isAndroid) {
     _initializeAndroidServices();
-    BatteryOptimizationHelper.promptDisableBatteryOptimization();
+    try {
+      await BatteryOptimizationHelper.promptDisableBatteryOptimization();
+    } catch (e) {
+      print("Battery optimization prompt not available $e");
+    }
+  }
+}
+
+// Test method - call this somewhere in your app
+Future<void> testNotificationSystem() async {
+  final notifications = PushNotifications();
+  await notifications.initialize();
+
+  // Schedule a test notification 1 minute from now
+  final testTime = DateTime.now().add(Duration(minutes: 1));
+  final testId = DateTime.now().millisecondsSinceEpoch;
+
+  final success = await notifications.scheduleNotification(
+    id: testId,
+    title: 'Test Notification',
+    body: 'This is a test scheduled notification',
+    scheduledTime: testTime,
+  );
+
+  print('Test notification scheduled: $success');
+
+  // Print all scheduled notifications
+  await notifications.debugPrintScheduledNotifications();
+}
+
+Future<void> _initializeFCM() async {
+  try {
+    final FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+    // Request notification permissions
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+    );
+
+    debugPrint('FCM Permission status: ${settings.authorizationStatus}');
+
+    // Get FCM token
+    try {
+      String? token = await messaging.getToken();
+      debugPrint('FCM Token: $token');
+
+      // Save token to user's document in Firestore
+      if (User != null) {
+        await _saveFCMTokenToFirestore(token);
+      }
+    } catch (e) {
+      debugPrint("Error uploading FCM token $e");
+    }
+
+    // Handle foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('Got a message whilst in the foreground!');
+      debugPrint('Message data: ${message.data}');
+
+      if (message.notification != null) {
+        debugPrint(
+          'Message also contained a notification: ${message.notification}',
+        );
+
+        // Show notification when app is in foreground
+        _showNotification(
+          title: message.notification!.title ?? 'Daily Planner',
+          body: message.notification!.body ?? 'New notification',
+        );
+      }
+    });
+
+    // Handle when app is opened from terminated state via notification
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('App opened via notification');
+      debugPrint('Message data: ${message.data}');
+
+      // Navigate to specific screen based on message data if needed
+      navigatorKey.currentState?.pushNamed('/home');
+    });
+
+    // Handle token refresh
+    messaging.onTokenRefresh.listen((String newToken) {
+      debugPrint('FCM token refreshed: $newToken');
+      _saveFCMTokenToFirestore(newToken);
+    });
+  } catch (e) {
+    debugPrint('FCM initialization error: $e');
+  }
+}
+
+// Future<void> _saveFCMTokenToFirestore(String? token) async {
+//   if (token == null) return;
+
+//   try {
+//     final user = FirebaseAuth.instance.currentUser;
+//     if (user != null) {
+//       // Save token to user's document
+//       await FirebaseFirestore.instance
+//           .collection('users')
+//           .doc(user.uid)
+//           .set({
+//             'fcmToken': token,
+//             'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+//           }, SetOptions(merge: true));
+
+//       debugPrint('FCM token saved to Firestore for user: ${user.uid}');
+//     }
+//   } catch (e) {
+//     debugPrint('Error saving FCM token to Firestore: $e');
+//   }
+// }
+
+Future<void> _saveFCMTokenToFirestore(String? token) async {
+  if (token == null) return;
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Use array to store multiple tokens for multiple devices
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmTokens': FieldValue.arrayUnion([token]),
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      debugPrint('FCM token saved to Firestore for user: ${user.uid}');
+    }
+  } catch (e) {
+    debugPrint('Error saving FCM token to Firestore: $e');
+  }
+}
+
+Future<void> _removeFCMTokenFromFirestore(String? token) async {
+  if (token == null) return;
+
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {
+          'fcmTokens': FieldValue.arrayRemove([token]),
+        },
+      );
+    }
+  } catch (e) {
+    debugPrint('Error removing FCM token from Firestore: $e');
   }
 }
 
 Future<void> _initializeAndroidServices() async {
   await Permission.notification.request();
-
-  // final hasExact = await NativeAlarmHelper.checkExactAlarmPermission();
-  // if (!hasExact) {
-  //   await NativeAlarmHelper.requestExactAlarmPermission();
-  //   await Future.delayed(const Duration(milliseconds: 500));
-  // }
-  // if (await NativeAlarmHelper.checkExactAlarmPermission()) {
-  //   await NativeAlarmHelper.schedulePermissionDummyAlarm();
-  // }
 
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
   final iosInit = DarwinInitializationSettings(
@@ -79,6 +280,9 @@ Future<void> _initializeAndroidServices() async {
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
     onDidReceiveNotificationResponse: (NotificationResponse response) {
+      debugPrint('Notification tapped: ${response.payload}');
+
+      // Handle notification tap
       if (response.actionId == 'STOP_ACTION') {
         flutterLocalNotificationsPlugin.cancel(response.id!);
       } else if (response.actionId == 'SNOOZE_ACTION') {
@@ -88,9 +292,20 @@ Future<void> _initializeAndroidServices() async {
           'Snoozed Reminder',
           'Reminder after snooze!',
           tz.TZDateTime.now(tz.local).add(const Duration(minutes: 5)),
-          const NotificationDetails(),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'daily_planner_channel',
+              'Daily Planner Notifications',
+              channelDescription:
+                  'Channel for task reminders and notifications',
+            ),
+          ),
+          // uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          androidScheduleMode: AndroidScheduleMode.exact,
         );
+      } else {
+        // Regular notification tap - navigate to home
+        navigatorKey.currentState?.pushNamed('/home');
       }
     },
   );
@@ -145,6 +360,7 @@ class _MyAppState extends State<MyApp> {
           theme: ThemeData.light(),
           darkTheme: ThemeData.dark(),
           themeMode: mode,
+          navigatorKey: navigatorKey, // Add navigator key for notifications
           home: const AuthWrapper(),
           routes: {
             "/home": (_) => const MyHome(),

@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
@@ -18,8 +19,17 @@ class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "exact_alarm_permission"
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Create notification channel when app starts
+        AlarmReceiver.createNotificationChannel(this)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Create notification channel when Flutter engine is configured
+        AlarmReceiver.createNotificationChannel(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -54,17 +64,21 @@ class MainActivity : FlutterActivity() {
                         }
 
                         "cancelAlarm" -> {
-    val id = call.argument<Int>("id") ?: 0
-    cancelAlarm(id)
-    result.success(null)
-}
-
+                            val id = call.argument<Int>("id") ?: 0
+                            cancelAlarm(id)
+                            result.success(null)
+                        }
 
                         "promptDisableBatteryOptimization" -> {
-    promptDisableBatteryOptimization()
-    result.success(null)
-}
+                            promptDisableBatteryOptimization()
+                            result.success(null)
+                        }
 
+                        // Add this new method to ensure channel is created
+                        "ensureNotificationChannel" -> {
+                            AlarmReceiver.createNotificationChannel(this)
+                            result.success(null)
+                        }
 
                         else -> result.notImplemented()
                     }
@@ -76,6 +90,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun scheduleAlarm(id: Int, title: String, body: String, time: Long) {
+        // Ensure notification channel exists before scheduling alarm
+        AlarmReceiver.createNotificationChannel(this)
+        
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, AlarmReceiver::class.java).apply {
             putExtra("title", title)
@@ -91,15 +108,15 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (alarmManager.canScheduleExactAlarms()) {
                 alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pendingIntent)
+                Log.d("AlarmSchedule", "Alarm scheduled with ID: $id for time: $time")
             } else {
                 Log.w("AlarmWarning", "Exact-alarm permission denied; cannot schedule alarm.")
             }
         } else {
             alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pendingIntent)
+            Log.d("AlarmSchedule", "Alarm scheduled with ID: $id for time: $time")
         }
     }
-
-    
 
     private fun canScheduleExactAlarms(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -137,23 +154,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun promptDisableBatteryOptimization() {
-    try {
-        val packageName = applicationContext.packageName
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                data = android.net.Uri.parse("package:$packageName")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        try {
+            val packageName = applicationContext.packageName
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = android.net.Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+            } else {
+                Log.i("BatteryOpt", "Already ignoring battery optimizations.")
             }
-            startActivity(intent)
-        } else {
-            Log.i("BatteryOpt", "Already ignoring battery optimizations.")
+        } catch (e: Exception) {
+            Log.e("BatteryOpt", "Failed to prompt disable battery optimization", e)
         }
-    } catch (e: Exception) {
-        Log.e("BatteryOpt", "Failed to prompt disable battery optimization", e)
     }
-}
-
 
     private fun openManufacturerSettings() {
         val manufacturer = Build.MANUFACTURER.lowercase(Locale.getDefault())
@@ -199,16 +215,15 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun cancelAlarm(id: Int) {
-    val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val intent = Intent(this, AlarmReceiver::class.java)
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, AlarmReceiver::class.java)
 
-    val pendingIntent = PendingIntent.getBroadcast(
-        this, id, intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, id, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-    alarmManager.cancel(pendingIntent)
-    Log.d("AlarmCancel", "Alarm with ID $id cancelled.")
-}
-
+        alarmManager.cancel(pendingIntent)
+        Log.d("AlarmCancel", "Alarm with ID $id cancelled.")
+    }
 }

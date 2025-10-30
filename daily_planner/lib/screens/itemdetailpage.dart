@@ -20,11 +20,13 @@ class ItemDetailPage extends StatefulWidget {
 
 class _ItemDetailPageState extends State<ItemDetailPage> {
   late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+  late PushNotifications _pushNotifications;
 
   List<DateTime> completedList = [];
   List<DateTime> notificationTimes = [];
   bool? _currentCompletionStatus;
   bool _isLoading = true;
+  bool _pushNotificationsInitialized = false;
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
@@ -45,6 +47,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   void initState() {
     super.initState();
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    _pushNotifications = PushNotifications();
     _currentCompletionStatus = widget.task.isCompleted;
 
     // Async setup after first frame to avoid blocking UI
@@ -52,7 +55,24 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       await _initializeNotifications();
       await _checkNotificationChannel();
       await _loadTaskData();
+      await _initializePushNotifications();
     });
+  }
+
+  // NEW: Initialize PushNotifications
+  Future<void> _initializePushNotifications() async {
+    try {
+      await _pushNotifications.initialize();
+      setState(() {
+        _pushNotificationsInitialized = true;
+      });
+      debugPrint('PushNotifications initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing PushNotifications: $e');
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text('Failed to initialize notifications: $e')),
+      );
+    }
   }
 
   Future<void> _loadTaskData() async {
@@ -67,7 +87,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           .doc(widget.task.docId)
           .get(
             const GetOptions(source: Source.serverAndCache),
-          ); // <-- offline-safe
+          );
 
       if (!doc.exists) return;
 
@@ -88,7 +108,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           [];
 
       loadedStamps.sort((a, b) => b.compareTo(a));
-      loadedNotifications.sort((a, b) => b.compareTo(a)); // latest on top
+      loadedNotifications.sort((a, b) => b.compareTo(a));
 
       setState(() {
         _currentCompletionStatus = loadedCompletionStatus;
@@ -174,45 +194,45 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     debugPrint('Notification permission granted: $granted');
   }
 
+   int generateNotificationId(String taskId, DateTime time) =>
+      (taskId + time.toIso8601String()).hashCode.abs();
+
   Future<void> _scheduleNativeAndLocalAlarm({
     required Duration delay,
     required String title,
     required String body,
   }) async {
     try {
+      // Check if push notifications are initialized
+      if (!_pushNotificationsInitialized) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(content: Text('Notifications not initialized yet. Please wait...')),
+        );
+        return;
+      }
+
       final id = DateTime.now().millisecondsSinceEpoch.remainder(100000);
       final scheduledTime = DateTime.now().add(delay);
 
-      // if (!await NativeAlarmHelper.checkExactAlarmPermission()) {
-      //   scaffoldMessengerKey.currentState?.showSnackBar(
-      //     const SnackBar(content: Text("Please grant exact alarm permission first")),
-      //   );
-      //   return;
-      // }
-
-      // await NativeAlarmHelper.scheduleAlarmAtTime(
-      //   id: id,
-      //   dateTime: scheduledTime,
-      //   title: title,
-      //   body: body,
-      // );
-
-      await PushNotifications().scheduleNotification(
+      // Use PushNotifications
+      await _pushNotifications.scheduleNotification(
+        id: id,
         title: title,
         body: body,
         scheduledTime: scheduledTime,
         payload: body,
-        channelId: "GENERAL_NOTIFICATIONS",
-        channelName: "GENERAL NOTIFICATIONS",
+        channelId: "daily_planner_channel",
       );
 
+      // Also schedule with local notifications for redundancy
       await flutterLocalNotificationsPlugin.zonedSchedule(
         id,
         title,
         body,
         tz.TZDateTime.from(scheduledTime, tz.local),
         NotificationDetails(android: _androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+       // uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        androidScheduleMode: AndroidScheduleMode.exact,
       );
 
       scaffoldMessengerKey.currentState?.showSnackBar(
@@ -228,14 +248,52 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
-  Future<void> _triggerTestAlarm() async => _scheduleNativeAndLocalAlarm(
-    delay: const Duration(seconds: 2),
-    title: '🔔 Test Alarm',
-    body: 'You tapped the test alarm button!',
-  );
+  Future<void> _triggerTestAlarm() async {
+    try {
+      // Check if push notifications are initialized
+      if (!_pushNotificationsInitialized) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(content: Text('Notifications not initialized yet. Please wait...')),
+        );
+        return;
+      }  
+
+      int notId = generateNotificationId(widget.task.id  as String, DateTime.now());
+      
+      // Test immediate notification first
+      await _pushNotifications.showNotification(
+        title: "Test Started",
+        body: "This is an immediate test notification!",
+        payload: "test_started", id: notId,
+      );
+
+      // Then schedule one for 2 seconds
+      final scheduledTime = DateTime.now().add(const Duration(seconds: 2));
+      notId = generateNotificationId(widget.task.id as String, DateTime.now());
+      await _pushNotifications.scheduleNotification(
+        title: "🔔 Test Alarm",
+        body: "You tapped the test button!",
+        scheduledTime: scheduledTime,
+        payload: "test_alarm",
+        channelId: "daily_planner_channel", id: notId,
+      );
+
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text("Test notifications sent! Check for immediate one and one in 2 seconds.")),
+      );
+    } catch (e) {
+      debugPrint('Error in test alarm: $e');
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(content: Text("Something went wrong: $e")),
+      );
+    }
+  }
 
   Future<void> _cancelAllNotifications() async {
     try {
+      if (_pushNotificationsInitialized) {
+        await _pushNotifications.cancelAllNotifications();
+      }
       await flutterLocalNotificationsPlugin.cancelAll();
       scaffoldMessengerKey.currentState?.showSnackBar(
         const SnackBar(content: Text("All scheduled notifications canceled")),
@@ -248,48 +306,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
-  // Future<void> _toggleCompletion(bool value) async {
-  //   final user = FirebaseAuth.instance.currentUser;
-  //   if (user == null || widget.task.docId == null) return;
-
-  //   final now = DateTime.now();
-  //   final nowStamp = Timestamp.fromDate(now.toUtc());
-
-  //   final currentStamps = widget.task.completionStamps ?? [];
-
-  //   final updateData = <String, dynamic>{'isCompleted': value};
-
-  //   // Update completionStamps
-  //   bool exists = currentStamps.any((ts) {
-  //     final dt = ts.toDate().toLocal();
-  //     if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
-  //     if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);
-  //     if (widget.task.taskType == 'MonthlyTask') return _isSameMonth(dt, now);
-  //     return false;
-  //   });
-
-  //   if (value && !exists) updateData['completionStamps'] = FieldValue.arrayUnion([nowStamp]);
-  //   if (!value && exists) {
-  //     final toRemove = currentStamps.where((ts) {
-  //       final dt = ts.toDate().toLocal();
-  //       if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
-  //       if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);
-  //       if (widget.task.taskType == 'MonthlyTask') return _isSameMonth(dt, now);
-  //       return false;
-  //     }).toList();
-  //     updateData['completionStamps'] = FieldValue.arrayRemove(toRemove);
-  //   }
-
-  //   await FirebaseFirestore.instance
-  //       .collection('users')
-  //       .doc(user.uid)
-  //       .collection('tasks')
-  //       .doc(widget.task.docId)
-  //       .update(updateData);
-
-  //   setState(() => _currentCompletionStatus = value);
-  // }
-
+  // ... rest of your existing methods (_toggleCompletion, _isSameDay, etc.) remain the same
   Future<void> _toggleCompletion(bool value) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || widget.task.docId == null) return;
@@ -297,13 +314,11 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     final now = DateTime.now();
     final nowStamp = Timestamp.fromDate(now.toUtc());
 
-    // Create a mutable copy of completionStamps
     final currentStamps = List<Timestamp>.from(
       widget.task.completionStamps ?? [],
     );
 
     if (value) {
-      // Add today’s completion if not already present
       bool exists = currentStamps.any((ts) {
         final dt = ts.toDate().toLocal();
         if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
@@ -314,7 +329,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       if (!exists) currentStamps.add(nowStamp);
     } else {
-      // Remove today’s completion
       currentStamps.removeWhere((ts) {
         final dt = ts.toDate().toLocal();
         if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
@@ -324,18 +338,14 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       });
     }
 
-    // Update UI immediately
     setState(() {
       _currentCompletionStatus = value;
-      completedList =
-          currentStamps.map((ts) => ts.toDate()).toList()
-            ..sort((a, b) => b.compareTo(a));
+      completedList = currentStamps.map((ts) => ts.toDate()).toList()
+        ..sort((a, b) => b.compareTo(a));
     });
 
-    // Navigate back immediately (non-blocking)
     Navigator.pop(context);
 
-    // Firestore update in background
     final updateData = <String, dynamic>{
       'isCompleted': value,
       'completionStamps': currentStamps,
@@ -347,10 +357,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           .doc(user.uid)
           .collection('tasks')
           .doc(widget.task.docId)
-          .set(updateData, SetOptions(merge: true)); // merge with existing
+          .set(updateData, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Failed to update Firestore: $e');
-      // Optionally save to local cache for retry if offline
     }
   }
 
@@ -383,6 +392,23 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Add initialization status indicator
+                if (!_pushNotificationsInitialized)
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: Colors.orange[100],
+                    child: Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.orange[800]),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Initializing notifications...',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+                      ],
+                    ),
+                  ),
+                
                 Text(
                   task.title,
                   style: const TextStyle(
@@ -427,18 +453,12 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     const Icon(Icons.flag),
                     const SizedBox(width: 8),
                     GestureDetector(
-                      onTap:
-                          () => _toggleCompletion(
-                            !(_currentCompletionStatus ?? false),
-                          ),
+                      onTap: () => _toggleCompletion(!(_currentCompletionStatus ?? false)),
                       child: Chip(
                         label: Text(
                           _currentCompletionStatus! ? "Completed" : "Pending",
                         ),
-                        backgroundColor:
-                            _currentCompletionStatus!
-                                ? Colors.green
-                                : Colors.red,
+                        backgroundColor: _currentCompletionStatus! ? Colors.green : Colors.red,
                       ),
                     ),
                   ],
@@ -474,60 +494,59 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
   }
 
+  // ... rest of your widget methods (_buildCompletionTimesExpansion, etc.) remain the same
   Widget _buildCompletionTimesExpansion() => ExpansionTile(
     leading: const Icon(Icons.list_alt),
     title: const Text("See All Completion Times"),
-    children:
-        completedList.isEmpty
-            ? [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    "No completion times available",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+    children: completedList.isEmpty
+        ? [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  "No completion times available",
+                  style: TextStyle(color: Colors.grey),
                 ),
               ),
-            ]
-            : completedList
-                .map(
-                  (date) => ListTile(
-                    leading: const Icon(Icons.check),
-                    title: Text(
-                      DateFormat('MMM d, yyyy • h:mm a').format(date),
-                    ),
-                  ),
-                )
-                .toList(),
+            ),
+          ]
+        : completedList
+            .map(
+              (date) => ListTile(
+                leading: const Icon(Icons.check),
+                title: Text(
+                  DateFormat('MMM d, yyyy • h:mm a').format(date),
+                ),
+              ),
+            )
+            .toList(),
   );
 
   Widget _buildNotificationTimesExpansion() => ExpansionTile(
     leading: const Icon(Icons.notifications),
     title: const Text("See All Notification Times"),
-    children:
-        notificationTimes.isEmpty
-            ? [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    "No Notification Times available",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+    children: notificationTimes.isEmpty
+        ? [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  "No Notification Times available",
+                  style: TextStyle(color: Colors.grey),
                 ),
               ),
-            ]
-            : notificationTimes
-                .map(
-                  (date) => ListTile(
-                    leading: const Icon(Icons.check),
-                    title: Text(
-                      DateFormat('MMM d, yyyy • h:mm a').format(date),
-                    ),
-                  ),
-                )
-                .toList(),
+            ),
+          ]
+        : notificationTimes
+            .map(
+              (date) => ListTile(
+                leading: const Icon(Icons.check),
+                title: Text(
+                  DateFormat('MMM d, yyyy • h:mm a').format(date),
+                ),
+              ),
+            )
+            .toList(),
   );
 
   Widget _buildNotificationTestButtons() => Column(
@@ -537,46 +556,47 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         "🔔 Notification Test Buttons",
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
-      const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8.0),
-        child: Text(
-          "Note: Using default system sound. To add custom sounds:\n"
-          "1. Add your sound file to android/app/src/main/res/raw\n"
-          "2. Use the filename without extension in code\n"
-          "3. Example: notification_sound.mp3 → 'notification_sound'",
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-      ),
       const SizedBox(height: 10),
+      // Add initialization status to button
       ElevatedButton(
-        onPressed: _triggerTestAlarm,
-        child: const Text("Test Alarm (2 seconds)"),
+        onPressed: _pushNotificationsInitialized ? _triggerTestAlarm : null,
+        child: Text(_pushNotificationsInitialized 
+            ? "Test Alarm (2 seconds)" 
+            : "Initializing..."),
       ),
       const SizedBox(height: 8),
       ElevatedButton(
-        onPressed:
-            () => _scheduleNativeAndLocalAlarm(
-              delay: const Duration(minutes: 1),
-              title: "⏰ Scheduled Alarm",
-              body: "This alarm is scheduled for 1 minute later!",
-            ),
-        child: const Text("Schedule Alarm (1 min)"),
+        onPressed: _pushNotificationsInitialized 
+            ? () => _scheduleNativeAndLocalAlarm(
+                  delay: const Duration(seconds: 10),
+                  title: "⏰ Scheduled Alarm",
+                  body: "This alarm is scheduled for 10 seconds later!",
+                )
+            : null,
+        child: Text(_pushNotificationsInitialized 
+            ? "Schedule Alarm (10 seconds)" 
+            : "Initializing..."),
       ),
       const SizedBox(height: 8),
       ElevatedButton(
-        onPressed:
-            () => _scheduleNativeAndLocalAlarm(
-              delay: const Duration(seconds: 10),
-              title: "⏰ Scheduled Alarm",
-              body: "This alarm is scheduled for 10 seconds later!",
-            ),
-        child: const Text("Schedule Alarm (10 seconds)"),
+        onPressed: _pushNotificationsInitialized 
+            ? () => _scheduleNativeAndLocalAlarm(
+                  delay: const Duration(minutes: 1),
+                  title: "⏰ Scheduled Alarm",
+                  body: "This alarm is scheduled for 1 minute later!",
+                )
+            : null,
+        child: Text(_pushNotificationsInitialized 
+            ? "Schedule Alarm (1 min)" 
+            : "Initializing..."),
       ),
       const SizedBox(height: 8),
       ElevatedButton(
         style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-        onPressed: _cancelAllNotifications,
-        child: const Text("Cancel All Scheduled Notifications"),
+        onPressed: _pushNotificationsInitialized ? _cancelAllNotifications : null,
+        child: Text(_pushNotificationsInitialized 
+            ? "Cancel All Scheduled Notifications" 
+            : "Initializing..."),
       ),
     ],
   );
@@ -595,21 +615,19 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       else
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children:
-              widget.task.editHistory.map((edit) {
-                final formattedEditTime = DateFormat(
-                  'MMM d, yyyy • h:mm a',
-                ).format(edit.timestamp);
-                return ListTile(
-                  leading: const Icon(Icons.edit_note),
-                  title: Text(formattedEditTime),
-                  subtitle:
-                      edit.note != null && edit.note!.isNotEmpty
-                          ? Text(edit.note!)
-                          : const Text("No note"),
-                  contentPadding: EdgeInsets.zero,
-                );
-              }).toList(),
+          children: widget.task.editHistory.map((edit) {
+            final formattedEditTime = DateFormat(
+              'MMM d, yyyy • h:mm a',
+            ).format(edit.timestamp);
+            return ListTile(
+              leading: const Icon(Icons.edit_note),
+              title: Text(formattedEditTime),
+              subtitle: edit.note != null && edit.note!.isNotEmpty
+                  ? Text(edit.note!)
+                  : const Text("No note"),
+              contentPadding: EdgeInsets.zero,
+            );
+          }).toList(),
         ),
     ],
   );

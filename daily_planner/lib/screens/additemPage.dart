@@ -244,11 +244,19 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
             scheduledTime: newTask.date,
             payload: "This notification was scheduled at $notiTime",
-            channelId: "GENERAL_NOTIFICATIONS",
-            channelName: "GENERAL NOTIFICATIONS",
+            channelId: "daily_planner_channel",
+            id: notiId,
+            // channelName: "GENERAL NOTIFICATIONS",
           );
           scheduledCount++;
-          debugPrint("Scheduled notification ID: $notiId for time: $notiTime");
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Scheduled notification ID: $notiId for time: $notiTime",
+              ),
+            ),
+          );
+          // debugPrint("Scheduled notification ID: $notiId for time: $notiTime");
         }
       }
 
