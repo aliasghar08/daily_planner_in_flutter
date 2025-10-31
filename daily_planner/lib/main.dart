@@ -18,11 +18,14 @@ import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'package:daily_planner/utils/notification_service.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+final notificationService = NotificationService();
 
 // Background message handler (must be top-level)
 @pragma('vm:entry-point')
@@ -71,6 +74,15 @@ Future<void> _showNotification({
   );
 }
 
+Future<void> _initializeNotificationService() async {
+  try {
+    await notificationService.initialize();
+    debugPrint('✅ NotificationService initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Error initializing NotificationService: $e');
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -101,6 +113,12 @@ Future<void> main() async {
   runApp(const MyApp());
 
   await testNotificationSystem();
+
+  // Initialize NotificationService FIRST
+await _initializeNotificationService();
+  
+  
+  
 
   // Perform async initializations in background
   if (!kIsWeb && Platform.isAndroid) {

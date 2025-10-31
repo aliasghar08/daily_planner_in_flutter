@@ -1,10 +1,12 @@
-import 'package:daily_planner/utils/push_notifications.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:daily_planner/main.dart';
+import 'package:daily_planner/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:intl/intl.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 
 enum TaskType { oneTime, daily, weekly, monthly }
 
@@ -103,8 +105,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
   String formatDate(DateTime date) => DateFormat.yMMMd().format(date);
   String formatTime(DateTime date) => DateFormat.jm().format(date);
 
-  int _generateNotificationId(String taskId, DateTime notificationTime) {
-    return (taskId + notificationTime.toIso8601String()).hashCode.abs();
+  Future<String> getFcmToken(String uid) async {
+    String? currentToken = await FirebaseMessaging.instance.getToken();
+
+    if (currentToken == null) {
+      print("❌ Unable to get FCM token");
+
+      return '';
+    } else {
+      return currentToken;
+    }
   }
 
   Future<void> _addTask() async {
@@ -160,15 +170,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
               .collection('tasks')
               .doc();
 
-      final taskId = now.millisecondsSinceEpoch;
-
       Task newTask;
 
       switch (_selectedType) {
         case TaskType.oneTime:
           newTask = Task(
             docId: newTaskRef.id,
-            id: taskId,
             title: title,
             detail: detail,
             date: _selectedDate,
@@ -177,13 +184,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
             completedAt: _isCompleted ? now : null,
             taskType: _selectedType.name,
             notificationTimes: _notificationTimes,
+            fcmToken: await getFcmToken(uid),
           );
           break;
 
         case TaskType.daily:
           newTask = DailyTask(
             docId: newTaskRef.id,
-            id: taskId,
             title: title,
             detail: detail,
             date: _selectedDate,
@@ -192,13 +199,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
+            fcmToken: await getFcmToken(uid),
           );
           break;
 
         case TaskType.weekly:
           newTask = WeeklyTask(
             docId: newTaskRef.id,
-            id: taskId,
             title: title,
             detail: detail,
             date: _selectedDate,
@@ -207,6 +214,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
+            fcmToken: await getFcmToken(uid),
           );
           break;
 
@@ -214,7 +222,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
           final dayOfMonth = _selectedDate.day;
           newTask = MonthlyTask(
             docId: newTaskRef.id,
-            id: taskId,
             title: title,
             detail: detail,
             date: _selectedDate,
@@ -224,6 +231,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             dayOfMonth: dayOfMonth,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
+            fcmToken: await getFcmToken(uid),
           );
           break;
       }
@@ -235,37 +243,59 @@ class _AddTaskPageState extends State<AddTaskPage> {
       await newTaskRef.set(newTask.toMap());
 
       int scheduledCount = 0;
-      for (final notiTime in _notificationTimes) {
-        if (notiTime.isAfter(now)) {
-          final notiId = _generateNotificationId(newTaskRef.id, notiTime);
-          await PushNotifications().scheduleNotification(
-            title: 'Task Reminder',
-            body:
-                '${newTask.title} is due at ${DateFormat.jm().format(newTask.date)}',
-            scheduledTime: newTask.date,
-            payload: "This notification was scheduled at $notiTime",
-            channelId: "daily_planner_channel",
-            id: notiId,
-            // channelName: "GENERAL NOTIFICATIONS",
+
+      // Schedule notifications using the global notificationService instance
+      for (final notificationTime in _notificationTimes) {
+        if (notificationTime.isAfter(now)) {
+          // Convert local notification time to UTC for Firestore consistency
+          final notificationTimeUtc = notificationTime.toUtc();
+
+          // FIX: Use the global instance, not creating a new one
+          await notificationService.scheduleTaskNotification(
+            taskId: newTaskRef.id, // Use Firestore document ID as taskId
+            title: 'Task Reminder: $title',
+            body: '$title is due at ${DateFormat.jm().format(_selectedDate)}',
+            scheduledTimeUtc: notificationTimeUtc, // Pass UTC time to service
+            payload: {
+              'taskId': newTaskRef.id,
+              'type': 'task_reminder',
+              'taskTitle': title,
+              'dueDate': _selectedDate.toIso8601String(),
+            },
           );
           scheduledCount++;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "Scheduled notification ID: $notiId for time: $notiTime",
-              ),
-            ),
+
+          debugPrint(
+            "Scheduled notification for UTC time: $notificationTimeUtc",
           );
-          // debugPrint("Scheduled notification ID: $notiId for time: $notiTime");
+          debugPrint("Which is local time: $notificationTime");
         }
       }
 
       if (scheduledCount > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("✅ $scheduledCount notification(s) scheduled."),
+            backgroundColor: Colors.green,
+          ),
+        );
         debugPrint("✅ $scheduledCount notification(s) scheduled.");
       }
 
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
+      // FIXED: Correctly handle List<ConnectivityResult> from new API
+      final List<ConnectivityResult> connectivityResults =
+          await Connectivity().checkConnectivity();
+
+      // Check if any of the connectivity types indicate we're online
+      final bool isOnline = connectivityResults.any(
+        (result) =>
+            result == ConnectivityResult.wifi ||
+            result == ConnectivityResult.mobile ||
+            result == ConnectivityResult.ethernet ||
+            result == ConnectivityResult.vpn,
+      );
+
+      if (!isOnline) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -277,14 +307,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("✅ Task '${newTask.title}' added."),
+            content: Text("✅ Task '$title' added."),
             backgroundColor: Colors.green,
           ),
         );
       }
 
       debugPrint(
-        "✅ Task '${newTask.title}' of type ${_selectedType.name} successfully added to Firestore",
+        "✅ Task '$title' of type ${_selectedType.name} successfully added to Firestore",
       );
 
       if (mounted) {
@@ -296,8 +326,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("❌ Failed to add task. Please try again."),
+          SnackBar(
+            content: Text("❌ Failed to add task: ${e.toString()}"),
             backgroundColor: Colors.red,
           ),
         );

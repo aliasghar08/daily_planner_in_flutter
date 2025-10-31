@@ -3,20 +3,20 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class CatlalogModel {
   static List<Task> items = [
     Task(
-      id: 1,
+      docId: '1',
       title: "Get the meal",
       detail: "I need to have my dinner done on time",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(), notificationTimes: [],
+      completedAt: DateTime.now(), notificationTimes: [], fcmToken: '',
     ),
     Task(
-      id: 2,
+      docId: '2',
       title: "Get your work done before deadline",
       detail: "I need to get my work done before the deadline at any cost",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(), notificationTimes: [],
+      completedAt: DateTime.now(), notificationTimes: [], fcmToken: '',
     ),
   ];
 }
@@ -48,7 +48,6 @@ class TaskEdit {
 
 class Task {
   String? docId;
-  int id;
   String title;
   String detail;
   DateTime date;
@@ -59,21 +58,25 @@ class Task {
   String taskType;
   List<DateTime> notificationTimes;
 
+
+
   Task({
     this.docId,
-    required this.id,
     required this.title,
     required this.detail,
     required this.date,
     required this.isCompleted,
+    
     DateTime? createdAt,
     this.completedAt,
     List<TaskEdit>? editHistory,
     this.taskType = 'oneTime',
-    List<DateTime>? notificationTimes,
+    List<DateTime>? notificationTimes, String? fcmToken,
   }) : createdAt = createdAt ?? DateTime.now(),
        editHistory = editHistory ?? [], 
        notificationTimes = notificationTimes ?? []; 
+
+    
 
 
   factory Task.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -110,7 +113,6 @@ class Task {
 
     return Task(
       docId: docId,
-      id: map['id'] ?? 0,
       title: map['title'] ?? '',
       detail: map['detail'] ?? '',
       date: parseTime(map['date']),
@@ -119,13 +121,13 @@ class Task {
       completedAt: parseTimeNullable(map['completedAt']),
       editHistory: history,
       taskType: map['taskType'] ?? 'oneTime', // ✅ Fallback for old records
-      notificationTimes: parseNotificationTimes(map['notificationTimes']),
+      notificationTimes: parseNotificationTimes(map['notificationTimes']), fcmToken: null
     );
   }
 
   Map<String, dynamic> toMap() {
     final data = {
-      'id': id,
+      'id': docId,
       'title': title,
       'detail': detail,
       'date': Timestamp.fromDate(date),
@@ -143,16 +145,19 @@ class Task {
       data['completedAt'] = Timestamp.fromDate(completedAt!);
     }
 
+    
+
     return data;
   }
 
   String get type => 'Task';
 
   Iterable? get completionStamps => null;
+  
+  get fcmToken => null;
 
   Task copyWith({
     String? docId,
-    int? id,
     String? title,
     String? detail,
     DateTime? date,
@@ -162,10 +167,10 @@ class Task {
     List<TaskEdit>? editHistory,
     String? taskType,
     List<DateTime>? notificationTimes,
+    String? fcmToken
   }) {
     return Task(
       docId: docId ?? this.docId,
-      id: id ?? this.id,
       title: title ?? this.title,
       detail: detail ?? this.detail,
       date: date ?? this.date,
@@ -175,6 +180,7 @@ class Task {
       editHistory: editHistory ?? this.editHistory,
       taskType: taskType ?? this.taskType,
       notificationTimes: notificationTimes ?? this.notificationTimes,
+      fcmToken: this.fcmToken,
     );
   }
 }
@@ -186,7 +192,6 @@ class DailyTask extends Task {
 
   DailyTask({
     required super.docId,
-    required super.id,
     required super.title,
     required super.detail,
     required super.date,
@@ -196,8 +201,10 @@ class DailyTask extends Task {
     this.morning = true,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+    String? fcmToken
+    
   }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes);
+       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -237,7 +244,6 @@ class DailyTask extends Task {
 
     return DailyTask(
       docId: docId,
-      id: map['id'],
       title: map['title'],
       detail: map['detail'],
       date: parseTime(map['date']),
@@ -248,6 +254,7 @@ class DailyTask extends Task {
       morning: map['morning'] ?? true,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
+      fcmToken: map['fcmToken'] as String?
     );
   }
 
@@ -271,7 +278,6 @@ class WeeklyTask extends Task {
 
   WeeklyTask({
     required super.docId,
-    required super.id,
     required super.title,
     required super.detail,
     required super.date,
@@ -280,8 +286,9 @@ class WeeklyTask extends Task {
     super.completedAt,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+    String? fcmToken,
   }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes);
+       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -320,7 +327,6 @@ class WeeklyTask extends Task {
 
     return WeeklyTask(
       docId: docId,
-      id: map['id'],
       title: map['title'],
       detail: map['detail'],
       date: parseTime(map['date']),
@@ -330,6 +336,7 @@ class WeeklyTask extends Task {
           map['completedAt'] != null ? parseTime(map['completedAt']) : null,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationsTimes']),
+      fcmToken: map['fcmToken'] as String?
     );
   }
 
@@ -350,7 +357,6 @@ class MonthlyTask extends Task {
 
   MonthlyTask({
     required super.docId,
-    required super.id,
     required super.title,
     required super.detail,
     required super.date,
@@ -360,8 +366,9 @@ class MonthlyTask extends Task {
     required this.dayOfMonth,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+    String? fcmToken,
   }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes);
+       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
 
   @override
   Map<String, dynamic> toMap() => {
@@ -399,7 +406,6 @@ class MonthlyTask extends Task {
 
     return MonthlyTask(
       docId: docId,
-      id: map['id'],
       title: map['title'],
       detail: map['detail'],
       date: parseTime(map['date']),
@@ -409,7 +415,8 @@ class MonthlyTask extends Task {
           map['completedAt'] != null ? parseTime(map['completedAt']) : null,
       dayOfMonth: map['dayOfMonth'],
       completionStamps: parseStamps(map['completionStamps']),
-      notificationTimes: parseNotificationTimes(map['notificationTimes'])
+      notificationTimes: parseNotificationTimes(map['notificationTimes']),
+      fcmToken: map['fcmToken'] as String
     );
   }
 

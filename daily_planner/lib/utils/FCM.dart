@@ -1,6 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 class FCMService {
+  
   static Future<String?> getFCMToken() async {
     try {
       String? token = await FirebaseMessaging.instance.getToken();

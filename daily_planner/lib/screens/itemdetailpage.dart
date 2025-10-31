@@ -258,7 +258,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         return;
       }  
 
-      int notId = generateNotificationId(widget.task.id  as String, DateTime.now());
+      int notId = generateNotificationId(widget.task.docId  as String, DateTime.now());
       
       // Test immediate notification first
       await _pushNotifications.showNotification(
@@ -269,7 +269,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       // Then schedule one for 2 seconds
       final scheduledTime = DateTime.now().add(const Duration(seconds: 2));
-      notId = generateNotificationId(widget.task.id as String, DateTime.now());
+      notId = generateNotificationId(widget.task.docId as String, DateTime.now());
       await _pushNotifications.scheduleNotification(
         title: "🔔 Test Alarm",
         body: "You tapped the test button!",
