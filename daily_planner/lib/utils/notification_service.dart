@@ -451,6 +451,46 @@ class NotificationService {
     }
   }
 
+  // NEW METHOD: Cancel all notifications for a document with multiple scheduled times
+  Future<void> cancelAllNotificationsForDocument({
+    required String docId,
+    required List<DateTime> scheduledTimesUtc,
+  }) async {
+    try {
+      debugPrint('🗑️ Cancelling all notifications for document: $docId with ${scheduledTimesUtc.length} scheduled times');
+      
+      int totalCancelled = 0;
+
+      for (final scheduledTimeUtc in scheduledTimesUtc) {
+        try {
+          final int notificationId = _generateNotificationId(docId, scheduledTimeUtc);
+          
+          // Cancel local notification
+          await localNotifications.cancel(notificationId);
+          
+          // Remove from scheduled local notifications
+          await _removeScheduledLocalNotification(docId, scheduledTimeUtc);
+          
+          // Remove from pending push notifications
+          await _removePendingPushNotification(docId, scheduledTimeUtc);
+          
+          totalCancelled++;
+          
+          debugPrint('✅ Cancelled notification for time: $scheduledTimeUtc');
+        } catch (e) {
+          debugPrint('❌ Error cancelling notification for time $scheduledTimeUtc: $e');
+        }
+      }
+
+      // Cancel all push notifications on server for this document
+      await _cancelAllPushNotificationsForDocument(docId);
+
+      debugPrint('🗑️ Successfully cancelled $totalCancelled/${scheduledTimesUtc.length} notifications for document: $docId');
+    } catch (e) {
+      debugPrint('❌ Error in cancelAllNotificationsForDocument: $e');
+    }
+  }
+
   Future<void> _removeScheduledLocalNotification(String taskId, DateTime scheduledTimeUtc) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -469,6 +509,7 @@ class NotificationService {
 
       if (updated.length != scheduled.length) {
         await prefs.setStringList(_scheduledLocalNotificationsKey, updated);
+        debugPrint('🗑️ Removed local notification record for task: $taskId');
       }
     } catch (e) {
       debugPrint('Error removing scheduled local notification: $e');
@@ -493,6 +534,7 @@ class NotificationService {
 
       if (updated.length != pending.length) {
         await prefs.setStringList(_pendingPushNotificationsKey, updated);
+        debugPrint('🗑️ Removed pending push notification for task: $taskId');
       }
     } catch (e) {
       debugPrint('Error removing pending push notification: $e');
@@ -508,8 +550,26 @@ class NotificationService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'taskId': taskId}),
       ).timeout(const Duration(seconds: 5));
+      
+      debugPrint('📤 Cancelled push notification for task: $taskId');
     } catch (e) {
       debugPrint('Error canceling push notification: $e');
+    }
+  }
+
+  Future<void> _cancelAllPushNotificationsForDocument(String docId) async {
+    try {
+      // Call your server to cancel all push notifications for this document
+      const String cancelAllUrl = 'https://your-push-service.com/cancel-all';
+      await http.post(
+        Uri.parse(cancelAllUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'docId': docId}),
+      ).timeout(const Duration(seconds: 5));
+      
+      debugPrint('📤 Cancelled all push notifications for document: $docId');
+    } catch (e) {
+      debugPrint('Error canceling all push notifications for document: $e');
     }
   }
 
@@ -559,6 +619,34 @@ class NotificationService {
       debugPrint('🆘 Fallback local notification scheduled');
     } catch (e) {
       debugPrint('❌ Fallback scheduling failed: $e');
+    }
+  }
+
+  // Helper method to get all scheduled times for a document (useful for cleanup)
+  Future<List<DateTime>> getScheduledTimesForDocument(String docId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> scheduled = 
+          prefs.getStringList(_scheduledLocalNotificationsKey) ?? [];
+
+      final List<DateTime> scheduledTimes = [];
+
+      for (final String notificationJson in scheduled) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(notificationJson) as Map<String, dynamic>;
+          if (data['taskId'] == docId) {
+            final DateTime scheduledTime = DateTime.parse(data['scheduledTimeUtc'] as String);
+            scheduledTimes.add(scheduledTime);
+          }
+        } catch (e) {
+          debugPrint('Error parsing scheduled time: $e');
+        }
+      }
+
+      return scheduledTimes;
+    } catch (e) {
+      debugPrint('Error getting scheduled times for document: $e');
+      return [];
     }
   }
 }
