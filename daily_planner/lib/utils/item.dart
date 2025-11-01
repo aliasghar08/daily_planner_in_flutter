@@ -167,12 +167,13 @@ class _ItemWidgetState extends State<ItemWidget> {
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
 
-        if (widget.item.date.isAfter(DateTime.now())) {
+        // ✅ FIXED: Check if task has date before scheduling alarm
+        if (widget.item.date != null && widget.item.date!.isAfter(DateTime.now())) {
           await NativeAlarmHelper.scheduleAlarmAtTime(
             id: notificationId,
             title: widget.item.title,
             body: widget.item.detail,
-            dateTime: widget.item.date,
+            dateTime: widget.item.date!,
           );
         }
       }
@@ -181,15 +182,15 @@ class _ItemWidgetState extends State<ItemWidget> {
       await taskRef.update(updateData);
 
       // Update local object
-      if (widget.item is DailyTask) {
+      if (widget.item.taskType == "DailyTask") {
         (widget.item as DailyTask).completionStamps
           ..clear()
           ..addAll(updatedStamps.map((ts) => ts.toDate()));
-      } else if (widget.item is WeeklyTask) {
+      } else if (widget.item.taskType == "WeeklyTask") {
         (widget.item as WeeklyTask).completionStamps
           ..clear()
           ..addAll(updatedStamps.map((ts) => ts.toDate()));
-      } else if (widget.item is MonthlyTask) {
+      } else if (widget.item.taskType == "MonthlyTask") {
         (widget.item as MonthlyTask).completionStamps
           ..clear()
           ..addAll(updatedStamps.map((ts) => ts.toDate()));
@@ -262,9 +263,11 @@ class _ItemWidgetState extends State<ItemWidget> {
           await NativeAlarmHelper.cancelAlarmById(id);
         }
       } else {
-        // Use docId for fallback ID generation
-        final fallbackId = generateNotificationId(task.docId!, task.date);
-        await NativeAlarmHelper.cancelAlarmById(fallbackId);
+        // ✅ FIXED: Only generate fallback ID if task has a date
+        if (task.date != null) {
+          final fallbackId = generateNotificationId(task.docId!, task.date!);
+          await NativeAlarmHelper.cancelAlarmById(fallbackId);
+        }
       }
 
       // Delete from Firestore :cite[1]:cite[3]
@@ -413,13 +416,77 @@ class _ItemWidgetState extends State<ItemWidget> {
     }
   }
 
+  // ✅ NEW: Get task type display info
+  String _getTaskTypeLabel() {
+    final taskType = widget.item.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return 'One-Time Task';
+      case 'DailyTask':
+        return 'Daily Task';
+      case 'WeeklyTask':
+        return 'Weekly Task';
+      case 'MonthlyTask':
+        return 'Monthly Task';
+      default:
+        return 'Task';
+    }
+  }
+
+  IconData _getTaskTypeIcon() {
+    final taskType = widget.item.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return Icons.push_pin;
+      case 'DailyTask':
+        return Icons.loop;
+      case 'WeeklyTask':
+        return Icons.calendar_today;
+      case 'MonthlyTask':
+        return Icons.date_range;
+      default:
+        return Icons.task;
+    }
+  }
+
+  Color _getTaskTypeColor() {
+    final taskType = widget.item.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return Colors.blue;
+      case 'DailyTask':
+        return Colors.green;
+      case 'WeeklyTask':
+        return Colors.orange;
+      case 'MonthlyTask':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final task = widget.item;
-    final isOverdue = task.date.isBefore(DateTime.now()) && !task.isCompleted;
-    final textColor = isOverdue ? Colors.red : null;
+    
+    // ✅ FIXED: Better overdue calculation with null safety
+    final bool isOverdue;
+    final String dateText;
+    final Color textColor;
+    
+    if (task.date != null) {
+      dateText = DateFormat.yMd().add_jm().format(task.date!);
+      isOverdue = task.date!.isBefore(DateTime.now()) && !task.isCompleted;
+      textColor = isOverdue ? Colors.red : Colors.grey;
+    } else {
+      dateText = "No end date";
+      isOverdue = false;
+      textColor = Colors.grey;
+    }
 
     return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: ListTile(
         onTap: () {
           Navigator.push(
@@ -443,10 +510,24 @@ class _ItemWidgetState extends State<ItemWidget> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ✅ FIXED: Always show date text with proper styling
             Text(
-              DateFormat.yMd().add_jm().format(task.date),
-              style: TextStyle(color: textColor),
+              dateText,
+              style: TextStyle(
+                color: textColor,
+                fontStyle: isOverdue ? FontStyle.italic : null,
+                fontWeight: isOverdue ? FontWeight.bold : null,
+              ),
             ),
+            if (isOverdue)
+              Text(
+                "Overdue!",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             if (buildExtraInfo(task) != null) buildExtraInfo(task)!,
           ],
         ),
@@ -497,12 +578,21 @@ class _ItemWidgetState extends State<ItemWidget> {
   }
 
   Widget? buildExtraInfo(Task task) {
-    if (task is DailyTask) {
-      return Text("Repeats every ${task.intervalDays} day(s)");
-    } else if (task is WeeklyTask) {
-      return Text("Repeats weekly");
-    } else if (task is MonthlyTask) {
-      return Text("Repeats monthly");
+    if (task.taskType == 'DailyTask') {
+      return Text(
+        "Repeats daily${task.date == null ? ' (no end date)' : ''}",
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      );
+    } else if (task.taskType == 'WeeklyTask') {
+      return Text(
+        "Repeats weekly${task.date == null ? ' (no end date)' : ''}",
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      );
+    } else if (task.taskType == 'MonthlyTask') {
+      return Text(
+        "Repeats monthly${task.date == null ? ' (no end date)' : ''}",
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      );
     }
     return null;
   }

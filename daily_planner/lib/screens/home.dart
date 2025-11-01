@@ -36,7 +36,7 @@ class _MyHomeState extends State<MyHome> {
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = "";
   bool _serviceStarted = false;
-  bool _authChecking = true; // Added to track auth state
+  bool _authChecking = true; 
 
   // Add Medication Manager
   final MedicationManager _medicationManager = MedicationManager();
@@ -64,6 +64,7 @@ class _MyHomeState extends State<MyHome> {
     });
   }
 
+  // ✅ FIXED: Order by createdAt instead of date
   Future<void> fetchTasksFromFirestore(User user) async {
     if (!mounted) return;
 
@@ -75,13 +76,15 @@ class _MyHomeState extends State<MyHome> {
           .collection('users')
           .doc(user.uid)
           .collection('tasks')
-          .orderBy('date')
+          .orderBy('createdAt', descending: true) // ✅ Order by createdAt (newest first)
           .get(const GetOptions(source: Source.cache));
 
       allTasks =
           cachedSnapshot.docs
               .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
               .toList();
+              
+      debugPrint("✅ Loaded ${allTasks.length} tasks from cache");
     } catch (e) {
       debugPrint("Error loading cached tasks: $e");
     }
@@ -99,13 +102,15 @@ class _MyHomeState extends State<MyHome> {
           .collection('users')
           .doc(user.uid)
           .collection('tasks')
-          .orderBy('date')
+          .orderBy('createdAt', descending: true) // ✅ Order by createdAt (newest first)
           .get(const GetOptions(source: Source.server));
 
       final serverTasks =
           serverSnapshot.docs
               .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
               .toList();
+
+      debugPrint("✅ Loaded ${serverTasks.length} tasks from server");
 
       if (mounted) {
         setState(() {
@@ -116,15 +121,6 @@ class _MyHomeState extends State<MyHome> {
       debugPrint("Server fetch failed (offline?): $e");
     }
   }
-
-  // Future<void> _startForegroundService() async {
-  //   try {
-  //     //  await NativeAlarmHelper.startForegroundService();
-  //     debugPrint("Foreground service started.");
-  //   } catch (e) {
-  //     debugPrint("Error starting foreground service: $e");
-  //   }
-  // }
 
   Future<void> maybeRequestAlarmPermission() async {
     final hasPermission = await NativeAlarmHelper.checkExactAlarmPermission();
@@ -156,19 +152,26 @@ class _MyHomeState extends State<MyHome> {
     }
   }
 
-  List<Task> getFilteredTasks(TaskFilter filter) {
+  // ✅ FIXED: Correct overdue calculation that matches ItemWidget logic
+  bool _isTaskOverdue(Task task) {
+    // If task is completed, it's not overdue
+    if (task.isCompleted) return false;
+    
+    // If no deadline is set, it's never overdue
+    if (task.date == null) return false;
+    
+    // Task is overdue if deadline has passed
     final now = DateTime.now();
+    return task.date!.isBefore(now);
+  }
 
+  // ✅ FIXED: Updated filtering logic to use consistent overdue calculation
+  List<Task> getFilteredTasks(TaskFilter filter) {
     return tasks.where((task) {
-      final taskDate =
-          (task.date is Timestamp)
-              ? (task.date as Timestamp).toDate()
-              : task.date;
-
       final matchesFilter = switch (filter) {
         TaskFilter.completed => task.isCompleted,
-        TaskFilter.incomplete => !task.isCompleted && taskDate.isAfter(now),
-        TaskFilter.overdue => !task.isCompleted && taskDate.isBefore(now),
+        TaskFilter.incomplete => !task.isCompleted && !_isTaskOverdue(task),
+        TaskFilter.overdue =>   !task.isCompleted && _isTaskOverdue(task),
         TaskFilter.all => true,
       };
 
@@ -216,6 +219,23 @@ class _MyHomeState extends State<MyHome> {
 
   Widget buildTaskList(TaskFilter filter) {
     final filtered = getFilteredTasks(filter);
+    
+    // ✅ ADDED: Debug logging to see what's happening
+    debugPrint("Filter: $filter, Total tasks: ${tasks.length}, Filtered: ${filtered.length}");
+    
+    // ✅ ADDED: More detailed debug info for overdue filter
+    if (filter == TaskFilter.overdue) {
+      final overdueTasks = tasks.where(_isTaskOverdue).toList();
+      debugPrint("Overdue tasks breakdown:");
+      for (var task in overdueTasks) {
+        debugPrint("  - ${task.title}: completed=${task.isCompleted}, date=${task.date}, isOverdue=${_isTaskOverdue(task)}");
+      }
+    }
+    
+    if (filtered.isNotEmpty) {
+      debugPrint("First task: ${filtered.first.title}, date: ${filtered.first.date}, type: ${filtered.first.taskType}, createdAt: ${filtered.first.createdAt}");
+    }
+    
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -224,18 +244,27 @@ class _MyHomeState extends State<MyHome> {
       return Column(
         children: [
           buildSearchBar(),
-          // NEW: Task count indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            // child: Text(
-            //   "Showing 0 of ${getTaskCount(TaskFilter.all)} tasks",
-            //   style: TextStyle(
-            //     fontSize: 14,
-            //     color: Colors.grey[600],
-            //   ),
-            // ),
+          const Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.task_alt, size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text(
+                    "No tasks found",
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Try changing filters or add a new task",
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
           ),
-          const Expanded(child: Center(child: Text("No tasks found."))),
         ],
       );
     }
@@ -262,24 +291,26 @@ class _MyHomeState extends State<MyHome> {
         case "MonthlyTask":
           groupedTasks["Monthly Tasks"]!.add(task);
           break;
+        default:
+          debugPrint("Unknown task type: ${task.taskType}"); // ✅ Debug unknown types
       }
     }
 
     return Column(
       children: [
         buildSearchBar(),
-        // NEW: Task count indicator
-        // Container(
-        //   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        //   // child: Text(
-        //   //   "Showing ${filtered.length} of ${getTaskCount(TaskFilter.all)} tasks",
-        //   //   style: TextStyle(
-        //   //     fontSize: 14,
-        //   //     color: Colors.grey[600],
-        //   //     fontWeight: FontWeight.w500,
-        //   //   ),
-        //   // ),
-        // ),
+        // ✅ ADDED: Debug info
+        // if (filtered.isNotEmpty)
+        //   Padding(
+        //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        //     child: Text(
+        //       "Showing ${filtered.length} task${filtered.length == 1 ? '' : 's'} (sorted by newest first)",
+        //       style: TextStyle(
+        //         fontSize: 12,
+        //         color: Colors.grey[600],
+        //       ),
+        //     ),
+        //   ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async => fetchTasksFromFirestore(user!),
@@ -420,14 +451,13 @@ class _MyHomeState extends State<MyHome> {
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 4,
-      initialIndex: 2,
+      initialIndex: 2, 
       child: Scaffold(
         appBar: AppBar(
           title: const Text("My Tasks"),
           bottom: TabBar(
             isScrollable: true,
             tabs: [
-              // NEW: Tabs with count and color
               Tab(
                 child: Row(
                   children: [
@@ -442,7 +472,7 @@ class _MyHomeState extends State<MyHome> {
                       // child: Text(
                       //   '${getTaskCount(TaskFilter.all)}',
                       //   style: const TextStyle(
-                      //     fontSize: 12,
+                      //     fontSize: 10,
                       //     color: Colors.white,
                       //     fontWeight: FontWeight.bold,
                       //   ),
@@ -465,7 +495,7 @@ class _MyHomeState extends State<MyHome> {
                       // child: Text(
                       //   '${getTaskCount(TaskFilter.completed)}',
                       //   style: const TextStyle(
-                      //     fontSize: 12,
+                      //     fontSize: 10,
                       //     color: Colors.white,
                       //     fontWeight: FontWeight.bold,
                       //   ),
@@ -488,7 +518,7 @@ class _MyHomeState extends State<MyHome> {
                       // child: Text(
                       //   '${getTaskCount(TaskFilter.incomplete)}',
                       //   style: const TextStyle(
-                      //     fontSize: 12,
+                      //     fontSize: 10,
                       //     color: Colors.white,
                       //     fontWeight: FontWeight.bold,
                       //   ),
@@ -511,7 +541,7 @@ class _MyHomeState extends State<MyHome> {
                       // child: Text(
                       //   '${getTaskCount(TaskFilter.overdue)}',
                       //   style: const TextStyle(
-                      //     fontSize: 12,
+                      //     fontSize: 10,
                       //     color: Colors.white,
                       //     fontWeight: FontWeight.bold,
                       //   ),
@@ -524,52 +554,50 @@ class _MyHomeState extends State<MyHome> {
           ),
         ),
         drawer: MyDrawer(user: user),
-        body:
-            _authChecking
-                ? const Scaffold(
-                  body: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 16),
-                        Text("Checking authentication..."),
-                      ],
-                    ),
-                  ),
-                )
-                : user == null
-                ? Center(
+        body: _authChecking
+            ? const Scaffold(
+                body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text("🔒 Please login to view your tasks"),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushReplacementNamed(context, '/login');
-                        },
-                        child: const Text("Login"),
-                      ),
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text("Checking authentication..."),
                     ],
                   ),
-                )
+                ),
+              )
+            : user == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text("🔒 Please login to view your tasks"),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushReplacementNamed(context, '/login');
+                          },
+                          child: const Text("Login"),
+                        ),
+                      ],
+                    ),
+                  )
                 : TabBarView(
-                  children: [
-                    buildTaskList(TaskFilter.all),
-                    buildTaskList(TaskFilter.completed),
-                    buildTaskList(TaskFilter.incomplete),
-                    buildTaskList(TaskFilter.overdue),
-                  ],
-                ),
-        floatingActionButton:
-            user == null
-                ? null
-                : FloatingActionButton(
-                  onPressed: _showAddOptions,
-                  tooltip: 'Add Task or Medication',
-                  child: const Icon(Icons.add),
-                ),
+                    children: [
+                      buildTaskList(TaskFilter.all),
+                      buildTaskList(TaskFilter.completed),
+                      buildTaskList(TaskFilter.incomplete),
+                      buildTaskList(TaskFilter.overdue),
+                    ],
+                  ),
+        floatingActionButton: user == null
+            ? null
+            : FloatingActionButton(
+                onPressed: _showAddOptions,
+                tooltip: 'Add Task or Medication',
+                child: const Icon(Icons.add),
+              ),
       ),
     );
   }

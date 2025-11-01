@@ -8,7 +8,8 @@ class CatlalogModel {
       detail: "I need to have my dinner done on time",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(), notificationTimes: [], fcmToken: '',
+      completedAt: DateTime.now(),
+      notificationTimes: [],
     ),
     Task(
       docId: '2',
@@ -16,7 +17,8 @@ class CatlalogModel {
       detail: "I need to get my work done before the deadline at any cost",
       date: DateTime.now(),
       isCompleted: true,
-      completedAt: DateTime.now(), notificationTimes: [], fcmToken: '',
+      completedAt: DateTime.now(),
+      notificationTimes: [],
     ),
   ];
 }
@@ -50,15 +52,14 @@ class Task {
   String? docId;
   String title;
   String detail;
-  DateTime date;
+  DateTime? date;
   bool isCompleted;
   DateTime createdAt;
   DateTime? completedAt;
   List<TaskEdit> editHistory;
   String taskType;
   List<DateTime> notificationTimes;
-
-
+  List<DateTime> completionStamps;
 
   Task({
     this.docId,
@@ -66,63 +67,19 @@ class Task {
     required this.detail,
     required this.date,
     required this.isCompleted,
-    
     DateTime? createdAt,
     this.completedAt,
     List<TaskEdit>? editHistory,
     this.taskType = 'oneTime',
-    List<DateTime>? notificationTimes, String? fcmToken,
+    List<DateTime>? notificationTimes,
+    List<DateTime>? completionStamps,
   }) : createdAt = createdAt ?? DateTime.now(),
-       editHistory = editHistory ?? [], 
-       notificationTimes = notificationTimes ?? []; 
-
-    
-
+       editHistory = editHistory ?? [],
+       notificationTimes = notificationTimes ?? [],
+       completionStamps = completionStamps ?? [];
 
   factory Task.fromMap(Map<String, dynamic> map, {String? docId}) {
-    List<TaskEdit> history = [];
-    if (map['editHistory'] is List) {
-      history =
-          (map['editHistory'] as List)
-              .map((e) => TaskEdit.fromMap(Map<String, dynamic>.from(e)))
-              .toList();
-    }
-
-    DateTime? parseTimeNullable(dynamic val) {
-      if (val == null) return null;
-      if (val is Timestamp) return val.toDate();
-      if (val is String) return DateTime.tryParse(val);
-      return null;
-    }
-
-    DateTime parseTime(dynamic val) {
-      return parseTimeNullable(val) ?? DateTime.now();
-    }
-
-    List<DateTime> parseNotificationTimes(dynamic val) {
-      if (val == null || val is! List) return [];
-      return val
-          .map((e) {
-            if (e is Timestamp) return e.toDate();
-            if (e is String) return DateTime.tryParse(e);
-            return null;
-          })
-          .whereType<DateTime>()
-          .toList();
-    }
-
-    return Task(
-      docId: docId,
-      title: map['title'] ?? '',
-      detail: map['detail'] ?? '',
-      date: parseTime(map['date']),
-      isCompleted: map['isCompleted'] ?? false,
-      createdAt: parseTime(map['createdAt']),
-      completedAt: parseTimeNullable(map['completedAt']),
-      editHistory: history,
-      taskType: map['taskType'] ?? 'oneTime', // ✅ Fallback for old records
-      notificationTimes: parseNotificationTimes(map['notificationTimes']), fcmToken: null
-    );
+    return parseTaskFromMap(map, docId: docId);
   }
 
   Map<String, dynamic> toMap() {
@@ -130,31 +87,26 @@ class Task {
       'id': docId,
       'title': title,
       'detail': detail,
-      'date': Timestamp.fromDate(date),
       'isCompleted': isCompleted,
       'createdAt': Timestamp.fromDate(createdAt),
       'editHistory': editHistory.map((e) => e.toMap()).toList(),
       'taskType': taskType,
-      'notificationTimes':
-          notificationTimes
-              .map((dt) => Timestamp.fromDate(dt))
-              .toList(), // ✅ Add this line
+      'notificationTimes': notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
+      'completionStamps': completionStamps.map((dt) => Timestamp.fromDate(dt)).toList(),
     };
+
+    if (date != null) {
+      data['date'] = Timestamp.fromDate(date!);
+    }
 
     if (completedAt != null) {
       data['completedAt'] = Timestamp.fromDate(completedAt!);
     }
 
-    
-
     return data;
   }
 
   String get type => 'Task';
-
-  Iterable? get completionStamps => null;
-  
-  get fcmToken => null;
 
   Task copyWith({
     String? docId,
@@ -167,7 +119,7 @@ class Task {
     List<TaskEdit>? editHistory,
     String? taskType,
     List<DateTime>? notificationTimes,
-    String? fcmToken
+    List<DateTime>? completionStamps,
   }) {
     return Task(
       docId: docId ?? this.docId,
@@ -180,31 +132,37 @@ class Task {
       editHistory: editHistory ?? this.editHistory,
       taskType: taskType ?? this.taskType,
       notificationTimes: notificationTimes ?? this.notificationTimes,
-      fcmToken: this.fcmToken,
+      completionStamps: completionStamps ?? this.completionStamps,
     );
   }
 }
 
 class DailyTask extends Task {
   final bool morning;
-  @override
-  final List<DateTime> completionStamps;
 
   DailyTask({
-    required super.docId,
-    required super.title,
-    required super.detail,
-    required super.date,
-    required super.isCompleted,
-    required super.createdAt,
-    super.completedAt,
+    required String? docId,
+    required String title,
+    required String detail,
+    DateTime? date,
+    required bool isCompleted,
+    required DateTime createdAt,
+    DateTime? completedAt,
     this.morning = true,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
-    String? fcmToken
-    
-  }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
+  }) : super(
+         docId: docId,
+         title: title,
+         detail: detail,
+         date: date, // ✅ FIXED: This is the key fix - pass date to super
+         isCompleted: isCompleted,
+         createdAt: createdAt,
+         completedAt: completedAt,
+         taskType: 'DailyTask',
+         notificationTimes: notificationTimes,
+         completionStamps: completionStamps,
+       );
 
   @override
   Map<String, dynamic> toMap() => {
@@ -212,10 +170,6 @@ class DailyTask extends Task {
     'type': 'DailyTask',
     'taskType': 'DailyTask',
     'morning': morning,
-    'completionStamps':
-        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
-    'notificationTimes':
-        notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
   };
 
   factory DailyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -227,7 +181,7 @@ class DailyTask extends Task {
 
     List<DateTime> parseStamps(dynamic list) {
       if (list == null) return [];
-      return List<DateTime>.from((list as List).map(parseTime));
+      return (list as List).map((e) => parseTime(e)).toList();
     }
 
     List<DateTime> parseNotificationTimes(dynamic list) {
@@ -242,23 +196,26 @@ class DailyTask extends Task {
           .toList();
     }
 
+    DateTime? parseTimeNullable(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
     return DailyTask(
       docId: docId,
-      title: map['title'],
-      detail: map['detail'],
-      date: parseTime(map['date']),
-      isCompleted: map['isCompleted'],
+      title: map['title'] ?? '',
+      detail: map['detail'] ?? '',
+      date: parseTimeNullable(map['date']), // ✅ This should work now
+      isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
-      completedAt:
-          map['completedAt'] != null ? parseTime(map['completedAt']) : null,
+      completedAt: parseTimeNullable(map['completedAt']),
       morning: map['morning'] ?? true,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
-      fcmToken: map['fcmToken'] as String?
     );
   }
-
-  Null get intervalDays => null;
 
   bool shouldResetToday() {
     if (completedAt == null) return true;
@@ -273,32 +230,34 @@ class DailyTask extends Task {
 }
 
 class WeeklyTask extends Task {
-  @override
-  final List<DateTime> completionStamps;
-
   WeeklyTask({
-    required super.docId,
-    required super.title,
-    required super.detail,
-    required super.date,
-    required super.isCompleted,
-    required super.createdAt,
-    super.completedAt,
+    required String? docId,
+    required String title,
+    required String detail,
+    DateTime? date,
+    required bool isCompleted,
+    required DateTime createdAt,
+    DateTime? completedAt,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
-    String? fcmToken,
-  }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
+  }) : super(
+         docId: docId,
+         title: title,
+         detail: detail,
+         date: date, // ✅ FIXED: Pass date to super
+         isCompleted: isCompleted,
+         createdAt: createdAt,
+         completedAt: completedAt,
+         taskType: 'WeeklyTask',
+         notificationTimes: notificationTimes,
+         completionStamps: completionStamps,
+       );
 
   @override
   Map<String, dynamic> toMap() => {
     ...super.toMap(),
     'type': 'WeeklyTask',
     'taskType': 'WeeklyTask',
-    'completionStamps':
-        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
-    'notificationTimes':
-        notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
   };
 
   factory WeeklyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -310,7 +269,7 @@ class WeeklyTask extends Task {
 
     List<DateTime> parseStamps(dynamic list) {
       if (list == null) return [];
-      return List<DateTime>.from((list as List).map(parseTime));
+      return (list as List).map((e) => parseTime(e)).toList();
     }
 
     List<DateTime> parseNotificationTimes(dynamic list) {
@@ -325,21 +284,25 @@ class WeeklyTask extends Task {
           .toList();
     }
 
+    DateTime? parseTimeNullable(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
     return WeeklyTask(
       docId: docId,
-      title: map['title'],
-      detail: map['detail'],
-      date: parseTime(map['date']),
-      isCompleted: map['isCompleted'],
+      title: map['title'] ?? '',
+      detail: map['detail'] ?? '',
+      date: parseTimeNullable(map['date']), // ✅ This should work now
+      isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
-      completedAt:
-          map['completedAt'] != null ? parseTime(map['completedAt']) : null,
+      completedAt: parseTimeNullable(map['completedAt']),
       completionStamps: parseStamps(map['completionStamps']),
-      notificationTimes: parseNotificationTimes(map['notificationsTimes']),
-      fcmToken: map['fcmToken'] as String?
+      notificationTimes: parseNotificationTimes(map['notificationTimes']),
     );
   }
-
 
   bool shouldResetThisWeek() {
     if (completedAt == null) return true;
@@ -352,23 +315,30 @@ class WeeklyTask extends Task {
 
 class MonthlyTask extends Task {
   final int dayOfMonth;
-  @override
-  final List<DateTime> completionStamps;
 
   MonthlyTask({
-    required super.docId,
-    required super.title,
-    required super.detail,
-    required super.date,
-    required super.isCompleted,
-    required super.createdAt,
-    super.completedAt,
+    required String? docId,
+    required String title,
+    required String detail,
+    DateTime? date,
+    required bool isCompleted,
+    required DateTime createdAt,
+    DateTime? completedAt,
     required this.dayOfMonth,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
-    String? fcmToken,
-  }) : completionStamps = completionStamps ?? [],
-       super(notificationTimes: notificationTimes, fcmToken: fcmToken);
+  }) : super(
+         docId: docId,
+         title: title,
+         detail: detail,
+         date: date, // ✅ FIXED: Pass date to super
+         isCompleted: isCompleted,
+         createdAt: createdAt,
+         completedAt: completedAt,
+         taskType: 'MonthlyTask',
+         notificationTimes: notificationTimes,
+         completionStamps: completionStamps,
+       );
 
   @override
   Map<String, dynamic> toMap() => {
@@ -376,10 +346,6 @@ class MonthlyTask extends Task {
     'type': 'MonthlyTask',
     'taskType': 'MonthlyTask',
     'dayOfMonth': dayOfMonth,
-    'completionStamps':
-        completionStamps.map((d) => Timestamp.fromDate(d)).toList(),
-        'notificationTimes': notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
-
   };
 
   factory MonthlyTask.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -391,32 +357,39 @@ class MonthlyTask extends Task {
 
     List<DateTime> parseStamps(dynamic list) {
       if (list == null) return [];
-      return List<DateTime>.from((list as List).map(parseTime));
+      return (list as List).map((e) => parseTime(e)).toList();
     }
 
     List<DateTime> parseNotificationTimes(dynamic list) {
-  if (list == null || list is! List) return [];
-  return list.map((e) {
-    if (e is Timestamp) return e.toDate();
-    if (e is String) return DateTime.tryParse(e);
-    return null;
-  }).whereType<DateTime>().toList();
-}
+      if (list == null || list is! List) return [];
+      return list
+          .map((e) {
+            if (e is Timestamp) return e.toDate();
+            if (e is String) return DateTime.tryParse(e);
+            return null;
+          })
+          .whereType<DateTime>()
+          .toList();
+    }
 
+    DateTime? parseTimeNullable(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
 
     return MonthlyTask(
       docId: docId,
-      title: map['title'],
-      detail: map['detail'],
-      date: parseTime(map['date']),
-      isCompleted: map['isCompleted'],
+      title: map['title'] ?? '',
+      detail: map['detail'] ?? '',
+      date: parseTimeNullable(map['date']), // ✅ This should work now
+      isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
-      completedAt:
-          map['completedAt'] != null ? parseTime(map['completedAt']) : null,
-      dayOfMonth: map['dayOfMonth'],
+      completedAt: parseTimeNullable(map['completedAt']),
+      dayOfMonth: map['dayOfMonth'] ?? 1,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
-      fcmToken: map['fcmToken'] as String
     );
   }
 
@@ -434,7 +407,9 @@ class MonthlyTask extends Task {
 
 /// Helper to determine correct subclass when decoding
 Task parseTaskFromMap(Map<String, dynamic> map, {String? docId}) {
-  switch (map['type']) {
+  final String type = map['type'] ?? map['taskType'] ?? 'oneTime';
+  
+  switch (type) {
     case 'DailyTask':
       return DailyTask.fromMap(map, docId: docId);
     case 'WeeklyTask':
@@ -442,19 +417,55 @@ Task parseTaskFromMap(Map<String, dynamic> map, {String? docId}) {
     case 'MonthlyTask':
       return MonthlyTask.fromMap(map, docId: docId);
     default:
-      return Task.fromMap(map, docId: docId);
-  }
-}
+      DateTime parseTime(dynamic val) {
+        if (val is Timestamp) return val.toDate();
+        if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+        return DateTime.now();
+      }
 
-DateTime getNextOccurrence(Task task) {
-  switch (task.taskType) {
-    case 'daily':
-      return task.date.add(const Duration(days: 1));
-    case 'weekly':
-      return task.date.add(const Duration(days: 7));
-    case 'monthly':
-      return DateTime(task.date.year, task.date.month + 1, task.date.day);
-    default:
-      return task.date;
+      List<DateTime> parseStamps(dynamic list) {
+        if (list == null) return [];
+        return (list as List).map((e) => parseTime(e)).toList();
+      }
+
+      List<DateTime> parseNotificationTimes(dynamic list) {
+        if (list == null || list is! List) return [];
+        return list
+            .map((e) {
+              if (e is Timestamp) return e.toDate();
+              if (e is String) return DateTime.tryParse(e);
+              return null;
+            })
+            .whereType<DateTime>()
+            .toList();
+      }
+
+      DateTime? parseTimeNullable(dynamic val) {
+        if (val == null) return null;
+        if (val is Timestamp) return val.toDate();
+        if (val is String) return DateTime.tryParse(val);
+        return null;
+      }
+
+      List<TaskEdit> history = [];
+      if (map['editHistory'] is List) {
+        history = (map['editHistory'] as List)
+            .map((e) => TaskEdit.fromMap(Map<String, dynamic>.from(e)))
+            .toList();
+      }
+
+      return Task(
+        docId: docId,
+        title: map['title'] ?? '',
+        detail: map['detail'] ?? '',
+        date: parseTimeNullable(map['date']), // ✅ This should work now
+        isCompleted: map['isCompleted'] ?? false,
+        createdAt: parseTime(map['createdAt']),
+        completedAt: parseTimeNullable(map['completedAt']),
+        editHistory: history,
+        taskType: type,
+        notificationTimes: parseNotificationTimes(map['notificationTimes']),
+        completionStamps: parseStamps(map['completionStamps']),
+      );
   }
 }

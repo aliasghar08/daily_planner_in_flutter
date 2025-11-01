@@ -61,10 +61,11 @@ class AddTaskPage extends StatefulWidget {
 class _AddTaskPageState extends State<AddTaskPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _detailController = TextEditingController();
-  DateTime _selectedDate = DateTime.now();
+  DateTime? _selectedDate; // ✅ Made nullable
   TaskType _selectedType = TaskType.oneTime;
   bool _isCompleted = false;
   bool _isSaving = false;
+  bool _hasEndDate = true; // ✅ New: Toggle for end date
   List<DateTime> _notificationTimes = [];
 
   @override
@@ -75,9 +76,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   Future<void> _pickDateTime() async {
+    final initialDate = _selectedDate ?? DateTime.now();
+    
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -86,7 +89,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     final pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_selectedDate),
+      initialTime: TimeOfDay.fromDateTime(initialDate),
     );
 
     if (pickedTime == null) return;
@@ -102,15 +105,26 @@ class _AddTaskPageState extends State<AddTaskPage> {
     });
   }
 
-  String formatDate(DateTime date) => DateFormat.yMMMd().format(date);
-  String formatTime(DateTime date) => DateFormat.jm().format(date);
+  String formatDate(DateTime? date) => date != null ? DateFormat.yMMMd().format(date) : "Not set";
+  String formatTime(DateTime? date) => date != null ? DateFormat.jm().format(date) : "Not set";
+
+  // ✅ Check if task type supports no end date
+  bool get _supportsNoEndDate {
+    return _selectedType == TaskType.daily || 
+           _selectedType == TaskType.weekly || 
+           _selectedType == TaskType.monthly;
+  }
+
+  // ✅ Check if task type requires end date
+  bool get _requiresEndDate {
+    return _selectedType == TaskType.oneTime;
+  }
 
   Future<String> getFcmToken(String uid) async {
     String? currentToken = await FirebaseMessaging.instance.getToken();
 
     if (currentToken == null) {
       print("❌ Unable to get FCM token");
-
       return '';
     } else {
       return currentToken;
@@ -133,7 +147,19 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    if (_selectedDate.isBefore(now)) {
+    // ✅ Validation for one-time tasks (require end date)
+    if (_requiresEndDate && _selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ One-time tasks require an end date."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // ✅ Validation for date if set
+    if (_selectedDate != null && _selectedDate!.isBefore(now)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("⚠️ Please choose a future date and time."),
@@ -172,19 +198,22 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       Task newTask;
 
+      // ✅ Use _hasEndDate for recurring tasks to determine if date should be null
+      final DateTime? taskDate = _requiresEndDate ? _selectedDate : (_hasEndDate ? _selectedDate : null);
+
       switch (_selectedType) {
         case TaskType.oneTime:
           newTask = Task(
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: _selectedDate,
+            date: taskDate, // ✅ Can be null for recurring tasks
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             taskType: _selectedType.name,
             notificationTimes: _notificationTimes,
-            fcmToken: await getFcmToken(uid),
+            //fcmToken: await getFcmToken(uid),
           );
           break;
 
@@ -193,13 +222,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: _selectedDate,
+            date: taskDate, // ✅ Can be null for recurring tasks
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-            fcmToken: await getFcmToken(uid),
+           // fcmToken: await getFcmToken(uid),
           );
           break;
 
@@ -208,30 +237,30 @@ class _AddTaskPageState extends State<AddTaskPage> {
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: _selectedDate,
+            date: taskDate, // ✅ Can be null for recurring tasks
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-            fcmToken: await getFcmToken(uid),
+           // fcmToken: await getFcmToken(uid),
           );
           break;
 
         case TaskType.monthly:
-          final dayOfMonth = _selectedDate.day;
+          final dayOfMonth = taskDate?.day ?? now.day; // ✅ Default to current day if no date
           newTask = MonthlyTask(
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: _selectedDate,
+            date: taskDate, // ✅ Can be null for recurring tasks
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             dayOfMonth: dayOfMonth,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-            fcmToken: await getFcmToken(uid),
+          //  fcmToken: await getFcmToken(uid),
           );
           break;
       }
@@ -254,13 +283,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
           await notificationService.scheduleTaskNotification(
             taskId: newTaskRef.id, // Use Firestore document ID as taskId
             title: 'Task Reminder: $title',
-            body: '$title is due at ${DateFormat.jm().format(_selectedDate)}',
+            body: taskDate != null 
+                ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                : '$title reminder', // ✅ Different body for no end date
             scheduledTimeUtc: notificationTimeUtc, // Pass UTC time to service
             payload: {
               'taskId': newTaskRef.id,
               'type': 'task_reminder',
               'taskTitle': title,
-              'dueDate': _selectedDate.toIso8601String(),
+              'dueDate': taskDate?.toIso8601String(),
             },
           );
           scheduledCount++;
@@ -341,12 +372,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   Future<void> _pickNotificationTime() async {
     final now = DateTime.now();
+    final taskDate = _selectedDate;
 
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDate: now,
       firstDate: now,
-      lastDate: _selectedDate,
+      lastDate: taskDate ?? DateTime(2100), // ✅ Handle null task date
     );
     if (pickedDate == null) return;
 
@@ -374,7 +406,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    if (newNotificationTime.isAfter(_selectedDate)) {
+    // ✅ Only check against task date if it exists
+    if (taskDate != null && newNotificationTime.isAfter(taskDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("❌ Notification time must be before task time."),
@@ -432,13 +465,19 @@ class _AddTaskPageState extends State<AddTaskPage> {
   String _getTaskTypeDescription() {
     switch (_selectedType) {
       case TaskType.oneTime:
-        return "This task will occur only once";
+        return "This task will occur only once and requires an end date";
       case TaskType.daily:
-        return "This task will repeat every day";
+        return _hasEndDate 
+            ? "This task will repeat every day until the end date"
+            : "This task will repeat every day indefinitely";
       case TaskType.weekly:
-        return "This task will repeat every week";
+        return _hasEndDate 
+            ? "This task will repeat every week until the end date"
+            : "This task will repeat every week indefinitely";
       case TaskType.monthly:
-        return "This task will repeat every month";
+        return _hasEndDate 
+            ? "This task will repeat every month until the end date"
+            : "This task will repeat every month indefinitely";
     }
   }
 
@@ -513,6 +552,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           if (type != null) {
                             setState(() {
                               _selectedType = type;
+                              // ✅ Reset end date toggle for recurring tasks
+                              if (_supportsNoEndDate) {
+                                _hasEndDate = true; // Default to having end date
+                              }
+                              // ✅ Clear date if switching to recurring without end date
+                              if (!_hasEndDate && _supportsNoEndDate) {
+                                _selectedDate = null;
+                              }
                             });
                           }
                         },
@@ -525,6 +572,77 @@ class _AddTaskPageState extends State<AddTaskPage> {
               ),
 
               const SizedBox(height: 20),
+
+              // ✅ NEW: End Date Toggle for recurring tasks
+              if (_supportsNoEndDate) ...[
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "End Date",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Icon(
+                              _hasEndDate ? Icons.event_available : Icons.event_busy,
+                              color: _hasEndDate ? Colors.green : Colors.grey,
+                              size: 28,
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                "Set an end date",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            Switch(
+                              value: _hasEndDate,
+                              onChanged: (val) {
+                                setState(() {
+                                  _hasEndDate = val;
+                                  if (!val) {
+                                    // When disabling end date, clear the date
+                                    _selectedDate = null;
+                                  } else {
+                                    // When enabling end date, set to current date if null
+                                    _selectedDate ??= DateTime.now();
+                                  }
+                                });
+                              },
+                              activeColor: Colors.green,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _hasEndDate 
+                              ? "This task will end on the selected date"
+                              : "This task will continue indefinitely",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
 
               // Task Details
               Card(
@@ -572,58 +690,61 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
               const SizedBox(height: 20),
 
-              // Date & Time Selection
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Date & Time",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildInfoChip(
-                              Icons.calendar_today,
-                              formattedDate,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildInfoChip(
-                              Icons.access_time,
-                              formattedTime,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _pickDateTime,
-                          icon: const Icon(Icons.edit_calendar),
-                          label: const Text("Change Date & Time"),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+              // Date & Time Selection (only show if required or hasEndDate is true)
+              if (_requiresEndDate || _hasEndDate) ...[
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _requiresEndDate ? "Date & Time" : "End Date & Time",
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildInfoChip(
+                                Icons.calendar_today,
+                                formattedDate,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildInfoChip(
+                                Icons.access_time,
+                                formattedTime,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _pickDateTime,
+                            icon: const Icon(Icons.edit_calendar),
+                            label: Text(_requiresEndDate 
+                                ? "Change Date & Time" 
+                                : "Set End Date & Time"),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
+              ],
 
               // Notifications Section
               Card(

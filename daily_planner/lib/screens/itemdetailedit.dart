@@ -18,12 +18,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
   late TextEditingController _detailController;
   late TextEditingController _editNoteController;
 
-  final ValueNotifier<DateTime> _selectedDateNotifier = ValueNotifier(
-    DateTime.now(),
-  );
+  final ValueNotifier<DateTime?> _selectedDateNotifier = ValueNotifier<DateTime?>(null); // ✅ Made nullable
   final ValueNotifier<bool> _isCompletedNotifier = ValueNotifier(false);
-  final ValueNotifier<List<DateTime>> _notificationTimesNotifier =
-      ValueNotifier([]);
+  final ValueNotifier<List<DateTime>> _notificationTimesNotifier = ValueNotifier([]);
+  final ValueNotifier<bool> _hasEndDateNotifier = ValueNotifier(true); // ✅ New: Toggle for end date
 
   bool _isSaving = false;
   late List<DateTime> _oldNotificationTimes;
@@ -35,9 +33,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _detailController = TextEditingController(text: widget.task.detail);
     _editNoteController = TextEditingController();
 
-    _selectedDateNotifier.value = widget.task.date;
+    _selectedDateNotifier.value = widget.task.date; // ✅ Can be null now
     _isCompletedNotifier.value = widget.task.isCompleted;
     _oldNotificationTimes = widget.task.notificationTimes ?? [];
+    
+    // ✅ Initialize hasEndDate based on whether task has a date
+    _hasEndDateNotifier.value = widget.task.date != null;
 
     loadNotificationTimes(widget.task).then((times) {
       _notificationTimesNotifier.value = times;
@@ -52,6 +53,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _selectedDateNotifier.dispose();
     _isCompletedNotifier.dispose();
     _notificationTimesNotifier.dispose();
+    _hasEndDateNotifier.dispose(); // ✅ Dispose the new notifier
     super.dispose();
   }
 
@@ -86,9 +88,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
   }
 
   Future<void> _pickDateTime() async {
+    final initialDate = _selectedDateNotifier.value ?? DateTime.now();
+    
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: _selectedDateNotifier.value,
+      initialDate: initialDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -96,7 +100,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     final pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_selectedDateNotifier.value),
+      initialTime: TimeOfDay.fromDateTime(initialDate),
     );
     if (pickedTime == null) return;
 
@@ -111,12 +115,13 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
   Future<void> _pickNotificationTime() async {
     final now = DateTime.now();
+    final taskDate = _selectedDateNotifier.value;
 
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: now,
       firstDate: now,
-      lastDate: _selectedDateNotifier.value,
+      lastDate: taskDate ?? DateTime(2100), // ✅ Handle null task date
     );
     if (pickedDate == null) return;
 
@@ -138,13 +143,14 @@ class _EditTaskPageState extends State<EditTaskPage> {
       _showSnackBar("❌ Notification must be in the future");
       return;
     }
-    if (newTime.isAfter(_selectedDateNotifier.value)) {
+    
+    // ✅ Only check against task date if it exists
+    if (taskDate != null && newTime.isAfter(taskDate)) {
       _showSnackBar("❌ Notification must be before task time");
       return;
     }
-    if (_notificationTimesNotifier.value.any(
-      (t) => t.isAtSameMomentAs(newTime),
-    )) {
+    
+    if (_notificationTimesNotifier.value.any((t) => t.isAtSameMomentAs(newTime))) {
       _showSnackBar("❌ Notification already added");
       return;
     }
@@ -171,6 +177,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
   bool _isSameMonth(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month;
 
+  // ✅ Check if task type supports no end date
+  bool get _supportsNoEndDate {
+    final taskType = widget.task.taskType;
+    return taskType == 'DailyTask' || taskType == 'WeeklyTask' || taskType == 'MonthlyTask';
+  }
+
   Future<void> _saveChanges() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -185,11 +197,12 @@ class _EditTaskPageState extends State<EditTaskPage> {
       if (newTitle.isEmpty) throw Exception("Task title cannot be empty");
 
       final isCompleted = _isCompletedNotifier.value;
-      final selectedDate = _selectedDateNotifier.value;
+      final hasEndDate = _hasEndDateNotifier.value;
+      final selectedDate = hasEndDate ? _selectedDateNotifier.value : null; // ✅ Can be null
       List<DateTime> finalTimes = [..._notificationTimesNotifier.value];
 
-      // Add fallback notification if none
-      if (!isCompleted && finalTimes.isEmpty) {
+      // Add fallback notification if none and task has end date
+      if (!isCompleted && finalTimes.isEmpty && selectedDate != null) {
         final fallback = selectedDate.subtract(const Duration(minutes: 15));
         if (fallback.isAfter(now)) finalTimes.add(fallback);
       }
@@ -217,10 +230,13 @@ class _EditTaskPageState extends State<EditTaskPage> {
           await PushNotifications().scheduleNotification(
             id: generateNotificationId(widget.task.docId!, time),
             title: 'Reminder: $newTitle',
-            body: '$newTitle is due at ${DateFormat.jm().format(selectedDate)}',
+            body: selectedDate != null 
+                ? '$newTitle is due at ${DateFormat.jm().format(selectedDate)}'
+                : '$newTitle reminder', // ✅ Different body for no end date
             scheduledTime: time,
-            payload:
-                "This notification is due at ${DateFormat.jm().format(selectedDate)}",
+            payload: selectedDate != null
+                ? "This notification is due at ${DateFormat.jm().format(selectedDate)}"
+                : "This is a reminder for your recurring task",
           );
         }
       }
@@ -229,11 +245,17 @@ class _EditTaskPageState extends State<EditTaskPage> {
       final updateData = <String, dynamic>{
         'title': newTitle,
         'detail': _detailController.text.trim(),
-        'date': Timestamp.fromDate(selectedDate.toUtc()),
         'isCompleted': isCompleted,
         'notificationTimes':
             finalTimes.map((dt) => Timestamp.fromDate(dt.toUtc())).toList(),
       };
+
+      // ✅ Only add date if it exists
+      if (selectedDate != null) {
+        updateData['date'] = Timestamp.fromDate(selectedDate.toUtc());
+      } else {
+        updateData['date'] = null; // ✅ Explicitly set to null for no end date
+      }
 
       // Add edit history if there's a note
       final editNote = _editNoteController.text.trim();
@@ -266,7 +288,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
         updateData['completionStamps'] = isCompleted ? [nowStamp] : [];
       } else {
         final stampsInPeriod = currentStamps.where((ts) {
-          final dt = ts.toDate().toLocal();
+          final dt = ts.toLocal();
           if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
           if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);
           if (widget.task.taskType == 'MonthlyTask') return _isSameMonth(dt, now);
@@ -469,60 +491,151 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
               const SizedBox(height: 20),
 
-              // Date & Time Selection
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Date & Time",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ValueListenableBuilder<DateTime>(
-                        valueListenable: _selectedDateNotifier,
-                        builder: (context, date, _) {
-                          return Row(
-                            children: [
-                              Expanded(
-                                child: _buildInfoChip(
-                                  Icons.calendar_today,
-                                  DateFormat('EEE, MMM d, yyyy').format(date),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _buildInfoChip(
-                                  Icons.access_time,
-                                  DateFormat('h:mm a').format(date),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _pickDateTime,
-                          icon: const Icon(Icons.edit_calendar),
-                          label: const Text("Change Date & Time"),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+              // ✅ NEW: End Date Toggle for recurring tasks
+              if (_supportsNoEndDate) ...[
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "End Date",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            ValueListenableBuilder<bool>(
+                              valueListenable: _hasEndDateNotifier,
+                              builder: (_, hasEndDate, __) => Icon(
+                                hasEndDate ? Icons.event_available : Icons.event_busy,
+                                color: hasEndDate ? Colors.green : Colors.grey,
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                "Set an end date",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: _hasEndDateNotifier,
+                              builder: (_, value, __) => Switch(
+                                value: value,
+                                onChanged: (val) {
+                                  _hasEndDateNotifier.value = val;
+                                  if (!val) {
+                                    // When disabling end date, clear the date
+                                    _selectedDateNotifier.value = null;
+                                  } else {
+                                    // When enabling end date, set to current date if null
+                                    _selectedDateNotifier.value ??= DateTime.now();
+                                  }
+                                },
+                                activeColor: Colors.green,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _hasEndDateNotifier,
+                          builder: (_, hasEndDate, __) {
+                            return Text(
+                              hasEndDate 
+                                  ? "This task will end on the selected date"
+                                  : "This task will continue indefinitely",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
+                const SizedBox(height: 20),
+              ],
+
+              // Date & Time Selection (only show if hasEndDate is true)
+              ValueListenableBuilder<bool>(
+                valueListenable: _hasEndDateNotifier,
+                builder: (context, hasEndDate, _) {
+                  if (!hasEndDate) return const SizedBox.shrink();
+                  
+                  return Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "End Date & Time",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ValueListenableBuilder<DateTime?>(
+                            valueListenable: _selectedDateNotifier,
+                            builder: (context, date, _) {
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildInfoChip(
+                                      Icons.calendar_today,
+                                      date != null 
+                                          ? DateFormat('EEE, MMM d, yyyy').format(date)
+                                          : "Not set",
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildInfoChip(
+                                      Icons.access_time,
+                                      date != null 
+                                          ? DateFormat('h:mm a').format(date)
+                                          : "Not set",
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _pickDateTime,
+                              icon: const Icon(Icons.edit_calendar),
+                              label: const Text("Set End Date & Time"),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
 
               const SizedBox(height: 20),

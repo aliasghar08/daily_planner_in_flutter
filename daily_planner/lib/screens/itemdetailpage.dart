@@ -60,6 +60,34 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     });
   }
 
+  // ✅ NEW: Helper function to format dates in "Saturday, 23rd August 2025" format
+  String _formatDateTime(DateTime? date) {
+    if (date == null) return "Not set";
+    
+    // Format: Saturday, 23rd August 2025 at 3:30 PM
+    final daySuffix = _getDaySuffix(date.day);
+    final dateFormat = DateFormat("EEEE, d'$daySuffix' MMMM yyyy 'at' h:mm a");
+    return dateFormat.format(date);
+  }
+
+  // ✅ NEW: Helper function to get day suffix (st, nd, rd, th)
+  String _getDaySuffix(int day) {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  }
+
+  // ✅ NEW: Helper function for shorter date format (for lists)
+  String _formatShortDateTime(DateTime date) {
+    final daySuffix = _getDaySuffix(date.day);
+    final dateFormat = DateFormat("EEE, d'$daySuffix' MMM yyyy 'at' h:mm a");
+    return dateFormat.format(date);
+  }
+
   // MODIFIED: Initialize NotificationService only
   Future<void> _initializeNotificationService() async {
     try {
@@ -196,52 +224,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   int generateNotificationId(String taskId, DateTime time) =>
       (taskId + time.toIso8601String()).hashCode.abs();
 
-  // MODIFIED: Use NotificationService for hybrid notifications
-  // Future<void> _triggerTestAlarm(int sec) async {
-  //   try {
-  //     // alarm will be triggered on scheduled time
-  //     final scheduledTime = DateTime.now().add(Duration(seconds: sec));
-  //     final scheduledTimeUtc = scheduledTime.toUtc();
-
-  //     // Check if notification service is initialized
-  //     if (!_notificationServiceInitialized) {
-  //       scaffoldMessengerKey.currentState?.showSnackBar(
-  //         const SnackBar(
-  //           content: Text('Notifications not initialized yet. Please wait...'),
-  //         ),
-  //       );
-  //       return;
-  //     }
-
-  //     // Use NotificationService for hybrid notifications (local + push based on connectivity)
-  //     await notificationService.scheduleTaskNotification(
-  //       taskId: widget.task.docId!,
-  //       title: widget.task.title,
-  //       body: "🔔 Reminder: ${widget.task.title}",
-  //       scheduledTimeUtc: scheduledTimeUtc,
-  //       payload: {
-  //         'taskId': widget.task.docId!,
-  //         'type': 'test_notification',
-  //         'scheduledTime': scheduledTimeUtc.toIso8601String(),
-  //       },
-  //     );
-
-  //     scaffoldMessengerKey.currentState?.showSnackBar(
-  //       SnackBar(
-  //         content: Text(
-  //           "Hybrid notification scheduled for ${sec} seconds from now! "
-  //           "(Local + Push based on connectivity)",
-  //         ),
-  //       ),
-  //     );
-  //   } catch (e) {
-  //     debugPrint('Error in test alarm: $e');
-  //     scaffoldMessengerKey.currentState?.showSnackBar(
-  //       SnackBar(content: Text("Something went wrong: $e")),
-  //     );
-  //   }
-  // }
- 
   // MODIFIED: Use NotificationService for hybrid notifications with clear feedback
 Future<void> _triggerTestAlarm(int sec) async {
   try {
@@ -415,26 +397,130 @@ Future<void> _triggerTestAlarm(int sec) async {
   bool _isSameMonth(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month;
 
+  // ✅ NEW: Get task type display info
+  String _getTaskTypeLabel() {
+    final taskType = widget.task.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return 'One-Time Task';
+      case 'DailyTask':
+        return 'Daily Task';
+      case 'WeeklyTask':
+        return 'Weekly Task';
+      case 'MonthlyTask':
+        return 'Monthly Task';
+      default:
+        return 'Task';
+    }
+  }
+
+  IconData _getTaskTypeIcon() {
+    final taskType = widget.task.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return Icons.push_pin;
+      case 'DailyTask':
+        return Icons.loop;
+      case 'WeeklyTask':
+        return Icons.calendar_today;
+      case 'MonthlyTask':
+        return Icons.date_range;
+      default:
+        return Icons.task;
+    }
+  }
+
+  Color _getTaskTypeColor() {
+    final taskType = widget.task.taskType;
+    switch (taskType) {
+      case 'oneTime':
+        return Colors.blue;
+      case 'DailyTask':
+        return Colors.green;
+      case 'WeeklyTask':
+        return Colors.orange;
+      case 'MonthlyTask':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    final formattedDate = DateFormat('MMM d, yyyy').format(task.date);
-    final formattedTime = TimeOfDay.fromDateTime(task.date).format(context);
+    // ✅ UPDATED: Use new date formatting functions
+    final formattedDeadline = _formatDateTime(task.date);
+    final formattedCreatedAt = _formatDateTime(task.createdAt);
     final lastCompleted = completedList.isNotEmpty ? completedList.first : null;
 
     return ScaffoldMessenger(
       key: scaffoldMessengerKey,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Task Detail")),
+        appBar: AppBar(
+          title: const Text("Task Detail"),
+          backgroundColor: _getTaskTypeColor().withOpacity(0.1),
+          foregroundColor: _getTaskTypeColor(),
+        ),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Task Type Header
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: _getTaskTypeColor().withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _getTaskTypeIcon(),
+                            color: _getTaskTypeColor(),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getTaskTypeLabel(),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: _getTaskTypeColor(),
+                                ),
+                              ),
+                              Text(
+                                task.date == null && _getTaskTypeLabel() != 'One-Time Task'
+                                    ? "Continues indefinitely"
+                                    : "Created ${_formatShortDateTime(task.createdAt)}",
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
                 // Add initialization status indicator
                 if (!_notificationServiceInitialized)
                   Container(
@@ -452,88 +538,162 @@ Future<void> _triggerTestAlarm(int sec) async {
                     ),
                   ),
 
-                Text(
-                  task.title,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  task.detail.isNotEmpty ? task.detail : "No details.",
-                  style: const TextStyle(fontSize: 18),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today),
-                    const SizedBox(width: 8),
-                    Text("Date: $formattedDate"),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.access_time),
-                    const SizedBox(width: 8),
-                    Text("Time: $formattedTime"),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.history),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Created on: ${DateFormat('MMM d, yyyy • h:mm a').format(task.createdAt)}",
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.flag),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap:
-                          () => _toggleCompletion(
-                            !(_currentCompletionStatus ?? false),
+                // Task Title and Details
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.title,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
                           ),
-                      child: Chip(
-                        label: Text(
-                          _currentCompletionStatus! ? "Completed" : "Pending",
                         ),
-                        backgroundColor:
-                            _currentCompletionStatus!
-                                ? Colors.green
-                                : Colors.red,
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          task.detail.isNotEmpty ? task.detail : "No details.",
+                          style: const TextStyle(fontSize: 18, color: Colors.grey),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                if (lastCompleted != null) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(Icons.check_circle_outline),
-                      const SizedBox(width: 8),
-                      Text(
-                        task.taskType != 'oneTime'
-                            ? "Last Completed: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}"
-                            : "Completed At: ${DateFormat('MMM d, yyyy • h:mm a').format(lastCompleted)}",
-                      ),
-                    ],
                   ),
-                ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // ✅ UPDATED: Date & Time Information with new formatting
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          task.date == null && _getTaskTypeLabel() != 'One-Time Task'
+                              ? "Recurring Schedule"
+                              : "Deadline",
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              color: task.date == null ? Colors.grey : Colors.blue,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                task.date == null 
+                                    ? (_getTaskTypeLabel() != 'One-Time Task' 
+                                        ? "Recurs indefinitely" 
+                                        : "No deadline set")
+                                    : formattedDeadline,
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontStyle: task.date == null ? FontStyle.italic : FontStyle.normal,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.history, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "Created on: $formattedCreatedAt",
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Completion Status
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Completion Status",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            const Icon(Icons.flag),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap:
+                                  () => _toggleCompletion(
+                                    !(_currentCompletionStatus ?? false),
+                                  ),
+                              child: Chip(
+                                label: Text(
+                                  _currentCompletionStatus! ? "Completed" : "Pending",
+                                ),
+                                backgroundColor:
+                                    _currentCompletionStatus!
+                                        ? Colors.green
+                                        : Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (lastCompleted != null) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(Icons.check_circle_outline),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  task.taskType != 'oneTime'
+                                      ? "Last Completed: ${_formatDateTime(lastCompleted)}"
+                                      : "Completed At: ${_formatDateTime(lastCompleted)}",
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
                 if (task.taskType != 'oneTime') ...[
+                  const SizedBox(height: 16),
                   _buildCompletionTimesExpansion(),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 _buildNotificationTimesExpansion(),
-                const Divider(),
+                const SizedBox(height: 16),
                 _buildNotificationTestButtons(),
-                const Divider(),
+                const SizedBox(height: 16),
                 _buildEditHistory(),
               ],
             ),
@@ -543,200 +703,164 @@ Future<void> _triggerTestAlarm(int sec) async {
     );
   }
 
-  Widget _buildCompletionTimesExpansion() => ExpansionTile(
-    leading: const Icon(Icons.list_alt),
-    title: const Text("See All Completion Times"),
-    children:
-        completedList.isEmpty
-            ? [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    "No completion times available",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-            ]
-            : completedList
-                .map(
-                  (date) => ListTile(
-                    leading: const Icon(Icons.check),
-                    title: Text(
-                      DateFormat('MMM d, yyyy • h:mm a').format(date),
+  Widget _buildCompletionTimesExpansion() => Card(
+    elevation: 2,
+    child: ExpansionTile(
+      leading: const Icon(Icons.list_alt),
+      title: const Text("Completion History"),
+      children:
+          completedList.isEmpty
+              ? [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: Text(
+                      "No completion times available",
+                      style: TextStyle(color: Colors.grey),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+              ]
+              : completedList
+                  .map(
+                    (date) => ListTile(
+                      leading: const Icon(Icons.check, color: Colors.green),
+                      title: Text(
+                        _formatShortDateTime(date), // ✅ UPDATED: Use short format for lists
+                      ),
+                    ),
+                  )
+                  .toList(),
+    ),
   );
 
-  Widget _buildNotificationTimesExpansion() => ExpansionTile(
-    leading: const Icon(Icons.notifications),
-    title: const Text("See All Notification Times"),
-    children:
-        notificationTimes.isEmpty
-            ? [
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(
-                  child: Text(
-                    "No Notification Times available",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-            ]
-            : notificationTimes
-                .map(
-                  (date) => ListTile(
-                    leading: const Icon(Icons.check),
-                    title: Text(
-                      DateFormat('MMM d, yyyy • h:mm a').format(date),
+  Widget _buildNotificationTimesExpansion() => Card(
+    elevation: 2,
+    child: ExpansionTile(
+      leading: const Icon(Icons.notifications),
+      title: const Text("Scheduled Notifications"),
+      children:
+          notificationTimes.isEmpty
+              ? [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: Text(
+                      "No notifications scheduled",
+                      style: TextStyle(color: Colors.grey),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+              ]
+              : notificationTimes
+                  .map(
+                    (date) => ListTile(
+                      leading: const Icon(Icons.notifications_active, color: Colors.blue),
+                      title: Text(
+                        _formatShortDateTime(date), // ✅ UPDATED: Use short format for lists
+                      ),
+                    ),
+                  )
+                  .toList(),
+    ),
   );
-
-  // MODIFIED: Updated button texts and handlers
-  // Widget _buildNotificationTestButtons() => Column(
-  //   crossAxisAlignment: CrossAxisAlignment.start,
-  //   children: [
-  //     const Text(
-  //       "🔔 Hybrid Notification Test",
-  //       style: TextStyle(fontWeight: FontWeight.bold),
-  //     ),
-  //     const SizedBox(height: 10),
-  //     Text(
-  //       "Notifications will use:\n• Local (always) + Push (when online)\n• Works offline & cross-device",
-  //       style: TextStyle(color: Colors.grey[700], fontSize: 12),
-  //     ),
-  //     const SizedBox(height: 10),
-  //     ElevatedButton(
-  //       onPressed: _notificationServiceInitialized 
-  //           ? () => _triggerTestAlarm(2)
-  //           : null,
-  //       child: Text(
-  //         _notificationServiceInitialized
-  //             ? "Test Hybrid Notification (2 seconds)"
-  //             : "Initializing...",
-  //       ),
-  //     ),
-  //     const SizedBox(height: 8),
-  //     ElevatedButton(
-  //       onPressed: _notificationServiceInitialized 
-  //           ? () => _triggerTestAlarm(10)
-  //           : null,
-  //       child: Text(
-  //         _notificationServiceInitialized
-  //             ? "Test Hybrid Notification (10 seconds)"
-  //             : "Initializing...",
-  //       ),
-  //     ),
-  //     const SizedBox(height: 8),
-  //     ElevatedButton(
-  //       onPressed: _notificationServiceInitialized 
-  //           ? () => _triggerTestAlarm(60)
-  //           : null,
-  //       child: Text(
-  //         _notificationServiceInitialized
-  //             ? "Test Hybrid Notification (1 minute)"
-  //             : "Initializing...",
-  //       ),
-  //     ),
-  //     const SizedBox(height: 8),
-  //     ElevatedButton(
-  //       style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-  //       onPressed: _notificationServiceInitialized ? _cancelAllNotifications : null,
-  //       child: Text(
-  //         _notificationServiceInitialized
-  //             ? "Cancel All Notifications for This Task"
-  //             : "Initializing...",
-  //       ),
-  //     ),
-  //   ],
-  // );
 
   // MODIFIED: Updated button texts and handlers with better explanation
-Widget _buildNotificationTestButtons() => Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    const Text(
-      "🔔 Smart Notification System",
-      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-    ),
-    const SizedBox(height: 10),
-    Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.blue[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue[100]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "How it works:",
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+Widget _buildNotificationTestButtons() => Card(
+  elevation: 2,
+  child: Padding(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "🔔 Smart Notification System",
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue[100]!),
           ),
-          const SizedBox(height: 4),
-          _buildFeatureRow("📱 Local Notification", "Always scheduled - works offline"),
-          _buildFeatureRow("🌐 Push Notification", "Sent to server when online"),
-          _buildFeatureRow("⏰ Queued Notifications", "Auto-send when connection returns"),
-          _buildFeatureRow("🔄 Cross-Device Sync", "Push notifications sync across devices"),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "How it works:",
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+              ),
+              const SizedBox(height: 4),
+              _buildFeatureRow("📱 Local Notification", "Always scheduled - works offline"),
+              _buildFeatureRow("🌐 Push Notification", "Sent to server when online"),
+              _buildFeatureRow("⏰ Queued Notifications", "Auto-send when connection returns"),
+              _buildFeatureRow("🔄 Cross-Device Sync", "Push notifications sync across devices"),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        ElevatedButton(
+          onPressed: _notificationServiceInitialized 
+              ? () => _triggerTestAlarm(2)
+              : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 48),
+          ),
+          child: Text(
+            _notificationServiceInitialized
+                ? "Test Smart Notification (2 seconds)"
+                : "Initializing...",
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: _notificationServiceInitialized 
+              ? () => _triggerTestAlarm(10)
+              : null,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 48),
+          ),
+          child: Text(
+            _notificationServiceInitialized
+                ? "Test Smart Notification (10 seconds)"
+                : "Initializing...",
+          ),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton(
+          onPressed: _notificationServiceInitialized 
+              ? () => _triggerTestAlarm(60)
+              : null,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 48),
+          ),
+          child: Text(
+            _notificationServiceInitialized
+                ? "Test Smart Notification (1 minute)"
+                : "Initializing...",
+          ),
+        ),
+        const SizedBox(height: 12),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 48),
+          ),
+          onPressed: _notificationServiceInitialized ? _cancelAllNotifications : null,
+          child: Text(
+            _notificationServiceInitialized
+                ? "Cancel All Notifications for This Task"
+                : "Initializing...",
+          ),
+        ),
+      ],
     ),
-    const SizedBox(height: 16),
-    ElevatedButton(
-      onPressed: _notificationServiceInitialized 
-          ? () => _triggerTestAlarm(2)
-          : null,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.green,
-        foregroundColor: Colors.white,
-      ),
-      child: Text(
-        _notificationServiceInitialized
-            ? "Test Smart Notification (2 seconds)"
-            : "Initializing...",
-      ),
-    ),
-    const SizedBox(height: 8),
-    ElevatedButton(
-      onPressed: _notificationServiceInitialized 
-          ? () => _triggerTestAlarm(10)
-          : null,
-      child: Text(
-        _notificationServiceInitialized
-            ? "Test Smart Notification (10 seconds)"
-            : "Initializing...",
-      ),
-    ),
-    const SizedBox(height: 8),
-    ElevatedButton(
-      onPressed: _notificationServiceInitialized 
-          ? () => _triggerTestAlarm(60)
-          : null,
-      child: Text(
-        _notificationServiceInitialized
-            ? "Test Smart Notification (1 minute)"
-            : "Initializing...",
-      ),
-    ),
-    const SizedBox(height: 12),
-    ElevatedButton(
-      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-      onPressed: _notificationServiceInitialized ? _cancelAllNotifications : null,
-      child: Text(
-        _notificationServiceInitialized
-            ? "Cancel All Notifications for This Task"
-            : "Initializing...",
-      ),
-    ),
-  ],
+  ),
 );
 
 // Helper widget for feature list
@@ -765,36 +889,39 @@ Widget _buildFeatureRow(String title, String subtitle) => Padding(
   ),
 );
 
-  Widget _buildEditHistory() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SizedBox(height: 32),
-      const Text(
-        "📜 Edit History",
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+  Widget _buildEditHistory() => Card(
+    elevation: 2,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "📜 Edit History",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (widget.task.editHistory.isEmpty)
+            const Text("No edits made yet.", style: TextStyle(fontSize: 16, color: Colors.grey))
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  widget.task.editHistory.map((edit) {
+                    final formattedEditTime = _formatShortDateTime(edit.timestamp); // ✅ UPDATED
+                    return ListTile(
+                      leading: const Icon(Icons.edit_note),
+                      title: Text(formattedEditTime),
+                      subtitle:
+                          edit.note != null && edit.note!.isNotEmpty
+                              ? Text(edit.note!)
+                              : const Text("No note"),
+                      contentPadding: EdgeInsets.zero,
+                    );
+                  }).toList(),
+            ),
+        ],
       ),
-      const SizedBox(height: 8),
-      if (widget.task.editHistory.isEmpty)
-        const Text("No edits made yet.", style: TextStyle(fontSize: 16))
-      else
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children:
-              widget.task.editHistory.map((edit) {
-                final formattedEditTime = DateFormat(
-                  'MMM d, yyyy • h:mm a',
-                ).format(edit.timestamp);
-                return ListTile(
-                  leading: const Icon(Icons.edit_note),
-                  title: Text(formattedEditTime),
-                  subtitle:
-                      edit.note != null && edit.note!.isNotEmpty
-                          ? Text(edit.note!)
-                          : const Text("No note"),
-                  contentPadding: EdgeInsets.zero,
-                );
-              }).toList(),
-        ),
-    ],
+    ),
   );
 }
