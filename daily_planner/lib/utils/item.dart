@@ -56,9 +56,7 @@ class _ItemWidgetState extends State<ItemWidget> {
     });
   }
 
-   int get notificationId => widget.item.docId.hashCode & 0x7FFFFFFF;
-
-  
+  int get notificationId => widget.item.docId.hashCode & 0x7FFFFFFF;
 
   // Helper functions for period comparisons
   bool _isSameDay(DateTime a, DateTime b) {
@@ -109,13 +107,14 @@ class _ItemWidgetState extends State<ItemWidget> {
       List<Timestamp> updatedStamps = [];
 
       if (currentData != null && currentData['completionStamps'] != null) {
-        updatedStamps = (currentData['completionStamps'] as List).map((e) {
-          if (e is Timestamp) return e;
-          if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
-          if (e is String) return Timestamp.fromDate(DateTime.parse(e));
-          if (e is DateTime) return Timestamp.fromDate(e);
-          throw Exception("Invalid completion stamp: $e");
-        }).toList();
+        updatedStamps =
+            (currentData['completionStamps'] as List).map((e) {
+              if (e is Timestamp) return e;
+              if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
+              if (e is String) return Timestamp.fromDate(DateTime.parse(e));
+              if (e is DateTime) return Timestamp.fromDate(e);
+              throw Exception("Invalid completion stamp: $e");
+            }).toList();
       }
 
       Map<String, dynamic> updateData = {'isCompleted': newStatus};
@@ -126,17 +125,18 @@ class _ItemWidgetState extends State<ItemWidget> {
         // For repeating tasks, only add if no stamp exists in current period
         bool shouldAddStamp = true;
         if (widget.item.taskType != 'oneTime') {
-          shouldAddStamp = !updatedStamps.any((stamp) {
-            final date = stamp.toDate();
-            if (widget.item.taskType == 'DailyTask') {
-              return _isSameDay(date, now);
-            } else if (widget.item.taskType == 'WeeklyTask') {
-              return _isSameWeek(date, now);
-            } else if (widget.item.taskType == 'MonthlyTask') {
-              return _isSameMonth(date, now);
-            }
-            return false;
-          });
+          shouldAddStamp =
+              !updatedStamps.any((stamp) {
+                final date = stamp.toDate();
+                if (widget.item.taskType == 'DailyTask') {
+                  return _isSameDay(date, now);
+                } else if (widget.item.taskType == 'WeeklyTask') {
+                  return _isSameWeek(date, now);
+                } else if (widget.item.taskType == 'MonthlyTask') {
+                  return _isSameMonth(date, now);
+                }
+                return false;
+              });
         }
 
         if (shouldAddStamp) {
@@ -148,20 +148,21 @@ class _ItemWidgetState extends State<ItemWidget> {
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
         // Remove ALL stamps in current period
-        updatedStamps = updatedStamps.where((stamp) {
-          final date = stamp.toDate();
+        updatedStamps =
+            updatedStamps.where((stamp) {
+              final date = stamp.toDate();
 
-          if (widget.item.taskType == 'oneTime') {
-            return false; // Remove all for one-time tasks
-          } else if (widget.item.taskType == 'DailyTask') {
-            return !_isSameDay(date, now);
-          } else if (widget.item.taskType == 'WeeklyTask') {
-            return !_isSameWeek(date, now);
-          } else if (widget.item.taskType == 'MonthlyTask') {
-            return !_isSameMonth(date, now);
-          }
-          return true;
-        }).toList();
+              if (widget.item.taskType == 'oneTime') {
+                return false; // Remove all for one-time tasks
+              } else if (widget.item.taskType == 'DailyTask') {
+                return !_isSameDay(date, now);
+              } else if (widget.item.taskType == 'WeeklyTask') {
+                return !_isSameWeek(date, now);
+              } else if (widget.item.taskType == 'MonthlyTask') {
+                return !_isSameMonth(date, now);
+              }
+              return true;
+            }).toList();
 
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
@@ -224,23 +225,24 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Confirm Deletion"),
-        content: const Text("Are you sure you want to delete this task?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text("Cancel"),
+      builder:
+          (context) => AlertDialog(
+            title: const Text("Confirm Deletion"),
+            content: const Text("Are you sure you want to delete this task?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text(
+                  "Delete",
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text(
-              "Delete",
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
     );
 
     if (confirm != true) return;
@@ -253,7 +255,8 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     try {
       // Cancel all notifications - FIXED: Use docId instead of task.id
-      if (task.notificationTimes != null && task.notificationTimes!.isNotEmpty) {
+      if (task.notificationTimes != null &&
+          task.notificationTimes!.isNotEmpty) {
         for (final time in task.notificationTimes!) {
           final id = generateNotificationId(task.docId!, time);
           await NativeAlarmHelper.cancelAlarmById(id);
@@ -284,7 +287,9 @@ class _ItemWidgetState extends State<ItemWidget> {
 
   void _showSnackbar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   TextSpan _highlightSearchText(String text, String query) {
@@ -472,19 +477,20 @@ class _ItemWidgetState extends State<ItemWidget> {
               );
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
-            const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-            const PopupMenuItem(
-              value: 'Analytics',
-              child: Text(" Analytics"),
-            ),
-            const PopupMenuItem(
-              value: 'details',
-              child: Text('📄 Details'),
-            ),
-          ],
+          itemBuilder:
+              (context) => [
+                const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
+                const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
+                const PopupMenuItem(value: 'share', child: Text('📤 Share')),
+                const PopupMenuItem(
+                  value: 'Analytics',
+                  child: Text("📈 Analytics"),
+                ),
+                const PopupMenuItem(
+                  value: 'details',
+                  child: Text('📄 Details'),
+                ),
+              ],
         ),
       ),
     );

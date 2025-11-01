@@ -103,7 +103,6 @@ Future<void> main() async {
   }
 
   // Initialize FCM and notifications
-  await _initializeFCM();
 
   // Initialize timezone and alarm helper
   tz.initializeTimeZones();
@@ -111,6 +110,9 @@ Future<void> main() async {
 
   // Call runApp immediately to avoid splash hang
   runApp(const MyApp());
+
+  await _initializeFCM();
+
 
   await testNotificationSystem();
 
@@ -222,27 +224,6 @@ Future<void> _initializeFCM() async {
   }
 }
 
-// Future<void> _saveFCMTokenToFirestore(String? token) async {
-//   if (token == null) return;
-
-//   try {
-//     final user = FirebaseAuth.instance.currentUser;
-//     if (user != null) {
-//       // Save token to user's document
-//       await FirebaseFirestore.instance
-//           .collection('users')
-//           .doc(user.uid)
-//           .set({
-//             'fcmToken': token,
-//             'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-//           }, SetOptions(merge: true));
-
-//       debugPrint('FCM token saved to Firestore for user: ${user.uid}');
-//     }
-//   } catch (e) {
-//     debugPrint('Error saving FCM token to Firestore: $e');
-//   }
-// }
 
 Future<void> _saveFCMTokenToFirestore(String? token) async {
   if (token == null) return;
