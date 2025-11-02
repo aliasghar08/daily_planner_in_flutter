@@ -4,21 +4,26 @@ import 'package:daily_planner/screens/itemdetailpage.dart';
 import 'package:daily_planner/screens/taskInsights.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
+import 'package:daily_planner/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+final notificationService = NotificationService();
+
 class ItemWidget extends StatefulWidget {
   final Task item;
   final VoidCallback? onEditDone;
   final String searchQuery;
+  final VoidCallback? onTaskStatusChanged; // NEW: Callback for status changes
 
   const ItemWidget({
     super.key,
     required this.item,
     this.onEditDone,
     this.searchQuery = '',
+    this.onTaskStatusChanged, // NEW: Added callback parameter
   });
 
   @override
@@ -32,31 +37,49 @@ class _ItemWidgetState extends State<ItemWidget> {
   @override
   void initState() {
     super.initState();
-    isChecked = widget.item.isCompleted;
-
-    loadCompletionStamps(widget.item).then((loadedList) {
-      setState(() {
-        completedList = loadedList;
-      });
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final taskType = widget.item.taskType;
-
-      if (taskType != 'oneTime') {
-        if (taskType == "DailyTask") {
-          await resetDaily(widget.item, completedList);
-        } else if (taskType == 'WeeklyTask') {
-          await resetWeekly(widget.item, completedList);
-        } else if (taskType == 'MonthlyTask') {
-          await resetMonthly(widget.item, completedList);
-        }
-        setState(() {});
-      }
-    });
+    _initializeTask();
   }
 
-  int get notificationId => widget.item.docId.hashCode & 0x7FFFFFFF;
+  @override
+  void didUpdateWidget(ItemWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh when the task data changes from parent
+    if (oldWidget.item.docId != widget.item.docId ||
+        oldWidget.item.isCompleted != widget.item.isCompleted) {
+      _initializeTask();
+    }
+  }
+
+  void _initializeTask() {
+    try {
+      print('Initializing task: ${widget.item.title}');
+      print('Task type: ${widget.item.taskType}');
+      print('Task date: ${widget.item.date}');
+      print('Task docId: ${widget.item.docId}');
+      print('Task isCompleted: ${widget.item.isCompleted}');
+
+      isChecked = widget.item.isCompleted ?? false;
+
+      loadCompletionStamps(widget.item).then((loadedList) {
+        if (mounted) {
+          setState(() {
+            completedList = loadedList;
+          });
+        }
+      });
+    } catch (e) {
+      print('Error initializing task: $e');
+      isChecked = false;
+      completedList = [];
+    }
+  }
+
+  int get notificationId {
+    if (widget.item.docId == null) {
+      return widget.item.title.hashCode & 0x7FFFFFFF;
+    }
+    return widget.item.docId!.hashCode & 0x7FFFFFFF;
+  }
 
   // Helper functions for period comparisons
   bool _isSameDay(DateTime a, DateTime b) {
@@ -85,13 +108,14 @@ class _ItemWidgetState extends State<ItemWidget> {
     final previousStatus = isChecked;
 
     setState(() {
-      isChecked = newStatus;
-      widget.item.isCompleted = newStatus!;
+      isChecked = newStatus ?? false;
+      widget.item.isCompleted = newStatus ?? false;
     });
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) throw Exception("User not logged in");
+      if (widget.item.docId == null) throw Exception("Task has no document ID");
 
       final taskRef = FirebaseFirestore.instance
           .collection('users')
@@ -100,7 +124,6 @@ class _ItemWidgetState extends State<ItemWidget> {
           .doc(widget.item.docId);
 
       final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
 
       final snapshot = await taskRef.get();
       final currentData = snapshot.data();
@@ -113,7 +136,7 @@ class _ItemWidgetState extends State<ItemWidget> {
               if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
               if (e is String) return Timestamp.fromDate(DateTime.parse(e));
               if (e is DateTime) return Timestamp.fromDate(e);
-              throw Exception("Invalid completion stamp: $e");
+              return Timestamp.now();
             }).toList();
       }
 
@@ -122,17 +145,17 @@ class _ItemWidgetState extends State<ItemWidget> {
       if (newStatus == true) {
         final ts = Timestamp.fromDate(now);
 
-        // For repeating tasks, only add if no stamp exists in current period
         bool shouldAddStamp = true;
-        if (widget.item.taskType != 'oneTime') {
+        final taskType = widget.item.taskType?.toLowerCase();
+        if (taskType != 'onetime') {
           shouldAddStamp =
               !updatedStamps.any((stamp) {
                 final date = stamp.toDate();
-                if (widget.item.taskType == 'DailyTask') {
+                if (taskType == 'dailytask') {
                   return _isSameDay(date, now);
-                } else if (widget.item.taskType == 'WeeklyTask') {
+                } else if (taskType == 'weeklytask') {
                   return _isSameWeek(date, now);
-                } else if (widget.item.taskType == 'MonthlyTask') {
+                } else if (taskType == 'monthlytask') {
                   return _isSameMonth(date, now);
                 }
                 return false;
@@ -147,18 +170,18 @@ class _ItemWidgetState extends State<ItemWidget> {
 
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
-        // Remove ALL stamps in current period
+        final taskType = widget.item.taskType?.toLowerCase();
         updatedStamps =
             updatedStamps.where((stamp) {
               final date = stamp.toDate();
 
-              if (widget.item.taskType == 'oneTime') {
-                return false; // Remove all for one-time tasks
-              } else if (widget.item.taskType == 'DailyTask') {
+              if (taskType == 'onetime') {
+                return false;
+              } else if (taskType == 'dailytask') {
                 return !_isSameDay(date, now);
-              } else if (widget.item.taskType == 'WeeklyTask') {
+              } else if (taskType == 'weeklytask') {
                 return !_isSameWeek(date, now);
-              } else if (widget.item.taskType == 'MonthlyTask') {
+              } else if (taskType == 'monthlytask') {
                 return !_isSameMonth(date, now);
               }
               return true;
@@ -167,14 +190,15 @@ class _ItemWidgetState extends State<ItemWidget> {
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
 
-        // ✅ FIXED: Check if task has date before scheduling alarm
-        if (widget.item.date != null && widget.item.date!.isAfter(DateTime.now())) {
-          await NativeAlarmHelper.scheduleAlarmAtTime(
-            id: notificationId,
-            title: widget.item.title,
-            body: widget.item.detail,
-            dateTime: widget.item.date!,
-          );
+        if (widget.item.date != null) {
+          if (widget.item.date!.isAfter(DateTime.now())) {
+            await NativeAlarmHelper.scheduleAlarmAtTime(
+              id: notificationId,
+              title: widget.item.title,
+              body: widget.item.detail,
+              dateTime: widget.item.date!,
+            );
+          }
         }
       }
 
@@ -182,38 +206,48 @@ class _ItemWidgetState extends State<ItemWidget> {
       await taskRef.update(updateData);
 
       // Update local object
-      if (widget.item.taskType == "DailyTask") {
+      final updatedDates = updatedStamps.map((ts) => ts.toDate()).toList();
+      if (widget.item is DailyTask) {
         (widget.item as DailyTask).completionStamps
           ..clear()
-          ..addAll(updatedStamps.map((ts) => ts.toDate()));
-      } else if (widget.item.taskType == "WeeklyTask") {
+          ..addAll(updatedDates);
+      } else if (widget.item is WeeklyTask) {
         (widget.item as WeeklyTask).completionStamps
           ..clear()
-          ..addAll(updatedStamps.map((ts) => ts.toDate()));
-      } else if (widget.item.taskType == "MonthlyTask") {
+          ..addAll(updatedDates);
+      } else if (widget.item is MonthlyTask) {
         (widget.item as MonthlyTask).completionStamps
           ..clear()
-          ..addAll(updatedStamps.map((ts) => ts.toDate()));
+          ..addAll(updatedDates);
       }
 
       // Update local state
-      setState(() {
-        completedList = updatedStamps.map((ts) => ts.toDate()).toList();
-      });
+      if (mounted) {
+        setState(() {
+          completedList = updatedDates;
+        });
+      }
 
       widget.item.completedAt = newStatus == true ? now : null;
+
+      // NEW: Call all refresh callbacks
       widget.onEditDone?.call();
+      widget.onTaskStatusChanged
+          ?.call(); // NEW: Call the status change callback
     } catch (e) {
-      setState(() {
-        isChecked = previousStatus;
-        widget.item.isCompleted = previousStatus!;
-      });
+      print('Error changing completion status: $e');
+      if (mounted) {
+        setState(() {
+          isChecked = previousStatus;
+          widget.item.isCompleted = previousStatus ?? false;
+        });
+      }
       _showSnackbar("❌ Failed to update task: ${e.toString()}");
     }
   }
 
-  int generateNotificationId(String taskId, DateTime time) {
-    return (taskId + time.toIso8601String()).hashCode.abs();
+  String generateNotificationId(String taskId, DateTime time) {
+    return (taskId + time.toIso8601String()).hashCode.abs().toString();
   }
 
   Future<void> deleteTask(Task task) async {
@@ -255,22 +289,24 @@ class _ItemWidgetState extends State<ItemWidget> {
     );
 
     try {
-      // Cancel all notifications - FIXED: Use docId instead of task.id
       if (task.notificationTimes != null &&
           task.notificationTimes!.isNotEmpty) {
         for (final time in task.notificationTimes!) {
-          final id = generateNotificationId(task.docId!, time);
-          await NativeAlarmHelper.cancelAlarmById(id);
+          await notificationService.cancelNotification(
+            task.docId!,
+            time.toUtc(),
+          );
         }
       } else {
-        // ✅ FIXED: Only generate fallback ID if task has a date
         if (task.date != null) {
           final fallbackId = generateNotificationId(task.docId!, task.date!);
-          await NativeAlarmHelper.cancelAlarmById(fallbackId);
+          await notificationService.cancelNotification(
+            fallbackId,
+            task.date!.toUtc(),
+          );
         }
       }
 
-      // Delete from Firestore :cite[1]:cite[3]
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -280,7 +316,10 @@ class _ItemWidgetState extends State<ItemWidget> {
 
       if (mounted) Navigator.of(context).pop();
       _showSnackbar("🗑️ Task deleted successfully");
+
+      // NEW: Call all refresh callbacks
       widget.onEditDone?.call();
+      widget.onTaskStatusChanged?.call();
     } catch (e) {
       if (mounted) Navigator.of(context).pop();
       _showSnackbar("❌ Failed to delete task: ${e.toString()}");
@@ -296,7 +335,8 @@ class _ItemWidgetState extends State<ItemWidget> {
   }
 
   TextSpan _highlightSearchText(String text, String query) {
-    final defaultStyle = DefaultTextStyle.of(context).style;
+    final defaultStyle =
+        Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
 
     if (query.isEmpty) return TextSpan(text: text, style: defaultStyle);
 
@@ -304,6 +344,7 @@ class _ItemWidgetState extends State<ItemWidget> {
       RegExp.escape(query),
       caseSensitive: false,
     ).allMatches(text);
+
     if (matches.isEmpty) return TextSpan(text: text, style: defaultStyle);
 
     final List<TextSpan> spans = [];
@@ -346,7 +387,10 @@ class _ItemWidgetState extends State<ItemWidget> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return completedList;
+      if (uid == null || task.docId == null) {
+        debugPrint("Missing UID or docId for task: ${task.title}");
+        return completedList;
+      }
 
       final taskRef = FirebaseFirestore.instance
           .collection('users')
@@ -355,245 +399,201 @@ class _ItemWidgetState extends State<ItemWidget> {
           .doc(task.docId);
 
       final snapshot = await taskRef.get();
-      if (!snapshot.exists) return completedList;
+      if (!snapshot.exists) {
+        debugPrint("Task document doesn't exist: ${task.docId}");
+        return completedList;
+      }
 
       final data = snapshot.data();
       if (data != null && data['completionStamps'] != null) {
         final List<dynamic> stamps = data['completionStamps'];
         completedList =
-            stamps.whereType<Timestamp>().map((ts) => ts.toDate()).toList();
+            stamps.map((stamp) {
+              if (stamp is Timestamp) return stamp.toDate();
+              if (stamp is int)
+                return DateTime.fromMillisecondsSinceEpoch(stamp);
+              if (stamp is String) return DateTime.parse(stamp);
+              if (stamp is DateTime) return stamp;
+              return DateTime.now();
+            }).toList();
+
+        debugPrint(
+          "Loaded ${completedList.length} completion stamps for task: ${task.title}",
+        );
       }
     } catch (e) {
-      debugPrint("❌ Error loading completion stamps: $e");
+      debugPrint(
+        "❌ Error loading completion stamps for task ${task.title}: $e",
+      );
     }
 
     return completedList;
   }
 
-  Future<void> resetDaily(Task task, List<DateTime> timestamps) async {
-    if (!task.isCompleted) return;
-
-    final nowUtc = DateTime.now().toUtc();
-    final todayUtc = DateTime(nowUtc.year, nowUtc.month, nowUtc.day);
-
-    final hasCompletedToday = timestamps.any((timestamp) {
-      final tsUtc = timestamp.toUtc();
-      return _isSameDay(tsUtc, todayUtc);
-    });
-
-    if (!hasCompletedToday) {
-      task.isCompleted = false;
-    }
-  }
-
-  Future<void> resetWeekly(Task task, List<DateTime> timestamps) async {
-    if (!task.isCompleted) return;
-
-    final nowUtc = DateTime.now().toUtc();
-
-    final hasCompletedThisWeek = timestamps.any((timestamp) {
-      final tsUtc = timestamp.toUtc();
-      return _isSameWeek(tsUtc, nowUtc);
-    });
-
-    if (!hasCompletedThisWeek) {
-      task.isCompleted = false;
-    }
-  }
-
-  Future<void> resetMonthly(Task task, List<DateTime> timestamps) async {
-    if (!task.isCompleted) return;
-
-    final nowUtc = DateTime.now().toUtc();
-
-    final hasCompletedThisMonth = timestamps.any((timestamp) {
-      final tsUtc = timestamp.toUtc();
-      return _isSameMonth(tsUtc, nowUtc);
-    });
-
-    if (!hasCompletedThisMonth) {
-      task.isCompleted = false;
-    }
-  }
-
-  // ✅ NEW: Get task type display info
-  String _getTaskTypeLabel() {
-    final taskType = widget.item.taskType;
-    switch (taskType) {
-      case 'oneTime':
-        return 'One-Time Task';
-      case 'DailyTask':
-        return 'Daily Task';
-      case 'WeeklyTask':
-        return 'Weekly Task';
-      case 'MonthlyTask':
-        return 'Monthly Task';
-      default:
-        return 'Task';
-    }
-  }
-
-  IconData _getTaskTypeIcon() {
-    final taskType = widget.item.taskType;
-    switch (taskType) {
-      case 'oneTime':
-        return Icons.push_pin;
-      case 'DailyTask':
-        return Icons.loop;
-      case 'WeeklyTask':
-        return Icons.calendar_today;
-      case 'MonthlyTask':
-        return Icons.date_range;
-      default:
-        return Icons.task;
-    }
-  }
-
-  Color _getTaskTypeColor() {
-    final taskType = widget.item.taskType;
-    switch (taskType) {
-      case 'oneTime':
-        return Colors.blue;
-      case 'DailyTask':
-        return Colors.green;
-      case 'WeeklyTask':
-        return Colors.orange;
-      case 'MonthlyTask':
-        return Colors.purple;
-      default:
-        return Colors.grey;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final task = widget.item;
-    
-    // ✅ FIXED: Better overdue calculation with null safety
-    final bool isOverdue;
-    final String dateText;
-    final Color textColor;
-    
-    if (task.date != null) {
-      dateText = DateFormat.yMd().add_jm().format(task.date!);
-      isOverdue = task.date!.isBefore(DateTime.now()) && !task.isCompleted;
-      textColor = isOverdue ? Colors.red : Colors.grey;
-    } else {
-      dateText = "No end date";
-      isOverdue = false;
-      textColor = Colors.grey;
-    }
+    try {
+      final task = widget.item;
 
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: ListTile(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ItemDetailPage(task: task)),
-          );
-        },
-        leading: IconButton(
-          icon: Icon(
-            (isChecked ?? false)
-                ? Icons.check_circle
-                : Icons.radio_button_unchecked,
-            color: (isChecked ?? false) ? Colors.green : Colors.grey,
-          ),
-          onPressed: () => changeCompleted(!(isChecked ?? false)),
-        ),
+      print('Building ItemWidget for: ${task.title}');
+      print('Task type: ${task.taskType}');
+      print('Date: ${task.date}');
+      print('isCompleted: ${task.isCompleted}');
 
-        title: RichText(
-          text: _highlightSearchText(task.title, widget.searchQuery),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ FIXED: Always show date text with proper styling
-            Text(
-              dateText,
-              style: TextStyle(
-                color: textColor,
-                fontStyle: isOverdue ? FontStyle.italic : null,
-                fontWeight: isOverdue ? FontWeight.bold : null,
+      final isOverdue =
+          task.date != null &&
+          task.date!.isBefore(DateTime.now()) &&
+          !(task.isCompleted ?? false);
+      final textColor = isOverdue ? Colors.red : null;
+
+      return Card(
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        child: ListTile(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ItemDetailPage(task: task),
               ),
-            ),
-            if (isOverdue)
-              Text(
-                "Overdue!",
-                style: TextStyle(
-                  color: Colors.red,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            if (buildExtraInfo(task) != null) buildExtraInfo(task)!,
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'edit') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EditTaskPage(task: task),
-                ),
-              ).then((_) => widget.onEditDone?.call());
-            } else if (value == 'delete') {
-              deleteTask(task);
-            } else if (value == 'share') {
-              Share.share("${task.title}\n\n${task.detail}");
-            } else if (value == 'details') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ItemDetailPage(task: task),
-                ),
-              );
-            } else if (value == 'Analytics') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => AnalyticsPage(task: task)),
-              );
-            }
+            );
           },
-          itemBuilder:
-              (context) => [
-                const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-                const PopupMenuItem(value: 'delete', child: Text('🗑️ Delete')),
-                const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-                const PopupMenuItem(
-                  value: 'Analytics',
-                  child: Text("📈 Analytics"),
+          leading: IconButton(
+            icon: Icon(
+              (isChecked ?? false)
+                  ? Icons.check_circle
+                  : Icons.radio_button_unchecked,
+              color: (isChecked ?? false) ? Colors.green : Colors.grey,
+              size: 28,
+            ),
+            onPressed: () => changeCompleted(!(isChecked ?? false)),
+          ),
+          title: RichText(
+            text: _highlightSearchText(task.title, widget.searchQuery),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (task.date != null)
+                Text(
+                  DateFormat.yMd().add_jm().format(task.date!),
+                  style: TextStyle(color: textColor, fontSize: 12),
                 ),
-                const PopupMenuItem(
-                  value: 'details',
-                  child: Text('📄 Details'),
+              if (buildExtraInfo(task) != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: buildExtraInfo(task)!,
                 ),
-              ],
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EditTaskPage(task: task),
+                  ),
+                ).then((_) {
+                  // NEW: Refresh after editing
+                  widget.onEditDone?.call();
+                  widget.onTaskStatusChanged?.call();
+                });
+              } else if (value == 'delete') {
+                deleteTask(task);
+              } else if (value == 'share') {
+                Share.share("${task.title}\n\n${task.detail}");
+              } else if (value == 'details') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ItemDetailPage(task: task),
+                  ),
+                );
+              } else if (value == 'Analytics') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => AnalyticsPage(task: task)),
+                );
+              }
+            },
+            itemBuilder:
+                (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('🗑️ Delete'),
+                  ),
+                  const PopupMenuItem(value: 'share', child: Text('📤 Share')),
+                  const PopupMenuItem(
+                    value: 'Analytics',
+                    child: Text("📈 Analytics"),
+                  ),
+                  const PopupMenuItem(
+                    value: 'details',
+                    child: Text('📄 Details'),
+                  ),
+                ],
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e, stackTrace) {
+      print('Error building ItemWidget: $e');
+      print('Stack trace: $stackTrace');
+
+      return Card(
+        color: Colors.red[100],
+        child: ListTile(
+          leading: const Icon(Icons.error, color: Colors.red),
+          title: Text('Error loading: ${widget.item.title}'),
+          subtitle: Text('Type: ${widget.item.taskType}'),
+          trailing: IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => setState(() {}),
+          ),
+        ),
+      );
+    }
   }
 
   Widget? buildExtraInfo(Task task) {
-    if (task.taskType == 'DailyTask') {
+    final taskType = task.taskType?.toLowerCase();
+    print('buildExtraInfo - taskType: $taskType');
+
+    if (taskType == 'dailytask') {
       return Text(
-        "Repeats daily${task.date == null ? ' (no end date)' : ''}",
-        style: const TextStyle(fontSize: 12, color: Colors.grey),
+        "Repeats daily",
+        style: TextStyle(
+          color: Colors.blue[700],
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       );
-    } else if (task.taskType == 'WeeklyTask') {
+    } else if (taskType == 'weeklytask') {
       return Text(
-        "Repeats weekly${task.date == null ? ' (no end date)' : ''}",
-        style: const TextStyle(fontSize: 12, color: Colors.grey),
+        "Repeats weekly",
+        style: TextStyle(
+          color: Colors.green[700],
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       );
-    } else if (task.taskType == 'MonthlyTask') {
+    } else if (taskType == 'monthlytask') {
       return Text(
-        "Repeats monthly${task.date == null ? ' (no end date)' : ''}",
-        style: const TextStyle(fontSize: 12, color: Colors.grey),
+        "Repeats monthly",
+        style: TextStyle(
+          color: Colors.orange[700],
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       );
+    } else if (taskType == 'onetime') {
+      return null;
     }
-    return null;
+
+    return Text(
+      "Task type: $taskType",
+      style: const TextStyle(color: Colors.grey, fontSize: 12),
+    );
   }
 }
