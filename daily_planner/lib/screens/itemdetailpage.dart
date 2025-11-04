@@ -30,7 +30,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  final notificationService = NotificationService();
 
   final AndroidNotificationDetails _androidDetails =
       const AndroidNotificationDetails(
@@ -63,7 +62,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   // ✅ NEW: Helper function to format dates in "Saturday, 23rd August 2025" format
   String _formatDateTime(DateTime? date) {
     if (date == null) return "Not set";
-    
+
     // Format: Saturday, 23rd August 2025 at 3:30 PM
     final daySuffix = _getDaySuffix(date.day);
     final dateFormat = DateFormat("EEEE, d'$daySuffix' MMMM yyyy 'at' h:mm a");
@@ -74,10 +73,14 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   String _getDaySuffix(int day) {
     if (day >= 11 && day <= 13) return 'th';
     switch (day % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
     }
   }
 
@@ -91,7 +94,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   // MODIFIED: Initialize NotificationService only
   Future<void> _initializeNotificationService() async {
     try {
-      await notificationService.initialize();
+      await NotificationService().initialize();
       setState(() {
         _notificationServiceInitialized = true;
       });
@@ -225,96 +228,100 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       (taskId + time.toIso8601String()).hashCode.abs();
 
   // MODIFIED: Use NotificationService for hybrid notifications with clear feedback
-Future<void> _triggerTestAlarm(int sec) async {
-  try {
-    // alarm will be triggered on scheduled time
-    final scheduledTime = DateTime.now().add(Duration(seconds: sec));
-    final scheduledTimeUtc = scheduledTime.toUtc();
+  Future<void> _triggerTestAlarm(int sec) async {
+    try {
+      // alarm will be triggered on scheduled time
+      final scheduledTime = DateTime.now().add(Duration(seconds: sec));
+      final scheduledTimeUtc = scheduledTime.toUtc();
 
-    // Check if notification service is initialized
-    if (!_notificationServiceInitialized) {
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text('Notifications not initialized yet. Please wait...'),
-        ),
+      // Check if notification service is initialized
+      if (!_notificationServiceInitialized) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(
+            content: Text('Notifications not initialized yet. Please wait...'),
+          ),
+        );
+        return;
+      }
+
+      // Get connectivity status for user feedback
+      final connectivity = Connectivity();
+      final results = await connectivity.checkConnectivity();
+      final isOnline = results.any(
+        (result) =>
+            result == ConnectivityResult.wifi ||
+            result == ConnectivityResult.mobile ||
+            result == ConnectivityResult.ethernet ||
+            result == ConnectivityResult.vpn,
       );
-      return;
-    }
 
-    // Get connectivity status for user feedback
-    final connectivity = Connectivity();
-    final results = await connectivity.checkConnectivity();
-    final isOnline = results.any((result) => 
-        result == ConnectivityResult.wifi ||
-        result == ConnectivityResult.mobile ||
-        result == ConnectivityResult.ethernet ||
-        result == ConnectivityResult.vpn);
+      // Use NotificationService for hybrid notifications (local + push based on connectivity)
+      await NotificationService().scheduleTaskNotification(
+        context: context,
+        taskId: widget.task.docId!,
+        title: widget.task.title,
+        body: "🔔 Reminder: ${widget.task.title}",
+        scheduledTimeUtc: scheduledTimeUtc,
+        payload: {
+          'taskId': widget.task.docId!,
+          'type': 'test_notification',
+          'scheduledTime': scheduledTimeUtc.toIso8601String(),
+        },
+      );
 
-    // Use NotificationService for hybrid notifications (local + push based on connectivity)
-    await notificationService.scheduleTaskNotification(
-      taskId: widget.task.docId!,
-      title: widget.task.title,
-      body: "🔔 Reminder: ${widget.task.title}",
-      scheduledTimeUtc: scheduledTimeUtc,
-      payload: {
-        'taskId': widget.task.docId!,
-        'type': 'test_notification',
-        'scheduledTime': scheduledTimeUtc.toIso8601String(),
-      },
-    );
+      // Show specific feedback based on connectivity
+      if (isOnline) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              "✅ Hybrid notification scheduled for $sec seconds!\n"
+              "• Local notification (always works)\n"
+              "• Push notification (sent to server)",
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              "📱 Local notification scheduled for $sec seconds!\n"
+              "• Local notification (scheduled now)\n"
+              "• Push notification (queued - will send when online)",
+            ),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
 
-    // Show specific feedback based on connectivity
-    if (isOnline) {
+      debugPrint('Connectivity status: ${isOnline ? 'Online' : 'Offline'}');
+      debugPrint('Notification scheduled for: $scheduledTime');
+    } catch (e) {
+      debugPrint('Error in test alarm: $e');
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          content: Text(
-            "✅ Hybrid notification scheduled for $sec seconds!\n"
-            "• Local notification (always works)\n"
-            "• Push notification (sent to server)",
-          ),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(
-            "📱 Local notification scheduled for $sec seconds!\n"
-            "• Local notification (scheduled now)\n"
-            "• Push notification (queued - will send when online)",
-          ),
-          backgroundColor: Colors.blue,
+          content: Text("❌ Failed to schedule notification: $e"),
+          backgroundColor: Colors.red,
         ),
       );
     }
-
-    debugPrint('Connectivity status: ${isOnline ? 'Online' : 'Offline'}');
-    debugPrint('Notification scheduled for: $scheduledTime');
-
-  } catch (e) {
-    debugPrint('Error in test alarm: $e');
-    scaffoldMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text("❌ Failed to schedule notification: $e"),
-        backgroundColor: Colors.red,
-      ),
-    );
   }
-}
+
   // MODIFIED: Cancel all notifications using NotificationService
   Future<void> _cancelAllNotifications() async {
     try {
       if (_notificationServiceInitialized) {
         // Get all scheduled times for this task and cancel them
-        final scheduledTimes = await notificationService.getScheduledTimesForDocument(widget.task.docId!);
-        
+        final scheduledTimes = await NotificationService()
+            .getScheduledTimesForDocument(widget.task.docId!);
+
         if (scheduledTimes.isNotEmpty) {
-          await notificationService.cancelAllNotificationsForDocument(
+          await NotificationService().cancelAllNotificationsForDocument(
             docId: widget.task.docId!,
             scheduledTimesUtc: scheduledTimes,
           );
         }
-        
+
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(content: Text("All scheduled notifications canceled")),
         );
@@ -503,7 +510,8 @@ Future<void> _triggerTestAlarm(int sec) async {
                                 ),
                               ),
                               Text(
-                                task.date == null && _getTaskTypeLabel() != 'One-Time Task'
+                                task.date == null &&
+                                        _getTaskTypeLabel() != 'One-Time Task'
                                     ? "Continues indefinitely"
                                     : "Created ${_formatShortDateTime(task.createdAt)}",
                                 style: const TextStyle(
@@ -556,7 +564,10 @@ Future<void> _triggerTestAlarm(int sec) async {
                         const SizedBox(height: 8),
                         Text(
                           task.detail.isNotEmpty ? task.detail : "No details.",
-                          style: const TextStyle(fontSize: 18, color: Colors.grey),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
@@ -574,7 +585,8 @@ Future<void> _triggerTestAlarm(int sec) async {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          task.date == null && _getTaskTypeLabel() != 'One-Time Task'
+                          task.date == null &&
+                                  _getTaskTypeLabel() != 'One-Time Task'
                               ? "Recurring Schedule"
                               : "Deadline",
                           style: const TextStyle(
@@ -588,19 +600,23 @@ Future<void> _triggerTestAlarm(int sec) async {
                           children: [
                             Icon(
                               Icons.calendar_today,
-                              color: task.date == null ? Colors.grey : Colors.blue,
+                              color:
+                                  task.date == null ? Colors.grey : Colors.blue,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                task.date == null 
-                                    ? (_getTaskTypeLabel() != 'One-Time Task' 
-                                        ? "Recurs indefinitely" 
+                                task.date == null
+                                    ? (_getTaskTypeLabel() != 'One-Time Task'
+                                        ? "Recurs indefinitely"
                                         : "No deadline set")
                                     : formattedDeadline,
                                 style: TextStyle(
                                   color: Colors.grey,
-                                  fontStyle: task.date == null ? FontStyle.italic : FontStyle.normal,
+                                  fontStyle:
+                                      task.date == null
+                                          ? FontStyle.italic
+                                          : FontStyle.normal,
                                 ),
                               ),
                             ),
@@ -654,7 +670,9 @@ Future<void> _triggerTestAlarm(int sec) async {
                                   ),
                               child: Chip(
                                 label: Text(
-                                  _currentCompletionStatus! ? "Completed" : "Pending",
+                                  _currentCompletionStatus!
+                                      ? "Completed"
+                                      : "Pending",
                                 ),
                                 backgroundColor:
                                     _currentCompletionStatus!
@@ -726,7 +744,9 @@ Future<void> _triggerTestAlarm(int sec) async {
                     (date) => ListTile(
                       leading: const Icon(Icons.check, color: Colors.green),
                       title: Text(
-                        _formatShortDateTime(date), // ✅ UPDATED: Use short format for lists
+                        _formatShortDateTime(
+                          date,
+                        ), // ✅ UPDATED: Use short format for lists
                       ),
                     ),
                   )
@@ -755,9 +775,14 @@ Future<void> _triggerTestAlarm(int sec) async {
               : notificationTimes
                   .map(
                     (date) => ListTile(
-                      leading: const Icon(Icons.notifications_active, color: Colors.blue),
+                      leading: const Icon(
+                        Icons.notifications_active,
+                        color: Colors.blue,
+                      ),
                       title: Text(
-                        _formatShortDateTime(date), // ✅ UPDATED: Use short format for lists
+                        _formatShortDateTime(
+                          date,
+                        ), // ✅ UPDATED: Use short format for lists
                       ),
                     ),
                   )
@@ -766,128 +791,152 @@ Future<void> _triggerTestAlarm(int sec) async {
   );
 
   // MODIFIED: Updated button texts and handlers with better explanation
-Widget _buildNotificationTestButtons() => Card(
-  elevation: 2,
-  child: Padding(
-    padding: const EdgeInsets.all(16),
-    child: Column(
+  Widget _buildNotificationTestButtons() => Card(
+    elevation: 2,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "🔔 Smart Notification System",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue[100]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "How it works:",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                _buildFeatureRow(
+                  "📱 Local Notification",
+                  "Always scheduled - works offline",
+                ),
+                _buildFeatureRow(
+                  "🌐 Push Notification",
+                  "Sent to server when online",
+                ),
+                _buildFeatureRow(
+                  "⏰ Queued Notifications",
+                  "Auto-send when connection returns",
+                ),
+                _buildFeatureRow(
+                  "🔄 Cross-Device Sync",
+                  "Push notifications sync across devices",
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed:
+                _notificationServiceInitialized
+                    ? () => _triggerTestAlarm(2)
+                    : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            child: Text(
+              _notificationServiceInitialized
+                  ? "Test Smart Notification (2 seconds)"
+                  : "Initializing...",
+            ),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed:
+                _notificationServiceInitialized
+                    ? () => _triggerTestAlarm(10)
+                    : null,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            child: Text(
+              _notificationServiceInitialized
+                  ? "Test Smart Notification (10 seconds)"
+                  : "Initializing...",
+            ),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed:
+                _notificationServiceInitialized
+                    ? () => _triggerTestAlarm(60)
+                    : null,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            child: Text(
+              _notificationServiceInitialized
+                  ? "Test Smart Notification (1 minute)"
+                  : "Initializing...",
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            onPressed:
+                _notificationServiceInitialized
+                    ? _cancelAllNotifications
+                    : null,
+            child: Text(
+              _notificationServiceInitialized
+                  ? "Cancel All Notifications for This Task"
+                  : "Initializing...",
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  // Helper widget for feature list
+  Widget _buildFeatureRow(String title, String subtitle) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          "🔔 Smart Notification System",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.blue[100]!),
-          ),
+        const SizedBox(width: 8),
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "How it works:",
-                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-              const SizedBox(height: 4),
-              _buildFeatureRow("📱 Local Notification", "Always scheduled - works offline"),
-              _buildFeatureRow("🌐 Push Notification", "Sent to server when online"),
-              _buildFeatureRow("⏰ Queued Notifications", "Auto-send when connection returns"),
-              _buildFeatureRow("🔄 Cross-Device Sync", "Push notifications sync across devices"),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+              ),
             ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: _notificationServiceInitialized 
-              ? () => _triggerTestAlarm(2)
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 48),
-          ),
-          child: Text(
-            _notificationServiceInitialized
-                ? "Test Smart Notification (2 seconds)"
-                : "Initializing...",
-          ),
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: _notificationServiceInitialized 
-              ? () => _triggerTestAlarm(10)
-              : null,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-          ),
-          child: Text(
-            _notificationServiceInitialized
-                ? "Test Smart Notification (10 seconds)"
-                : "Initializing...",
-          ),
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: _notificationServiceInitialized 
-              ? () => _triggerTestAlarm(60)
-              : null,
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-          ),
-          child: Text(
-            _notificationServiceInitialized
-                ? "Test Smart Notification (1 minute)"
-                : "Initializing...",
-          ),
-        ),
-        const SizedBox(height: 12),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 48),
-          ),
-          onPressed: _notificationServiceInitialized ? _cancelAllNotifications : null,
-          child: Text(
-            _notificationServiceInitialized
-                ? "Cancel All Notifications for This Task"
-                : "Initializing...",
           ),
         ),
       ],
     ),
-  ),
-);
-
-// Helper widget for feature list
-Widget _buildFeatureRow(String title, String subtitle) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 2),
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const SizedBox(width: 8),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 10, color: Colors.grey[700]),
-            ),
-          ],
-        ),
-      ),
-    ],
-  ),
-);
+  );
 
   Widget _buildEditHistory() => Card(
     elevation: 2,
@@ -902,13 +951,18 @@ Widget _buildFeatureRow(String title, String subtitle) => Padding(
           ),
           const SizedBox(height: 8),
           if (widget.task.editHistory.isEmpty)
-            const Text("No edits made yet.", style: TextStyle(fontSize: 16, color: Colors.grey))
+            const Text(
+              "No edits made yet.",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            )
           else
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children:
                   widget.task.editHistory.map((edit) {
-                    final formattedEditTime = _formatShortDateTime(edit.timestamp); // ✅ UPDATED
+                    final formattedEditTime = _formatShortDateTime(
+                      edit.timestamp,
+                    ); // ✅ UPDATED
                     return ListTile(
                       leading: const Icon(Icons.edit_note),
                       title: Text(formattedEditTime),

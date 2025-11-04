@@ -280,7 +280,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
           final notificationTimeUtc = notificationTime.toUtc();
 
           // FIX: Use the global instance, not creating a new one
-          await notificationService.scheduleTaskNotification(
+          await NotificationService().scheduleTaskNotification(
+            context: context, 
             taskId: newTaskRef.id, // Use Firestore document ID as taskId
             title: 'Task Reminder: $title',
             body: taskDate != null 

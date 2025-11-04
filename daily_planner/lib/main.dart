@@ -19,6 +19,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'package:daily_planner/utils/notification_service.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -86,6 +87,9 @@ Future<void> _initializeNotificationService() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ✅ FIXED: Initialize Android Alarm Manager Plus FIRST
+  await AndroidAlarmManager.initialize();
+
   // Initialize Firebase with offline persistence
   try {
     await Firebase.initializeApp(
@@ -102,35 +106,30 @@ Future<void> main() async {
     // Continue anyway - we'll use offline capabilities
   }
 
-  // Initialize FCM and notifications
-
-  // Initialize timezone and alarm helper
+  // ✅ FIXED: Initialize timezone FIRST
   tz.initializeTimeZones();
-  // await NativeAlarmHelper.initialize();
 
-  // Call runApp immediately to avoid splash hang
-  runApp(const MyApp());
+  // ✅ FIXED: Initialize NotificationService BEFORE running app
+  await _initializeNotificationService();
 
+  // ✅ FIXED: Initialize FCM and other services
   await _initializeFCM();
+  await _initializeAndroidServices();
 
-
-  await testNotificationSystem();
-
-  // Initialize NotificationService FIRST
-await _initializeNotificationService();
-  
-  
-  
+  // ✅ FIXED: Remove test calls that might interfere
+  // await testNotificationSystem(); // Remove this line - test separately
 
   // Perform async initializations in background
   if (!kIsWeb && Platform.isAndroid) {
-    _initializeAndroidServices();
     try {
       await BatteryOptimizationHelper.promptDisableBatteryOptimization();
     } catch (e) {
       print("Battery optimization prompt not available $e");
     }
   }
+
+  // ✅ FIXED: Call runApp AFTER all critical initializations
+  runApp(const MyApp());
 }
 
 // Test method - call this somewhere in your app
@@ -180,7 +179,7 @@ Future<void> _initializeFCM() async {
       debugPrint('FCM Token: $token');
 
       // Save token to user's document in Firestore
-      if (User != null) {
+      if (FirebaseAuth.instance.currentUser != null) {
         await _saveFCMTokenToFirestore(token);
       }
     } catch (e) {
@@ -224,7 +223,6 @@ Future<void> _initializeFCM() async {
   }
 }
 
-
 Future<void> _saveFCMTokenToFirestore(String? token) async {
   if (token == null) return;
 
@@ -262,52 +260,57 @@ Future<void> _removeFCMTokenFromFirestore(String? token) async {
 }
 
 Future<void> _initializeAndroidServices() async {
-  await Permission.notification.request();
+  try {
+    await Permission.notification.request();
 
-  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  final iosInit = DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-  );
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    final iosInit = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
 
-  final initializationSettings = InitializationSettings(
-    android: androidInit,
-    iOS: iosInit,
-  );
+    final initializationSettings = InitializationSettings(
+      android: androidInit,
+      iOS: iosInit,
+    );
 
-  await flutterLocalNotificationsPlugin.initialize(
-    initializationSettings,
-    onDidReceiveNotificationResponse: (NotificationResponse response) {
-      debugPrint('Notification tapped: ${response.payload}');
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        debugPrint('Notification tapped: ${response.payload}');
 
-      // Handle notification tap
-      if (response.actionId == 'STOP_ACTION') {
-        flutterLocalNotificationsPlugin.cancel(response.id!);
-      } else if (response.actionId == 'SNOOZE_ACTION') {
-        flutterLocalNotificationsPlugin.cancel(response.id!);
-        flutterLocalNotificationsPlugin.zonedSchedule(
-          response.id!,
-          'Snoozed Reminder',
-          'Reminder after snooze!',
-          tz.TZDateTime.now(tz.local).add(const Duration(minutes: 5)),
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'daily_planner_channel',
-              'Daily Planner Notifications',
-              channelDescription:
-                  'Channel for task reminders and notifications',
+        // Handle notification tap
+        if (response.actionId == 'STOP_ACTION') {
+          flutterLocalNotificationsPlugin.cancel(response.id!);
+        } else if (response.actionId == 'SNOOZE_ACTION') {
+          flutterLocalNotificationsPlugin.cancel(response.id!);
+          flutterLocalNotificationsPlugin.zonedSchedule(
+            response.id!,
+            'Snoozed Reminder',
+            'Reminder after snooze!',
+            tz.TZDateTime.now(tz.local).add(const Duration(minutes: 5)),
+            const NotificationDetails(
+              android: AndroidNotificationDetails(
+                'daily_planner_channel',
+                'Daily Planner Notifications',
+                channelDescription:
+                    'Channel for task reminders and notifications',
+              ),
             ),
-          ),
-          // uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-          androidScheduleMode: AndroidScheduleMode.exact,
-        );
-      } else {
-        // Regular notification tap - navigate to home
-        navigatorKey.currentState?.pushNamed('/home');
-      }
-    },
-  );
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          );
+        } else {
+          // Regular notification tap - navigate to home
+          navigatorKey.currentState?.pushNamed('/home');
+        }
+      },
+    );
+    
+    debugPrint('✅ Android services initialized successfully');
+  } catch (e) {
+    debugPrint('❌ Error initializing Android services: $e');
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -328,7 +331,7 @@ class _MyAppState extends State<MyApp> {
   Future<void> _asyncInit() async {
     // Firestore reset & theme loading
     try {
-      // Make resetAllTasksIfNeeded non-blocking - this is the key change
+      // Make resetAllTasksIfNeeded non-blocking
       resetAllTasksIfNeeded().catchError((e) {
         debugPrint("resetAllTasksIfNeeded failed: $e");
       });
