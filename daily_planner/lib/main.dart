@@ -77,7 +77,7 @@ Future<void> _showNotification({
 
 Future<void> _initializeNotificationService() async {
   try {
-    await notificationService.initialize();
+    await NotificationService().initialize();
     debugPrint('✅ NotificationService initialized successfully');
   } catch (e) {
     debugPrint('❌ Error initializing NotificationService: $e');
@@ -130,8 +130,6 @@ Future<void> main() async {
       print("Battery optimization prompt not available $e");
     }
   }
-
-  
 }
 
 // Test method - call this somewhere in your app
@@ -308,7 +306,7 @@ Future<void> _initializeAndroidServices() async {
         }
       },
     );
-    
+
     debugPrint('✅ Android services initialized successfully');
   } catch (e) {
     debugPrint('❌ Error initializing Android services: $e');

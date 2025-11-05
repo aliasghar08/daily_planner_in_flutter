@@ -146,7 +146,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             'taskTitle': title,
             'dueDate': taskDate?.toIso8601String(),
           },
-          isAlarm: true,
+          
         );
         
         scheduledCount++;

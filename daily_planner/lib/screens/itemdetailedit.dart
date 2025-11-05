@@ -233,7 +233,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
             'taskTitle': title,
             'dueDate': selectedDate?.toIso8601String(),
           },
-          isAlarm: true
+          
         );
         debugPrint("✅ Scheduled notification for: $time");
       } catch (e) {

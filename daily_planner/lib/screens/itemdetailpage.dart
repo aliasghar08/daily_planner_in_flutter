@@ -30,7 +30,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
-
   final AndroidNotificationDetails _androidDetails =
       const AndroidNotificationDetails(
         'daily_planner_channel',
@@ -108,123 +107,78 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   }
 
   Future<void> _loadTaskData() async {
-  try {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('tasks')
-        .doc(widget.task.docId)
-        .get(const GetOptions(source: Source.serverAndCache));
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc(widget.task.docId)
+          .get(const GetOptions(source: Source.serverAndCache));
 
-    if (!doc.exists) return;
+      if (!doc.exists) return;
 
-    final data = doc.data()!;
-    final loadedCompletionStatus = data['isCompleted'] ?? false;
+      final data = doc.data()!;
+      final loadedCompletionStatus = data['isCompleted'] ?? false;
 
-    final loadedStamps = (data['completionStamps'] as List<dynamic>?)
-            ?.whereType<Timestamp>()
-            .map((ts) => ts.toDate())
-            .toList() ??
-        [];
-    final loadedNotifications = (data['notificationTimes'] as List<dynamic>?)
-            ?.whereType<Timestamp>()
-            .map((ts) => ts.toDate())
-            .toList() ??
-        [];
+      final loadedStamps =
+          (data['completionStamps'] as List<dynamic>?)
+              ?.whereType<Timestamp>()
+              .map((ts) => ts.toDate())
+              .toList() ??
+          [];
+      final loadedNotifications =
+          (data['notificationTimes'] as List<dynamic>?)
+              ?.whereType<Timestamp>()
+              .map((ts) => ts.toDate())
+              .toList() ??
+          [];
 
-    // ✅ FIX: Load edit history from Firestore
-    final loadedEditHistory = (data['editHistory'] as List<dynamic>?)
-            ?.map((editMap) => _parseEditHistory(editMap))
-            .whereType<TaskEdit>()
-            .toList() ??
-        [];
+      // ✅ FIX: Load edit history from Firestore
+      final loadedEditHistory =
+          (data['editHistory'] as List<dynamic>?)
+              ?.map((editMap) => _parseEditHistory(editMap))
+              .whereType<TaskEdit>()
+              .toList() ??
+          [];
 
-    loadedStamps.sort((a, b) => b.compareTo(a));
-    loadedNotifications.sort((a, b) => b.compareTo(a));
-    loadedEditHistory.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      loadedStamps.sort((a, b) => b.compareTo(a));
+      loadedNotifications.sort((a, b) => b.compareTo(a));
+      loadedEditHistory.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    setState(() {
-      _currentCompletionStatus = loadedCompletionStatus;
-      completedList = loadedStamps;
-      notificationTimes = loadedNotifications;
-      // ✅ FIX: Update the task with loaded edit history
-      widget.task.editHistory = loadedEditHistory;
-      _isLoading = false;
-    });
-  } catch (e) {
-    debugPrint("Error loading task data: $e");
-    if (mounted) setState(() => _isLoading = false);
-  }
-}
-
-// ✅ ADD: Helper function to parse EditHistory from Firestore data
-TaskEdit? _parseEditHistory(dynamic editMap) {
-  try {
-    if (editMap is Map<String, dynamic>) {
-      final timestamp = editMap['timestamp'] as Timestamp?;
-      final note = editMap['note'] as String?;
-      
-      if (timestamp != null) {
-        return TaskEdit(
-          timestamp: timestamp.toDate(),
-          note: note,
-        );
-      }
+      setState(() {
+        _currentCompletionStatus = loadedCompletionStatus;
+        completedList = loadedStamps;
+        notificationTimes = loadedNotifications;
+        // ✅ FIX: Update the task with loaded edit history
+        widget.task.editHistory = loadedEditHistory;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Error loading task data: $e");
+      if (mounted) setState(() => _isLoading = false);
     }
-    return null;
-  } catch (e) {
-    debugPrint("Error parsing edit history: $e");
-    return null;
   }
-}
 
-  // Future<void> _loadTaskData() async {
-  //   try {
-  //     final uid = FirebaseAuth.instance.currentUser?.uid;
-  //     if (uid == null) return;
+  // ✅ ADD: Helper function to parse EditHistory from Firestore data
+  TaskEdit? _parseEditHistory(dynamic editMap) {
+    try {
+      if (editMap is Map<String, dynamic>) {
+        final timestamp = editMap['timestamp'] as Timestamp?;
+        final note = editMap['note'] as String?;
 
-  //     final doc = await FirebaseFirestore.instance
-  //         .collection('users')
-  //         .doc(uid)
-  //         .collection('tasks')
-  //         .doc(widget.task.docId)
-  //         .get(const GetOptions(source: Source.serverAndCache));
-
-  //     if (!doc.exists) return;
-
-  //     final data = doc.data()!;
-  //     final loadedCompletionStatus = data['isCompleted'] ?? false;
-
-  //     final loadedStamps =
-  //         (data['completionStamps'] as List<dynamic>?)
-  //             ?.whereType<Timestamp>()
-  //             .map((ts) => ts.toDate())
-  //             .toList() ??
-  //         [];
-  //     final loadedNotifications =
-  //         (data['notificationTimes'] as List<dynamic>?)
-  //             ?.whereType<Timestamp>()
-  //             .map((ts) => ts.toDate())
-  //             .toList() ??
-  //         [];
-
-  //     loadedStamps.sort((a, b) => b.compareTo(a));
-  //     loadedNotifications.sort((a, b) => b.compareTo(a));
-
-  //     setState(() {
-  //       _currentCompletionStatus = loadedCompletionStatus;
-  //       completedList = loadedStamps;
-  //       notificationTimes = loadedNotifications;
-  //       _isLoading = false;
-  //     });
-  //   } catch (e) {
-  //     debugPrint("Error loading task data: $e");
-  //     if (mounted) setState(() => _isLoading = false);
-  //   }
-  // }
+        if (timestamp != null) {
+          return TaskEdit(timestamp: timestamp.toDate(), note: note);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("Error parsing edit history: $e");
+      return null;
+    }
+  }
 
   @override
   void didUpdateWidget(ItemDetailPage oldWidget) {
@@ -330,18 +284,35 @@ TaskEdit? _parseEditHistory(dynamic editMap) {
       );
 
       // Use NotificationService for hybrid notifications (local + push based on connectivity)
-      await NotificationService().scheduleTaskNotification(
+      // await NotificationService().scheduleAlarmNotification(
+      //   context: context,
+      //   taskId: widget.task.docId!,
+      //   title: widget.task.title,
+      //   body: "🔔 Reminder: ${widget.task.title}",
+      //   scheduledTimeUtc: scheduledTimeUtc,
+      //   payload: {
+      //     'taskId': widget.task.docId!,
+      //     'type': 'test_notification',
+      //     'scheduledTime': scheduledTimeUtc.toIso8601String(),
+      //   },
+      // );
+
+      await NotificationService().scheduleAlarmNotification(
         context: context,
         taskId: widget.task.docId!,
         title: widget.task.title,
-        body: "🔔 Reminder: ${widget.task.title}",
+        body: "🚨 ALARM: ${widget.task.title}\nTap to view details",
         scheduledTimeUtc: scheduledTimeUtc,
         payload: {
           'taskId': widget.task.docId!,
-          'type': 'test_notification',
+          'type': 'alarm', // 🆕 Changed from 'test_notification' to 'alarm'
           'scheduledTime': scheduledTimeUtc.toIso8601String(),
+          'taskTitle': widget.task.title,
+          'taskDescription': widget.task.detail ?? '',
+          'alarmBehavior': true, // 🆕 Explicitly enable alarm behavior
+          'vibrationPattern': 'long', // 🆕 Custom vibration
+          'sound': 'alarm', // 🆕 Alarm sound
         },
-        isAlarm: true,
       );
 
       // Show specific feedback based on connectivity

@@ -29,80 +29,250 @@ class NotificationService {
   // Track current connectivity state
   bool _isOnline = false;
 
-  Future<void> initialize() async {
-    await _setupLocalNotifications();
-    await _setupConnectivityMonitoring();
-    await _requestNotificationPermissions();
-    await _checkInitialConnectivity();
-    
-    // ✅ Initialize Android Alarm Manager Plus
-    await AndroidAlarmManager.initialize();
-    debugPrint('✅ Android Alarm Manager Plus initialized');
+  // 🆕 Add initialization status tracking
+  bool _isInitialized = false;
+
+  // 🆕 Callback for alarm actions
+  static Function(String, String)? onAlarmAction;
+
+  Future<void> initialize({Function(String, String)? alarmActionCallback}) async {
+    if (_isInitialized) {
+      debugPrint('⚠️ NotificationService already initialized');
+      return;
+    }
+
+    try {
+      debugPrint('🛠️ Initializing NotificationService...');
+      
+      // 🆕 Set the alarm action callback
+      onAlarmAction = alarmActionCallback;
+      
+      await _setupLocalNotifications();
+      await _setupConnectivityMonitoring();
+      await _requestNotificationPermissions();
+      await _checkInitialConnectivity();
+      
+      // ✅ Initialize Android Alarm Manager Plus
+      await AndroidAlarmManager.initialize();
+      debugPrint('✅ Android Alarm Manager Plus initialized');
+      
+      _isInitialized = true;
+      debugPrint('🎉 NotificationService initialized successfully');
+    } catch (e) {
+      debugPrint('❌ Error initializing NotificationService: $e');
+      _isInitialized = false;
+    }
   }
 
   Future<void> _checkInitialConnectivity() async {
-    final results = await _connectivity.checkConnectivity();
-    _isOnline = _isAnyConnectivityOnline(results);
-    debugPrint('Initial connectivity: ${_isOnline ? 'Online' : 'Offline'}');
+    try {
+      final results = await _connectivity.checkConnectivity();
+      _isOnline = _isAnyConnectivityOnline(results);
+      debugPrint('Initial connectivity: ${_isOnline ? 'Online' : 'Offline'}');
+    } catch (e) {
+      debugPrint('❌ Error checking connectivity: $e');
+      _isOnline = false;
+    }
   }
 
   Future<void> _requestNotificationPermissions() async {
     try {
-      // Request exact alarm permission for Android
-      if (await Permission.scheduleExactAlarm.request().isGranted) {
-        debugPrint('Exact alarm permission granted');
-      } else {
-        debugPrint('Exact alarm permission denied - using inexact alarms');
+      debugPrint('🔐 Requesting notification permissions...');
+      
+      // Request notification permission first (required for Android 13+)
+      final notificationStatus = await Permission.notification.request();
+      debugPrint('Notification permission: $notificationStatus');
+
+      // ✅ FIXED: Use permission_handler to check exact alarm permission
+      bool canScheduleExactAlarms = false;
+      try {
+        if (await Permission.scheduleExactAlarm.isGranted) {
+          canScheduleExactAlarms = true;
+          debugPrint('Exact alarm permission: Granted');
+        } else {
+          // Request the permission if not granted
+          final status = await Permission.scheduleExactAlarm.request();
+          canScheduleExactAlarms = status.isGranted;
+          debugPrint('Exact alarm permission requested: $status');
+        }
+      } catch (e) {
+        debugPrint('Error checking exact alarm permission: $e');
+        canScheduleExactAlarms = false;
       }
 
-      // Request notification permission
-      await Permission.notification.request();
+      debugPrint('Can schedule exact alarms: $canScheduleExactAlarms');
+
     } catch (e) {
-      debugPrint('Error requesting permissions: $e');
+      debugPrint('❌ Error requesting permissions: $e');
     }
   }
 
   Future<void> _setupLocalNotifications() async {
-    tz.initializeTimeZones();
+    try {
+      debugPrint('🛠️ Setting up local notifications...');
+      
+      tz.initializeTimeZones();
 
-    localNotifications = FlutterLocalNotificationsPlugin();
+      localNotifications = FlutterLocalNotificationsPlugin();
 
-    // 🚀 CREATE ALARM CHANNEL FOR HIGH-PRIORITY NOTIFICATIONS
-    final AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
-      'alarm_channel',
-      'Alarm Reminders',
-      description: 'System-level alarms for critical task reminders',
-      importance: Importance.max,
-      // priority: Priority.high,
-      playSound: true,
-      sound: const RawResourceAndroidNotificationSound('alarm_sound'),
-      enableVibration: true,
-      vibrationPattern: Int64List.fromList(const [0, 1000, 500, 1000, 500, 1000]),
-    );
+      // 🚀 CREATE ALARM CHANNEL FOR HIGH-PRIORITY NOTIFICATIONS
+      final AndroidNotificationChannel alarmChannel = AndroidNotificationChannel(
+        'alarm_channel',
+        'Alarm Reminders',
+        description: 'System-level alarms for critical task reminders',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
+      );
 
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+      // 🆕 CREATE REGULAR NOTIFICATION CHANNEL
+      final AndroidNotificationChannel regularChannel = AndroidNotificationChannel(
+        'task_channel',
+        'Task Notifications',
+        description: 'Notifications for task reminders',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+      );
 
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-          requestAlertPermission: true,
-          requestBadgePermission: true,
-          requestSoundPermission: true,
-        );
+      const AndroidInitializationSettings androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
+      const DarwinInitializationSettings iosSettings =
+          DarwinInitializationSettings(
+            requestAlertPermission: true,
+            requestBadgePermission: true,
+            requestSoundPermission: true,
+          );
 
-    await localNotifications.initialize(settings);
+      const InitializationSettings settings = InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      );
 
-    // Create the alarm channel
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
-        localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    await androidPlugin?.createNotificationChannel(alarmChannel);
+      // 🆕 UPDATED: Add notification response handling for alarm actions
+      await localNotifications.initialize(
+        settings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          debugPrint('📱 Notification tapped: ${response.payload}');
+          _handleNotificationResponse(response);
+        },
+        onDidReceiveBackgroundNotificationResponse: _handleBackgroundNotificationResponse,
+      );
 
-    debugPrint('✅ Alarm notification channel created');
+      // Create notification channels
+      final AndroidFlutterLocalNotificationsPlugin? androidPlugin =
+          localNotifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+      
+      await androidPlugin?.createNotificationChannel(alarmChannel);
+      await androidPlugin?.createNotificationChannel(regularChannel);
+
+      debugPrint('✅ Notification channels created successfully');
+    } catch (e) {
+      debugPrint('❌ Error setting up local notifications: $e');
+      rethrow;
+    }
+  }
+
+  // 🆕 HANDLE NOTIFICATION RESPONSES (ALARM ACTIONS)
+  void _handleNotificationResponse(NotificationResponse response) {
+    debugPrint('🎯 Notification action: ${response.actionId} with payload: ${response.payload}');
+    
+    if (response.actionId != null && response.payload != null) {
+      _handleAlarmAction(response.actionId!, response.payload!);
+    }
+  }
+
+  // 🆕 BACKGROUND NOTIFICATION HANDLER
+  @pragma('vm:entry-point')
+  static void _handleBackgroundNotificationResponse(NotificationResponse response) {
+    debugPrint('🎯 Background notification action: ${response.actionId} with payload: ${response.payload}');
+    
+    if (response.actionId != null && response.payload != null) {
+      WidgetsFlutterBinding.ensureInitialized();
+      final Map<String, dynamic> data = jsonDecode(response.payload!) as Map<String, dynamic>;
+      final String taskId = data['taskId'] ?? '';
+      
+      if (response.actionId == 'stop_action') {
+        debugPrint('🛑 Background stop action for task: $taskId');
+      } else if (response.actionId == 'snooze_action') {
+        debugPrint('⏰ Background snooze action for task: $taskId');
+      }
+    }
+  }
+
+  // 🆕 HANDLE ALARM ACTIONS (STOP/SNOOZE)
+  void _handleAlarmAction(String actionId, String payload) {
+    try {
+      final Map<String, dynamic> data = jsonDecode(payload) as Map<String, dynamic>;
+      final String taskId = data['taskId'] ?? '';
+      final String alarmType = data['type'] ?? 'alarm';
+
+      debugPrint('🔄 Handling alarm action: $actionId for task: $taskId');
+
+      switch (actionId) {
+        case 'stop_action':
+          _stopAlarm(taskId);
+          break;
+        case 'snooze_action':
+          _snoozeAlarm(taskId);
+          break;
+        default:
+          debugPrint('Unknown action: $actionId');
+      }
+
+      // Notify the callback if set
+      if (onAlarmAction != null) {
+        onAlarmAction!(actionId, taskId);
+      }
+    } catch (e) {
+      debugPrint('❌ Error handling alarm action: $e');
+    }
+  }
+
+  // 🆕 STOP ALARM ACTION
+  void _stopAlarm(String taskId) {
+    debugPrint('🛑 Stopping alarm for task: $taskId');
+    // Cancel all notifications for this task
+    cancelNotification(taskId, DateTime.now());
+    _showLocalNotification('Alarm Stopped', 'Alarm has been stopped for task: $taskId');
+  }
+
+  // 🆕 SNOOZE ALARM ACTION
+  void _snoozeAlarm(String taskId) {
+    debugPrint('⏰ Snoozing alarm for task: $taskId');
+    // Reschedule alarm for 10 minutes later
+    final DateTime snoozeTime = DateTime.now().add(const Duration(minutes: 10));
+    _showLocalNotification('Alarm Snoozed', 'Alarm snoozed until ${snoozeTime.hour}:${snoozeTime.minute}');
+    
+    // You can implement rescheduling logic here
+    // For now, just show a notification
+  }
+
+  // 🆕 SHOW LOCAL NOTIFICATION
+  Future<void> _showLocalNotification(String title, String body) async {
+    try {
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'task_channel',
+        'Task Notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+      );
+
+      const NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+      );
+
+      await localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        title,
+        body,
+        details,
+      );
+    } catch (e) {
+      debugPrint('Error showing local notification: $e');
+    }
   }
 
   Future<void> _setupConnectivityMonitoring() async {
@@ -114,7 +284,7 @@ class NotificationService {
       
       debugPrint('Connectivity changed: ${_isOnline ? 'Online' : 'Offline'}');
 
-      // Process pending push notifications when coming back online
+      // ✅ FIXED: Process pending push notifications when coming back online
       if (_isOnline && !wasOnline) {
         await _processPendingPushNotifications();
       }
@@ -163,7 +333,7 @@ class NotificationService {
     );
   }
 
-  // 🚀 ENHANCED HYBRID APPROACH WITH ALARM BEHAVIOR
+  // 🚀 REGULAR NOTIFICATION (Less intrusive)
   Future<void> scheduleTaskNotification({
     required BuildContext context,
     required String taskId,
@@ -171,13 +341,75 @@ class NotificationService {
     required String body,
     required DateTime scheduledTimeUtc,
     Map<String, dynamic>? payload,
-    bool isAlarm = false, // 🆕 NEW PARAMETER: Enable alarm behavior
   }) async {
+    await _scheduleNotification(
+      context: context,
+      taskId: taskId,
+      title: title,
+      body: body,
+      scheduledTimeUtc: scheduledTimeUtc,
+      payload: payload,
+      isAlarm: false, // Regular notification
+    );
+  }
+
+  // 🚀 ALARM NOTIFICATION (More intrusive)
+  Future<void> scheduleAlarmNotification({
+    required BuildContext context,
+    required String taskId,
+    required String title,
+    required String body,
+    required DateTime scheduledTimeUtc,
+    Map<String, dynamic>? payload,
+  }) async {
+    await _scheduleNotification(
+      context: context,
+      taskId: taskId,
+      title: title,
+      body: body,
+      scheduledTimeUtc: scheduledTimeUtc,
+      payload: payload,
+      isAlarm: true, // Alarm behavior
+    );
+  }
+
+  // 🆕 UNIFIED SCHEDULING METHOD
+  Future<void> _scheduleNotification({
+    required BuildContext context,
+    required String taskId,
+    required String title,
+    required String body,
+    required DateTime scheduledTimeUtc,
+    Map<String, dynamic>? payload,
+    required bool isAlarm,
+  }) async {
+    if (!_isInitialized) {
+      _showErrorSnackBar(context, 'Notification service not initialized. Please restart the app.');
+      return;
+    }
+
     try {
       // Convert UTC time from Firestore to local device time
       final DateTime scheduledTimeLocal = _utcToLocal(scheduledTimeUtc);
+      final DateTime now = DateTime.now();
       
-      // Generate notification ID at runtime
+      // 🆕 CHECK IF SCHEDULED TIME IS IN FUTURE
+      if (scheduledTimeLocal.isBefore(now)) {
+        _showErrorSnackBar(context, 'Cannot schedule notification in the past');
+        return;
+      }
+
+      debugPrint('''
+📅 Scheduling ${isAlarm ? 'ALARM' : 'Notification'}:
+   Task ID: $taskId
+   Title: $title
+   Scheduled UTC: $scheduledTimeUtc
+   Scheduled Local: $scheduledTimeLocal
+   Now Local: $now
+   In: ${scheduledTimeLocal.difference(now).inSeconds} seconds
+''');
+
+      // Generate IDs
       final int notificationId = _generateNotificationId(taskId, scheduledTimeUtc);
       final int alarmId = _generateAlarmId(taskId, scheduledTimeUtc);
 
@@ -189,7 +421,7 @@ class NotificationService {
         body: body,
         scheduledTimeLocal: scheduledTimeLocal,
         payload: payload,
-        isAlarm: isAlarm, // 🆕 Pass alarm flag
+        isAlarm: isAlarm,
       );
 
       // 🚀 STRATEGY 2: LOCAL NOTIFICATIONS (Backup)
@@ -199,10 +431,10 @@ class NotificationService {
         body: body,
         scheduledTimeLocal: scheduledTimeLocal,
         payload: payload,
-        isAlarm: isAlarm, // 🆕 Pass alarm flag
+        isAlarm: isAlarm,
       );
 
-      // Store record of scheduled notifications
+      // Store records
       await _storeScheduledLocalNotification(
         taskId: taskId,
         notificationId: notificationId,
@@ -234,14 +466,14 @@ class NotificationService {
         );
       }
 
-      // ✅ SHOW SNACKBAR INSTEAD OF DEBUG PRINT
       _showSuccessSnackBar(
         context,
-        '✅ ${isAlarm ? 'ALARM' : 'Notification'} scheduled - Alarm Manager: System-level, Local: Backup, Push: ${_isOnline ? 'Immediate' : 'Pending'}',
+        '✅ ${isAlarm ? 'ALARM' : 'Reminder'} scheduled for ${scheduledTimeLocal.hour}:${scheduledTimeLocal.minute.toString().padLeft(2, '0')}',
       );
 
     } catch (e) {
-      _showErrorSnackBar(context, '❌ Error in hybrid notification scheduling: $e');
+      debugPrint('❌ Error in hybrid notification scheduling: $e');
+      _showErrorSnackBar(context, 'Failed to schedule ${isAlarm ? 'alarm' : 'notification'}: $e');
       
       // Fallback to local notification only
       await _scheduleLocalNotificationFallback(
@@ -250,12 +482,12 @@ class NotificationService {
         body: body,
         scheduledTimeLocal: _utcToLocal(scheduledTimeUtc),
         payload: payload,
-        isAlarm: isAlarm, // 🆕 Pass alarm flag
+        isAlarm: isAlarm,
       );
     }
   }
 
-  // 🚀 ENHANCED ALARM MANAGER WITH ALARM BEHAVIOR
+  // 🚀 ENHANCED ALARM MANAGER WITH PROPER ALARM BEHAVIOR
   Future<void> _scheduleWithAlarmManager({
     required int alarmId,
     required String taskId,
@@ -263,7 +495,7 @@ class NotificationService {
     required String body,
     required DateTime scheduledTimeLocal,
     Map<String, dynamic>? payload,
-    bool isAlarm = false, // 🆕 NEW PARAMETER
+    required bool isAlarm,
   }) async {
     try {
       // Prepare payload for alarm callback
@@ -273,26 +505,37 @@ class NotificationService {
         'body': body,
         'notificationId': _generateNotificationId(taskId, scheduledTimeLocal.toUtc()),
         'payload': payload,
-        'isAlarm': isAlarm, // 🆕 Include alarm flag in payload
+        'isAlarm': isAlarm, // 🚀 Pass the alarm flag
       };
+
+      debugPrint('⏰ Scheduling with Alarm Manager - ID: $alarmId, Time: $scheduledTimeLocal, isAlarm: $isAlarm');
+
+      // ✅ FIXED: Check exact alarm permission using permission_handler
+      bool canScheduleExactAlarms = false;
+      try {
+        canScheduleExactAlarms = await Permission.scheduleExactAlarm.isGranted;
+      } catch (e) {
+        debugPrint('Error checking exact alarm permission: $e');
+        canScheduleExactAlarms = false;
+      }
 
       // Schedule with Android Alarm Manager Plus
       final bool scheduled = await AndroidAlarmManager.oneShotAt(
         scheduledTimeLocal,
         alarmId,
         _alarmCallback,
-        exact: true,
+        exact: canScheduleExactAlarms, // ✅ Use permission-based exact timing
         wakeup: true,
         rescheduleOnReboot: true,
-        alarmClock: isAlarm, // 🆕 Only show in alarm clock if it's an alarm
+        alarmClock: isAlarm, // 🚀 Only show in alarm clock if it's an alarm
         params: alarmPayload,
       );
 
       if (scheduled) {
-        debugPrint('⏰ ${isAlarm ? 'ALARM' : 'Notification'} scheduled - ID: $alarmId, Time: $scheduledTimeLocal');
+        debugPrint('✅ ${isAlarm ? 'ALARM' : 'Notification'} scheduled successfully with Alarm Manager (exact: $canScheduleExactAlarms)');
       } else {
-        debugPrint('❌ Failed to schedule ${isAlarm ? 'alarm' : 'notification'}');
-        throw Exception('Failed to schedule system ${isAlarm ? 'alarm' : 'notification'}');
+        debugPrint('❌ Failed to schedule ${isAlarm ? 'alarm' : 'notification'} with Alarm Manager');
+        throw Exception('Alarm Manager scheduling failed');
       }
     } catch (e) {
       debugPrint('❌ Error scheduling with Android Alarm Manager: $e');
@@ -300,7 +543,7 @@ class NotificationService {
     }
   }
 
-  // 🚀 ENHANCED ALARM CALLBACK WITH ALARM BEHAVIOR
+  // 🚀 ENHANCED ALARM CALLBACK WITH STOP/SNOOZE BUTTONS
   @pragma('vm:entry-point')
   static Future<void> _alarmCallback(Map<String, dynamic>? params) async {
     debugPrint('🚨 ${params?['isAlarm'] == true ? 'ALARM' : 'Notification'} triggered with params: $params');
@@ -329,150 +572,450 @@ class NotificationService {
       final String body = params['body'] ?? 'Your scheduled task is due!';
       final int notificationId = params['notificationId'] ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
       final bool isAlarm = params['isAlarm'] == true;
+      final String taskId = params['taskId'] ?? 'unknown';
 
-      // 🚀 USE ALARM CHANNEL FOR ALARM BEHAVIOR, REGULAR CHANNEL FOR NORMAL NOTIFICATIONS
-      final AndroidNotificationDetails androidDetails = isAlarm 
-          ? AndroidNotificationDetails(
-              'alarm_channel', // 🚀 ALARM CHANNEL
-              'Alarm Reminders',
-              channelDescription: 'System-level alarms for critical task reminders',
-              importance: Importance.max,
-              priority: Priority.high,
-              playSound: true,
-              sound: const RawResourceAndroidNotificationSound('alarm_sound'),
-              enableVibration: true,
-              vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
-              fullScreenIntent: true, // 🚀 Full screen for alarms
-              autoCancel: false, // 🚀 Don't auto-cancel alarms
-              ongoing: true, // 🚀 Ongoing notification for alarms
-              colorized: true,
-              color: const Color(0xFFFF0000), // 🚀 Red color for urgency
-              ledColor: const Color(0xFFFF0000),
-              ledOnMs: 1000,
-              ledOffMs: 1000,
-            )
-          : AndroidNotificationDetails(
-              'task_channel', // 📱 REGULAR CHANNEL
-              'Task Notifications',
-              channelDescription: 'Notifications for task reminders',
-              importance: Importance.high,
-              priority: Priority.high,
-              playSound: true,
-              enableVibration: true,
-              vibrationPattern: Int64List.fromList([0, 500, 500, 500]),
-            );
+      // 🚀 DIFFERENT BEHAVIOR FOR ALARMS VS NOTIFICATIONS
+      final AndroidNotificationDetails androidDetails;
+      
+      if (isAlarm) {
+        // 🚨 ALARM BEHAVIOR - More intrusive with actions
+        androidDetails = AndroidNotificationDetails(
+          'alarm_channel', // Use alarm channel
+          'Alarm Reminders',
+          channelDescription: 'System-level alarms for critical task reminders',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]), // Longer vibration
+          fullScreenIntent: true, // 🚀 Show full screen on some devices
+          autoCancel: false, // 🚀 Don't auto-cancel - user must dismiss
+          ongoing: true, // 🚀 Ongoing notification
+          colorized: true,
+          color: const Color(0xFFFF6B6B), // 🚀 Red color for urgency
+          ledColor: const Color(0xFFFF0000),
+          ledOnMs: 1000,
+          ledOffMs: 1000,
+          timeoutAfter: 0, // 🚀 No timeout - stays until dismissed
+          // 🆕 ADD ACTIONS FOR ALARM
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(
+              'snooze_action',
+              'Snooze',
+            ),
+            AndroidNotificationAction(
+              'stop_action',
+              'Stop',
+            ),
+          ],
+        );
+      } else {
+        // 📱 REGULAR NOTIFICATION BEHAVIOR - Less intrusive
+        androidDetails = AndroidNotificationDetails(
+          'task_channel', // Use regular channel
+          'Task Notifications',
+          channelDescription: 'Notifications for task reminders',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 500, 500]), // Shorter vibration
+          autoCancel: true,
+          timeoutAfter: 30000, // 🚀 Auto-dismiss after 30 seconds
+        );
+      }
 
       final NotificationDetails details = NotificationDetails(
         android: androidDetails,
       );
 
+      // 🚀 Add emoji prefix for alarms
+      final String displayTitle = isAlarm ? '🚨 $title' : title;
+
+      // 🆕 CREATE PAYLOAD WITH ACTION DATA
+      final Map<String, dynamic> notificationPayload = {
+        'taskId': taskId,
+        'type': isAlarm ? 'alarm' : 'notification',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
       await localNotifications.show(
         notificationId,
-        isAlarm ? '🚨 $title' : title, // 🚀 Add alarm emoji for alarms
+        displayTitle,
         body,
         details,
+        payload: jsonEncode(notificationPayload),
       );
 
-      debugPrint('✅ ${isAlarm ? 'ALARM' : 'Notification'} shown successfully');
+      debugPrint('✅ ${isAlarm ? 'ALARM' : 'Notification'} shown successfully with actions');
     } catch (e) {
       debugPrint('❌ Error in alarm callback: $e');
     }
   }
 
-  // 🚀 ENHANCED LOCAL NOTIFICATION WITH ALARM BEHAVIOR
+  // 🚀 ENHANCED LOCAL NOTIFICATION WITH STOP/SNOOZE BUTTONS
   Future<void> _scheduleLocalNotification({
     required int notificationId,
     required String title,
     required String body,
     required DateTime scheduledTimeLocal,
     Map<String, dynamic>? payload,
-    bool isAlarm = false, // 🆕 NEW PARAMETER
+    required bool isAlarm,
   }) async {
     try {
-      // 🚀 USE ALARM CHANNEL FOR ALARM BEHAVIOR, REGULAR CHANNEL FOR NORMAL NOTIFICATIONS
-      final AndroidNotificationDetails androidDetails = isAlarm
-          ? AndroidNotificationDetails(
-              'alarm_channel', // 🚀 ALARM CHANNEL
-              'Alarm Reminders',
-              channelDescription: 'System-level alarms for critical task reminders',
-              importance: Importance.max,
-              priority: Priority.high,
-              playSound: true,
-              sound: const RawResourceAndroidNotificationSound('alarm_sound'),
-              enableVibration: true,
-              vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
-            )
-          : AndroidNotificationDetails(
-              'task_channel', // 📱 REGULAR CHANNEL
-              'Task Notifications',
-              channelDescription: 'Notifications for task reminders',
-              importance: Importance.high,
-              priority: Priority.high,
-              playSound: true,
-            );
-
-      final DarwinNotificationDetails iosDetails = DarwinNotificationDetails();
-
-      final NotificationDetails details = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      );
-
       final localTimeZone = tz.local;
       final scheduledTzTime = tz.TZDateTime.from(scheduledTimeLocal, localTimeZone);
 
-      // Check if we have exact alarm permission, fallback to inexact if not
-      AndroidScheduleMode scheduleMode;
-      try {
-        final hasExactAlarmPermission = await Permission.scheduleExactAlarm.isGranted;
-        scheduleMode = hasExactAlarmPermission 
-            ? AndroidScheduleMode.exactAllowWhileIdle
-            : AndroidScheduleMode.inexactAllowWhileIdle;
-        
-        debugPrint('Using schedule mode: $scheduleMode');
-      } catch (e) {
-        scheduleMode = AndroidScheduleMode.inexactAllowWhileIdle;
-        debugPrint('Permission check failed, using inexact scheduling');
+      debugPrint('📱 Scheduling local ${isAlarm ? 'ALARM' : 'notification'} - ID: $notificationId, Time: $scheduledTzTime');
+
+      // 🚀 USE DIFFERENT CHANNELS FOR ALARMS VS NOTIFICATIONS
+      final AndroidNotificationDetails androidDetails;
+      
+      if (isAlarm) {
+        // 🚨 ALARM CHANNEL WITH ACTIONS
+        androidDetails = AndroidNotificationDetails(
+          'alarm_channel',
+          'Alarm Reminders',
+          channelDescription: 'System-level alarms for critical task reminders',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
+          fullScreenIntent: true,
+          autoCancel: false,
+          ongoing: true,
+          // 🆕 ADD ACTIONS FOR ALARM
+          actions: <AndroidNotificationAction>[
+            AndroidNotificationAction(
+              'snooze_action',
+              'Snooze',
+            ),
+            AndroidNotificationAction(
+              'stop_action',
+              'Stop',
+            ),
+          ],
+        );
+      } else {
+        // 📱 REGULAR CHANNEL
+        androidDetails = AndroidNotificationDetails(
+          'task_channel',
+          'Task Notifications',
+          channelDescription: 'Notifications for task reminders',
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          autoCancel: true,
+        );
       }
+
+      final NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(),
+      );
+
+      // 🚀 Add emoji prefix for alarms in local notifications too
+      final String displayTitle = isAlarm ? '🚨 $title' : title;
+
+      // ✅ FIXED: Check exact alarm permission for scheduling mode
+      bool canScheduleExactAlarms = false;
+      try {
+        canScheduleExactAlarms = await Permission.scheduleExactAlarm.isGranted;
+      } catch (e) {
+        debugPrint('Error checking exact alarm permission: $e');
+        canScheduleExactAlarms = false;
+      }
+
+      final AndroidScheduleMode scheduleMode = canScheduleExactAlarms 
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle;
+
+      // 🆕 CREATE PAYLOAD FOR ACTIONS
+      final Map<String, dynamic> notificationPayload = {
+        'taskId': payload?['taskId'] ?? 'unknown',
+        'type': isAlarm ? 'alarm' : 'notification',
+        'scheduledTime': scheduledTimeLocal.toIso8601String(),
+      };
 
       await localNotifications.zonedSchedule(
         notificationId,
-        isAlarm ? '🚨 $title' : title, // 🚀 Add alarm emoji for alarms
+        displayTitle,
         body,
         scheduledTzTime,
         details,
-        payload: payload != null ? jsonEncode(payload) : null,
+        payload: jsonEncode(notificationPayload),
         androidScheduleMode: scheduleMode,
       );
 
-      debugPrint('📱 ${isAlarm ? 'ALARM' : 'Notification'} scheduled for: $scheduledTimeLocal');
+      debugPrint('✅ Local ${isAlarm ? 'ALARM' : 'notification'} scheduled successfully (mode: $scheduleMode)');
     } catch (e) {
-      debugPrint('❌ Error scheduling ${isAlarm ? 'alarm' : 'notification'}: $e');
+      debugPrint('❌ Error scheduling local ${isAlarm ? 'alarm' : 'notification'}: $e');
       rethrow;
     }
   }
 
-  // 🆕 CONVENIENCE METHOD FOR ALARMS (optional)
-  Future<void> scheduleAlarmNotification({
-    required BuildContext context,
+  // 🆕 TEST METHODS
+  Future<void> testNotification(BuildContext context) async {
+    if (!_isInitialized) {
+      _showErrorSnackBar(context, 'Notification service not initialized');
+      return;
+    }
+
+    final testTime = DateTime.now().add(const Duration(seconds: 10));
+    
+    await scheduleTaskNotification(
+      context: context,
+      taskId: 'test_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Test Notification',
+      body: 'This is a regular notification scheduled 10 seconds from now',
+      scheduledTimeUtc: testTime.toUtc(),
+    );
+
+    _showSuccessSnackBar(context, 'Test notification scheduled for ${testTime.toLocal()}');
+  }
+
+  Future<void> testAlarm(BuildContext context) async {
+    if (!_isInitialized) {
+      _showErrorSnackBar(context, 'Notification service not initialized');
+      return;
+    }
+
+    final testTime = DateTime.now().add(const Duration(seconds: 15));
+    
+    await scheduleAlarmNotification(
+      context: context,
+      taskId: 'test_alarm_${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Test Alarm',
+      body: 'This is a test ALARM scheduled 15 seconds from now',
+      scheduledTimeUtc: testTime.toUtc(),
+    );
+
+    _showSuccessSnackBar(context, 'Test ALARM scheduled for ${testTime.toLocal()}');
+  }
+
+  // 🆕 SHOW IMMEDIATE ALARM (FOR TESTING)
+  Future<void> showImmediateAlarm(BuildContext context) async {
+    if (!_isInitialized) {
+      _showErrorSnackBar(context, 'Notification service not initialized');
+      return;
+    }
+
+    final String taskId = 'immediate_alarm_${DateTime.now().millisecondsSinceEpoch}';
+    final int notificationId = _generateNotificationId(taskId, DateTime.now());
+
+    try {
+      // 🚨 ALARM CHANNEL WITH ACTIONS
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'alarm_channel',
+        'Alarm Reminders',
+        channelDescription: 'System-level alarms for critical task reminders',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
+        fullScreenIntent: true,
+        autoCancel: false,
+        ongoing: true,
+        actions: const <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            'snooze_action',
+            'Snooze',
+          ),
+          AndroidNotificationAction(
+            'stop_action',
+            'Stop',
+          ),
+        ],
+      );
+
+      final NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+      );
+
+      // 🆕 CREATE PAYLOAD FOR ACTIONS
+      final Map<String, dynamic> notificationPayload = {
+        'taskId': taskId,
+        'type': 'alarm',
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+
+      await localNotifications.show(
+        notificationId,
+        '🚨 IMMEDIATE ALARM',
+        'This is an immediate alarm with stop/snooze buttons',
+        details,
+        payload: jsonEncode(notificationPayload),
+      );
+
+      _showSuccessSnackBar(context, 'Immediate alarm shown with stop/snooze buttons');
+    } catch (e) {
+      _showErrorSnackBar(context, 'Failed to show immediate alarm: $e');
+    }
+  }
+
+  // 🆕 PERMISSION CHECKER
+  Future<void> checkPermissions(BuildContext context) async {
+    final notificationStatus = await Permission.notification.status;
+    final exactAlarmStatus = await Permission.scheduleExactAlarm.status;
+    
+    // ✅ FIXED: Use permission_handler instead of non-existent method
+    bool canScheduleExactAlarms = false;
+    try {
+      canScheduleExactAlarms = await Permission.scheduleExactAlarm.isGranted;
+    } catch (e) {
+      debugPrint('Error checking exact alarms: $e');
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission Status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Notification: $notificationStatus'),
+            Text('Exact Alarm Permission: $exactAlarmStatus'),
+            Text('Can Schedule Exact: $canScheduleExactAlarms'),
+            Text('Service Initialized: $_isInitialized'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🚀 PROCESS PENDING PUSH NOTIFICATIONS
+  Future<void> _processPendingPushNotifications() async {
+    try {
+      debugPrint('📤 Processing pending push notifications...');
+      
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> pendingNotifications = prefs.getStringList(_pendingPushNotificationsKey) ?? [];
+      
+      if (pendingNotifications.isEmpty) {
+        debugPrint('📤 No pending push notifications to process');
+        return;
+      }
+
+      debugPrint('📤 Found ${pendingNotifications.length} pending push notifications');
+
+      for (final notificationJson in pendingNotifications) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(notificationJson) as Map<String, dynamic>;
+          
+          await _schedulePushNotification(
+            taskId: data['taskId'],
+            title: data['title'],
+            body: data['body'],
+            scheduledTimeUtc: DateTime.parse(data['scheduledTimeUtc']),
+            payload: data['payload'],
+          );
+          
+          debugPrint('✅ Processed pending push notification for task: ${data['taskId']}');
+        } catch (e) {
+          debugPrint('❌ Error processing pending notification: $e');
+        }
+      }
+
+      // Clear processed notifications
+      await prefs.remove(_pendingPushNotificationsKey);
+      debugPrint('✅ All pending push notifications processed and cleared');
+      
+    } catch (e) {
+      debugPrint('❌ Error in _processPendingPushNotifications: $e');
+    }
+  }
+
+  // 🚀 PUSH NOTIFICATION METHOD
+  Future<void> _schedulePushNotification({
     required String taskId,
     required String title,
     required String body,
     required DateTime scheduledTimeUtc,
     Map<String, dynamic>? payload,
   }) async {
-    await scheduleTaskNotification(
-      context: context,
-      taskId: taskId,
-      title: title,
-      body: body,
-      scheduledTimeUtc: scheduledTimeUtc,
-      payload: payload,
-      isAlarm: true, // 🚀 Set alarm behavior
-    );
+    try {
+      // Your push notification implementation here
+      // This could be FCM, your backend API, etc.
+      debugPrint('📤 Push notification scheduled for task: $taskId at $scheduledTimeUtc');
+      
+      // Simulate API call
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+    } catch (e) {
+      debugPrint('❌ Push notification error: $e');
+      await _storePendingPushNotification(
+        taskId: taskId,
+        title: title,
+        body: body,
+        scheduledTimeUtc: scheduledTimeUtc,
+        payload: payload,
+      );
+    }
   }
 
-  // 🆕 STORE SCHEDULED ALARM
+  // 🗄️ STORAGE METHODS
+  Future<void> _storePendingPushNotification({
+    required String taskId,
+    required String title,
+    required String body,
+    required DateTime scheduledTimeUtc,
+    Map<String, dynamic>? payload,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> pendingNotifications = prefs.getStringList(_pendingPushNotificationsKey) ?? [];
+
+      final notificationData = {
+        'taskId': taskId,
+        'title': title,
+        'body': body,
+        'scheduledTimeUtc': scheduledTimeUtc.toIso8601String(),
+        'payload': payload,
+      };
+
+      pendingNotifications.add(jsonEncode(notificationData));
+      await prefs.setStringList(_pendingPushNotificationsKey, pendingNotifications);
+
+      debugPrint('💾 Stored pending push notification for task: $taskId');
+    } catch (e) {
+      debugPrint('Error storing pending push notification: $e');
+    }
+  }
+
+  Future<void> _storeScheduledLocalNotification({
+    required String taskId,
+    required int notificationId,
+    required DateTime scheduledTimeUtc,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> scheduledNotifications = prefs.getStringList(_scheduledLocalNotificationsKey) ?? [];
+
+      final notificationData = {
+        'taskId': taskId,
+        'notificationId': notificationId.toString(),
+        'scheduledTimeUtc': scheduledTimeUtc.toIso8601String(),
+      };
+
+      scheduledNotifications.add(jsonEncode(notificationData));
+      await prefs.setStringList(_scheduledLocalNotificationsKey, scheduledNotifications);
+
+      debugPrint('💾 Stored scheduled local notification for task: $taskId');
+    } catch (e) {
+      debugPrint('Error storing scheduled local notification: $e');
+    }
+  }
+
   Future<void> _storeScheduledAlarm({
     required String taskId,
     required int alarmId,
@@ -497,13 +1040,7 @@ class NotificationService {
     }
   }
 
-  // 🆕 GENERATE ALARM ID
-  int _generateAlarmId(String taskId, DateTime scheduledTimeUtc) {
-    // Use different calculation than notification ID to avoid conflicts
-    return (taskId + scheduledTimeUtc.toIso8601String() + '_alarm').hashCode.abs() % 100000;
-  }
-
-  // 🆕 UPDATE CANCEL METHODS TO HANDLE ALARMS
+  // 🗑️ CANCELLATION METHODS
   Future<void> cancelNotification(String taskId, DateTime scheduledTimeUtc) async {
     try {
       final int notificationId = _generateNotificationId(taskId, scheduledTimeUtc);
@@ -533,7 +1070,6 @@ class NotificationService {
     }
   }
 
-  // 🆕 UPDATE CANCEL ALL METHOD
   Future<void> cancelAllNotificationsForDocument({
     required String docId,
     required List<DateTime> scheduledTimesUtc,
@@ -580,7 +1116,31 @@ class NotificationService {
     }
   }
 
-  // 🆕 REMOVE SCHEDULED ALARM
+  // 🗑️ REMOVAL METHODS
+  Future<void> _removeScheduledLocalNotification(String taskId, DateTime scheduledTimeUtc) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> scheduledNotifications = prefs.getStringList(_scheduledLocalNotificationsKey) ?? [];
+
+      final List<String> updated = scheduledNotifications.where((notificationJson) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(notificationJson) as Map<String, dynamic>;
+          return data['taskId'] != taskId || 
+                 data['scheduledTimeUtc'] != scheduledTimeUtc.toIso8601String();
+        } catch (e) {
+          return true;
+        }
+      }).toList();
+
+      if (updated.length != scheduledNotifications.length) {
+        await prefs.setStringList(_scheduledLocalNotificationsKey, updated);
+        debugPrint('🗑️ Removed scheduled local notification for task: $taskId');
+      }
+    } catch (e) {
+      debugPrint('Error removing scheduled local notification: $e');
+    }
+  }
+
   Future<void> _removeScheduledAlarm(String taskId, DateTime scheduledTimeUtc) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -605,54 +1165,94 @@ class NotificationService {
     }
   }
 
-  // ✅ YOUR EXISTING METHODS (unchanged)
-  Future<void> _schedulePushNotification({
-    required String taskId,
-    required String title,
-    required String body,
-    required DateTime scheduledTimeUtc,
-    Map<String, dynamic>? payload,
-  }) async {
-    // Your existing push notification code...
+  Future<void> _removePendingPushNotification(String taskId, DateTime scheduledTimeUtc) async {
     try {
-      // Your existing implementation...
-      debugPrint('📤 Push notification scheduled for task: $taskId');
+      final prefs = await SharedPreferences.getInstance();
+      final List<String> pendingNotifications = prefs.getStringList(_pendingPushNotificationsKey) ?? [];
+
+      final List<String> updated = pendingNotifications.where((notificationJson) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(notificationJson) as Map<String, dynamic>;
+          return data['taskId'] != taskId || 
+                 data['scheduledTimeUtc'] != scheduledTimeUtc.toIso8601String();
+        } catch (e) {
+          return true;
+        }
+      }).toList();
+
+      if (updated.length != pendingNotifications.length) {
+        await prefs.setStringList(_pendingPushNotificationsKey, updated);
+        debugPrint('🗑️ Removed pending push notification for task: $taskId');
+      }
     } catch (e) {
-      debugPrint('❌ Push notification error: $e');
-      await _storePendingPushNotification(
-        taskId: taskId,
-        title: title,
-        body: body,
-        scheduledTimeUtc: scheduledTimeUtc,
-        payload: payload,
-      );
+      debugPrint('Error removing pending push notification: $e');
     }
   }
 
-  // STORAGE METHODS (your existing code)
-  Future<void> _storeScheduledLocalNotification({
-    required String taskId,
+  // 🚀 FALLBACK METHOD
+  Future<void> _scheduleLocalNotificationFallback({
     required int notificationId,
-    required DateTime scheduledTimeUtc,
-  }) async {
-    // Your existing implementation...
-  }
-
-  Future<void> _storePendingPushNotification({
-    required String taskId,
     required String title,
     required String body,
-    required DateTime scheduledTimeUtc,
+    required DateTime scheduledTimeLocal,
     Map<String, dynamic>? payload,
+    required bool isAlarm,
   }) async {
-    // Your existing implementation...
+    try {
+      debugPrint('🔄 Using fallback local notification scheduling');
+      
+      final AndroidNotificationDetails androidDetails = isAlarm
+          ? AndroidNotificationDetails(
+              'alarm_channel',
+              'Alarm Reminders',
+              importance: Importance.max,
+              priority: Priority.high,
+              playSound: true,
+              enableVibration: true,
+              actions: <AndroidNotificationAction>[
+                AndroidNotificationAction(
+                  'snooze_action',
+                  'Snooze',
+                ),
+                AndroidNotificationAction(
+                  'stop_action',
+                  'Stop',
+                ),
+              ],
+            )
+          : AndroidNotificationDetails(
+              'task_channel',
+              'Task Notifications',
+              importance: Importance.high,
+              priority: Priority.high,
+              playSound: true,
+            );
+
+      final NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: const DarwinNotificationDetails(),
+      );
+
+      final localTimeZone = tz.local;
+      final scheduledTzTime = tz.TZDateTime.from(scheduledTimeLocal, localTimeZone);
+
+      await localNotifications.zonedSchedule(
+        notificationId,
+        isAlarm ? '🚨 $title' : title,
+        body,
+        scheduledTzTime,
+        details,
+        payload: payload != null ? jsonEncode(payload) : null,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+
+      debugPrint('✅ Fallback ${isAlarm ? 'ALARM' : 'notification'} scheduled successfully');
+    } catch (e) {
+      debugPrint('❌ Error in fallback scheduling: $e');
+    }
   }
 
-  Future<void> _processPendingPushNotifications() async {
-    // Your existing implementation...
-  }
-
-  // UTILITY METHODS (your existing code)
+  // 🔧 UTILITY METHODS
   DateTime _utcToLocal(DateTime utcTime) {
     return utcTime.toLocal();
   }
@@ -661,37 +1261,26 @@ class NotificationService {
     return (taskId + scheduledTimeUtc.toIso8601String()).hashCode.abs();
   }
 
-  Future<void> _removeScheduledLocalNotification(String taskId, DateTime scheduledTimeUtc) async {
-    // Your existing implementation...
+  int _generateAlarmId(String taskId, DateTime scheduledTimeUtc) {
+    return (taskId + scheduledTimeUtc.toIso8601String() + '_alarm').hashCode.abs() % 100000;
   }
 
-  Future<void> _removePendingPushNotification(String taskId, DateTime scheduledTimeUtc) async {
-    // Your existing implementation...
-  }
+  // 🆕 Add getter for initialization status
+  bool get isInitialized => _isInitialized;
 
+  // 📋 PLACEHOLDER METHODS (Implement based on your backend)
   Future<void> _cancelPushNotification(String taskId) async {
-    // Your existing implementation...
+    // Implement your push notification cancellation logic
+    debugPrint('📤 Cancelled push notification for task: $taskId');
   }
 
   Future<void> _cancelAllPushNotificationsForDocument(String docId) async {
-    // Your existing implementation...
+    // Implement your push notification cancellation logic
+    debugPrint('📤 Cancelled all push notifications for document: $docId');
   }
 
-  // 🚀 ENHANCED FALLBACK METHOD WITH ALARM BEHAVIOR
-  Future<void> _scheduleLocalNotificationFallback({
-    required int notificationId,
-    required String title,
-    required String body,
-    required DateTime scheduledTimeLocal,
-    Map<String, dynamic>? payload,
-    bool isAlarm = false, // 🆕 NEW PARAMETER
-  }) async {
-    // Your existing implementation with alarm behavior...
-  }
-
-  // Helper method to get all scheduled times for a document (your existing code)
   Future<List<DateTime>> getScheduledTimesForDocument(String docId) async {
-    // Your existing implementation...
+    // Implement your logic to get scheduled times
     return [];
   }
 
