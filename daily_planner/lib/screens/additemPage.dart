@@ -120,14 +120,56 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return _selectedType == TaskType.oneTime;
   }
 
-  Future<String> getFcmToken(String uid) async {
-    String? currentToken = await FirebaseMessaging.instance.getToken();
+  // 🚀 OPTIMIZED: Schedule notifications asynchronously without blocking UI
+  Future<void> _scheduleNotifications(String taskId, String title, DateTime? taskDate) async {
+    final now = DateTime.now();
+    int scheduledCount = 0;
 
-    if (currentToken == null) {
-      print("❌ Unable to get FCM token");
-      return '';
-    } else {
-      return currentToken;
+    // Schedule notifications asynchronously without waiting for each one
+    final notificationFutures = _notificationTimes.where((notificationTime) => 
+      notificationTime.isAfter(now)
+    ).map((notificationTime) async {
+      try {
+        final notificationTimeUtc = notificationTime.toUtc();
+        
+        await NotificationService().scheduleTaskNotification(
+          context: context, 
+          taskId: taskId,
+          title: 'Task Reminder: $title',
+          body: taskDate != null 
+              ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+              : '$title reminder',
+          scheduledTimeUtc: notificationTimeUtc,
+          payload: {
+            'taskId': taskId,
+            'type': 'task_reminder',
+            'taskTitle': title,
+            'dueDate': taskDate?.toIso8601String(),
+          },
+          isAlarm: true,
+        );
+        
+        scheduledCount++;
+        debugPrint("✅ Scheduled notification for: $notificationTime");
+      } catch (e) {
+        debugPrint("❌ Failed to schedule notification: $e");
+      }
+    }).toList();
+
+    // Wait for all notifications to be scheduled, but don't block the main task creation
+    if (notificationFutures.isNotEmpty) {
+      await Future.wait(notificationFutures);
+    }
+
+    // Show success message only if we actually scheduled something
+    if (scheduledCount > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✅ $scheduledCount notification(s) scheduled."),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -189,12 +231,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
       }
 
       final uid = user.uid;
-      final newTaskRef =
-          FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('tasks')
-              .doc();
+      final newTaskRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('tasks')
+          .doc();
 
       Task newTask;
 
@@ -207,13 +248,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: taskDate, // ✅ Can be null for recurring tasks
+            date: taskDate,
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             taskType: _selectedType.name,
             notificationTimes: _notificationTimes,
-            //fcmToken: await getFcmToken(uid),
           );
           break;
 
@@ -222,13 +262,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: taskDate, // ✅ Can be null for recurring tasks
+            date: taskDate,
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-           // fcmToken: await getFcmToken(uid),
           );
           break;
 
@@ -237,121 +276,61 @@ class _AddTaskPageState extends State<AddTaskPage> {
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: taskDate, // ✅ Can be null for recurring tasks
+            date: taskDate,
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-           // fcmToken: await getFcmToken(uid),
           );
           break;
 
         case TaskType.monthly:
-          final dayOfMonth = taskDate?.day ?? now.day; // ✅ Default to current day if no date
+          final dayOfMonth = taskDate?.day ?? now.day;
           newTask = MonthlyTask(
             docId: newTaskRef.id,
             title: title,
             detail: detail,
-            date: taskDate, // ✅ Can be null for recurring tasks
+            date: taskDate,
             isCompleted: _isCompleted,
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             dayOfMonth: dayOfMonth,
             completionStamps: _isCompleted ? [now] : [],
             notificationTimes: _notificationTimes,
-          //  fcmToken: await getFcmToken(uid),
           );
           break;
       }
 
-      debugPrint(
-        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}",
-      );
+      debugPrint("Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}");
 
+      // 🚀 FIRST: Save the task to Firestore immediately
       await newTaskRef.set(newTask.toMap());
+      debugPrint("✅ Task '$title' successfully added to Firestore");
 
-      int scheduledCount = 0;
-
-      // Schedule notifications using the global notificationService instance
-      for (final notificationTime in _notificationTimes) {
-        if (notificationTime.isAfter(now)) {
-          // Convert local notification time to UTC for Firestore consistency
-          final notificationTimeUtc = notificationTime.toUtc();
-
-          // FIX: Use the global instance, not creating a new one
-          await NotificationService().scheduleTaskNotification(
-            context: context, 
-            taskId: newTaskRef.id, // Use Firestore document ID as taskId
-            title: 'Task Reminder: $title',
-            body: taskDate != null 
-                ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                : '$title reminder', // ✅ Different body for no end date
-            scheduledTimeUtc: notificationTimeUtc, // Pass UTC time to service
-            payload: {
-              'taskId': newTaskRef.id,
-              'type': 'task_reminder',
-              'taskTitle': title,
-              'dueDate': taskDate?.toIso8601String(),
-            },
-          );
-          scheduledCount++;
-
-          debugPrint(
-            "Scheduled notification for UTC time: $notificationTimeUtc",
-          );
-          debugPrint("Which is local time: $notificationTime");
-        }
-      }
-
-      if (scheduledCount > 0) {
+      // 🚀 SECOND: Show immediate success message
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("✅ $scheduledCount notification(s) scheduled."),
+            content: Text("✅ Task '$title' added successfully!"),
             backgroundColor: Colors.green,
-          ),
-        );
-        debugPrint("✅ $scheduledCount notification(s) scheduled.");
-      }
-
-      // FIXED: Correctly handle List<ConnectivityResult> from new API
-      final List<ConnectivityResult> connectivityResults =
-          await Connectivity().checkConnectivity();
-
-      // Check if any of the connectivity types indicate we're online
-      final bool isOnline = connectivityResults.any(
-        (result) =>
-            result == ConnectivityResult.wifi ||
-            result == ConnectivityResult.mobile ||
-            result == ConnectivityResult.ethernet ||
-            result == ConnectivityResult.vpn,
-      );
-
-      if (!isOnline) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "✅ Task added offline. Will sync when internet is back.",
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("✅ Task '$title' added."),
-            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
 
-      debugPrint(
-        "✅ Task '$title' of type ${_selectedType.name} successfully added to Firestore",
-      );
-
+      // 🚀 THIRD: Navigate back immediately without waiting for notifications
       if (mounted) {
         Navigator.pop(context, true);
       }
+
+      // 🚀 FOURTH: Schedule notifications in the background (after navigation)
+      if (_notificationTimes.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scheduleNotifications(newTaskRef.id, title, taskDate);
+        });
+      }
+
     } catch (e, stack) {
       debugPrint("❌ Error adding task: $e");
       debugPrint("Stack trace:\n$stack");
@@ -363,12 +342,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
             backgroundColor: Colors.red,
           ),
         );
-      }
-    } finally {
-      if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+    // 🚀 REMOVED: Don't set _isSaving to false here since we navigated away
   }
 
   Future<void> _pickNotificationTime() async {
@@ -379,7 +356,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       context: context,
       initialDate: now,
       firstDate: now,
-      lastDate: taskDate ?? DateTime(2100), // ✅ Handle null task date
+      lastDate: taskDate ?? DateTime(2100),
     );
     if (pickedDate == null) return;
 
@@ -407,7 +384,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    // ✅ Only check against task date if it exists
     if (taskDate != null && newNotificationTime.isAfter(taskDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -529,35 +505,32 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             horizontal: 16,
                           ),
                         ),
-                        items:
-                            TaskType.values.map((type) {
-                              return DropdownMenuItem(
-                                value: type,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      type.icon,
-                                      color: type.color,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      type.label,
-                                      style: TextStyle(color: type.color),
-                                    ),
-                                  ],
+                        items: TaskType.values.map((type) {
+                          return DropdownMenuItem(
+                            value: type,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  type.icon,
+                                  color: type.color,
+                                  size: 20,
                                 ),
-                              );
-                            }).toList(),
+                                const SizedBox(width: 12),
+                                Text(
+                                  type.label,
+                                  style: TextStyle(color: type.color),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
                         onChanged: (type) {
                           if (type != null) {
                             setState(() {
                               _selectedType = type;
-                              // ✅ Reset end date toggle for recurring tasks
                               if (_supportsNoEndDate) {
-                                _hasEndDate = true; // Default to having end date
+                                _hasEndDate = true;
                               }
-                              // ✅ Clear date if switching to recurring without end date
                               if (!_hasEndDate && _supportsNoEndDate) {
                                 _selectedDate = null;
                               }
@@ -574,7 +547,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
               const SizedBox(height: 20),
 
-              // ✅ NEW: End Date Toggle for recurring tasks
               if (_supportsNoEndDate) ...[
                 Card(
                   elevation: 2,
@@ -615,10 +587,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                 setState(() {
                                   _hasEndDate = val;
                                   if (!val) {
-                                    // When disabling end date, clear the date
                                     _selectedDate = null;
                                   } else {
-                                    // When enabling end date, set to current date if null
                                     _selectedDate ??= DateTime.now();
                                   }
                                 });
@@ -691,7 +661,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
               const SizedBox(height: 20),
 
-              // Date & Time Selection (only show if required or hasEndDate is true)
               if (_requiresEndDate || _hasEndDate) ...[
                 Card(
                   elevation: 2,
@@ -779,21 +748,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children:
-                              _notificationTimes.map((time) {
-                                return Chip(
-                                  label: Text(
-                                    DateFormat.yMd().add_jm().format(time),
-                                  ),
-                                  deleteIcon: const Icon(Icons.close, size: 16),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _notificationTimes.remove(time);
-                                    });
-                                  },
-                                  backgroundColor: Colors.blue.withOpacity(0.1),
-                                );
-                              }).toList(),
+                          children: _notificationTimes.map((time) {
+                            return Chip(
+                              label: Text(
+                                DateFormat.yMd().add_jm().format(time),
+                              ),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() {
+                                  _notificationTimes.remove(time);
+                                });
+                              },
+                              backgroundColor: Colors.blue.withOpacity(0.1),
+                            );
+                          }).toList(),
                         ),
                       const SizedBox(height: 12),
                       SizedBox(

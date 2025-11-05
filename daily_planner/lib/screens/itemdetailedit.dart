@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/utils/notification_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,10 +19,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
   late TextEditingController _detailController;
   late TextEditingController _editNoteController;
 
-  final ValueNotifier<DateTime?> _selectedDateNotifier = ValueNotifier<DateTime?>(null); // ✅ Made nullable
+  final ValueNotifier<DateTime?> _selectedDateNotifier = ValueNotifier<DateTime?>(null);
   final ValueNotifier<bool> _isCompletedNotifier = ValueNotifier(false);
   final ValueNotifier<List<DateTime>> _notificationTimesNotifier = ValueNotifier([]);
-  final ValueNotifier<bool> _hasEndDateNotifier = ValueNotifier(true); // ✅ New: Toggle for end date
+  final ValueNotifier<bool> _hasEndDateNotifier = ValueNotifier(true);
 
   bool _isSaving = false;
   late List<DateTime> _oldNotificationTimes;
@@ -33,11 +34,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _detailController = TextEditingController(text: widget.task.detail);
     _editNoteController = TextEditingController();
 
-    _selectedDateNotifier.value = widget.task.date; // ✅ Can be null now
+    _selectedDateNotifier.value = widget.task.date;
     _isCompletedNotifier.value = widget.task.isCompleted;
     _oldNotificationTimes = widget.task.notificationTimes ?? [];
     
-    // ✅ Initialize hasEndDate based on whether task has a date
     _hasEndDateNotifier.value = widget.task.date != null;
 
     loadNotificationTimes(widget.task).then((times) {
@@ -53,7 +53,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
     _selectedDateNotifier.dispose();
     _isCompletedNotifier.dispose();
     _notificationTimesNotifier.dispose();
-    _hasEndDateNotifier.dispose(); // ✅ Dispose the new notifier
+    _hasEndDateNotifier.dispose();
     super.dispose();
   }
 
@@ -121,7 +121,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
       context: context,
       initialDate: now,
       firstDate: now,
-      lastDate: taskDate ?? DateTime(2100), // ✅ Handle null task date
+      lastDate: taskDate ?? DateTime(2100),
     );
     if (pickedDate == null) return;
 
@@ -144,7 +144,6 @@ class _EditTaskPageState extends State<EditTaskPage> {
       return;
     }
     
-    // ✅ Only check against task date if it exists
     if (taskDate != null && newTime.isAfter(taskDate)) {
       _showSnackBar("❌ Notification must be before task time");
       return;
@@ -183,6 +182,71 @@ class _EditTaskPageState extends State<EditTaskPage> {
     return taskType == 'DailyTask' || taskType == 'WeeklyTask' || taskType == 'MonthlyTask';
   }
 
+  // 🚀 OPTIMIZED: Handle notifications in background
+  Future<void> _handleNotifications(String taskId, String title, DateTime? selectedDate) async {
+    final now = DateTime.now();
+    List<DateTime> finalTimes = [..._notificationTimesNotifier.value];
+
+    // Add fallback notification if none and task has end date
+    if (!_isCompletedNotifier.value && finalTimes.isEmpty && selectedDate != null) {
+      final fallback = selectedDate.subtract(const Duration(minutes: 15));
+      if (fallback.isAfter(now)) finalTimes.add(fallback);
+    }
+
+    // Prepare Alarm IDs
+    final oldIds = {
+      for (var t in _oldNotificationTimes)
+        generateNotificationId(taskId, t),
+    };
+    final newIds = {
+      for (var t in finalTimes)
+        generateNotificationId(taskId, t),
+    };
+
+    // Cancel removed notifications
+    final removedIds = oldIds.difference(newIds);
+    for (final id in removedIds) {
+      try {
+        await PushNotifications().cancelNotification(id);
+        debugPrint("✅ Cancelled notification: $id");
+      } catch (e) {
+        debugPrint("❌ Error cancelling notification $id: $e");
+      }
+    }
+
+    // Schedule new notifications asynchronously
+    final notificationFutures = finalTimes.where((time) => 
+      time.isAfter(now) && !_oldNotificationTimes.any((oldTime) => oldTime.isAtSameMomentAs(time))
+    ).map((time) async {
+      try {
+        await NotificationService().scheduleTaskNotification(
+          context: context,
+          taskId: taskId,
+          title: 'Reminder: $title',
+          body: selectedDate != null 
+              ? '$title is due at ${DateFormat.jm().format(selectedDate)}'
+              : '$title reminder',
+          scheduledTimeUtc: time.toUtc(),
+          payload: {
+            'taskId': taskId,
+            'type': 'task_reminder',
+            'taskTitle': title,
+            'dueDate': selectedDate?.toIso8601String(),
+          },
+          isAlarm: true
+        );
+        debugPrint("✅ Scheduled notification for: $time");
+      } catch (e) {
+        debugPrint("❌ Failed to schedule notification: $e");
+      }
+    }).toList();
+
+    // Wait for all notifications in background
+    if (notificationFutures.isNotEmpty) {
+      await Future.wait(notificationFutures);
+    }
+  }
+
   Future<void> _saveChanges() async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
@@ -198,63 +262,23 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
       final isCompleted = _isCompletedNotifier.value;
       final hasEndDate = _hasEndDateNotifier.value;
-      final selectedDate = hasEndDate ? _selectedDateNotifier.value : null; // ✅ Can be null
-      List<DateTime> finalTimes = [..._notificationTimesNotifier.value];
-
-      // Add fallback notification if none and task has end date
-      if (!isCompleted && finalTimes.isEmpty && selectedDate != null) {
-        final fallback = selectedDate.subtract(const Duration(minutes: 15));
-        if (fallback.isAfter(now)) finalTimes.add(fallback);
-      }
-
-      // Prepare Alarm IDs
-      final oldIds = {
-        for (var t in _oldNotificationTimes)
-          generateNotificationId(widget.task.docId!, t),
-      };
-      final newIds = {
-        for (var t in finalTimes)
-          generateNotificationId(widget.task.docId!, t),
-      };
-
-      // Cancel removed notifications
-      final removedIds = oldIds.difference(newIds);
-      for (final id in removedIds) {
-        await PushNotifications().cancelNotification(id);
-      }
-
-      // Schedule new notifications
-      for (final time in finalTimes) {
-        if (time.isAfter(now) &&
-            !_oldNotificationTimes.any((oldTime) => oldTime.isAtSameMomentAs(time))) {
-          await PushNotifications().scheduleNotification(
-            id: generateNotificationId(widget.task.docId!, time),
-            title: 'Reminder: $newTitle',
-            body: selectedDate != null 
-                ? '$newTitle is due at ${DateFormat.jm().format(selectedDate)}'
-                : '$newTitle reminder', // ✅ Different body for no end date
-            scheduledTime: time,
-            payload: selectedDate != null
-                ? "This notification is due at ${DateFormat.jm().format(selectedDate)}"
-                : "This is a reminder for your recurring task",
-          );
-        }
-      }
+      final selectedDate = hasEndDate ? _selectedDateNotifier.value : null;
 
       // Prepare Firestore update
       final updateData = <String, dynamic>{
         'title': newTitle,
         'detail': _detailController.text.trim(),
         'isCompleted': isCompleted,
-        'notificationTimes':
-            finalTimes.map((dt) => Timestamp.fromDate(dt.toUtc())).toList(),
+        'notificationTimes': _notificationTimesNotifier.value
+            .map((dt) => Timestamp.fromDate(dt.toUtc()))
+            .toList(),
       };
 
       // ✅ Only add date if it exists
       if (selectedDate != null) {
         updateData['date'] = Timestamp.fromDate(selectedDate.toUtc());
       } else {
-        updateData['date'] = null; // ✅ Explicitly set to null for no end date
+        updateData['date'] = null;
       }
 
       // Add edit history if there's a note
@@ -302,6 +326,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
         }
       }
 
+      // 🚀 FIRST: Save to Firestore immediately
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -309,14 +334,25 @@ class _EditTaskPageState extends State<EditTaskPage> {
           .doc(widget.task.docId)
           .update(updateData);
 
+      debugPrint("✅ Task '$newTitle' successfully updated in Firestore");
+
+      // 🚀 SECOND: Show immediate success message
       _showSnackBar("✅ Task updated successfully!");
+
+      // 🚀 THIRD: Navigate back immediately
       if (mounted) Navigator.pop(context, true);
+
+      // 🚀 FOURTH: Handle notifications in background (after navigation)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleNotifications(widget.task.docId!, newTitle, selectedDate);
+      });
+
     } catch (e, stack) {
       debugPrint("❌ Error updating task: $e\n$stack");
       _showSnackBar("❌ Failed to update task: ${e.toString()}");
-    } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+    // 🚀 REMOVED: Don't set _isSaving to false here since we navigated away
   }
 
   void _showSnackBar(String message) {
@@ -327,6 +363,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
         SnackBar(
           content: Text(message),
           backgroundColor: message.contains("❌") ? Colors.red : Colors.green,
+          duration: const Duration(seconds: 3),
         ),
       );
   }
@@ -536,10 +573,8 @@ class _EditTaskPageState extends State<EditTaskPage> {
                                 onChanged: (val) {
                                   _hasEndDateNotifier.value = val;
                                   if (!val) {
-                                    // When disabling end date, clear the date
                                     _selectedDateNotifier.value = null;
                                   } else {
-                                    // When enabling end date, set to current date if null
                                     _selectedDateNotifier.value ??= DateTime.now();
                                   }
                                 },

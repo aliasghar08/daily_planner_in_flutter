@@ -112,6 +112,9 @@ Future<void> main() async {
   // ✅ FIXED: Initialize NotificationService BEFORE running app
   await _initializeNotificationService();
 
+  // ✅ FIXED: Call runApp AFTER all critical initializations
+  runApp(const MyApp());
+
   // ✅ FIXED: Initialize FCM and other services
   await _initializeFCM();
   await _initializeAndroidServices();
@@ -128,8 +131,7 @@ Future<void> main() async {
     }
   }
 
-  // ✅ FIXED: Call runApp AFTER all critical initializations
-  runApp(const MyApp());
+  
 }
 
 // Test method - call this somewhere in your app
