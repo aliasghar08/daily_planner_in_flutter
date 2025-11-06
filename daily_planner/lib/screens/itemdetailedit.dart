@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/notification_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -219,20 +220,20 @@ class _EditTaskPageState extends State<EditTaskPage> {
       time.isAfter(now) && !_oldNotificationTimes.any((oldTime) => oldTime.isAtSameMomentAs(time))
     ).map((time) async {
       try {
-        await NotificationService().scheduleTaskNotification(
-          context: context,
-          taskId: taskId,
+        await NativeAlarmHelper.scheduleAlarmAtTime(
+          
+          id: taskId as int,
           title: 'Reminder: $title',
           body: selectedDate != null 
               ? '$title is due at ${DateFormat.jm().format(selectedDate)}'
               : '$title reminder',
-          scheduledTimeUtc: time.toUtc(),
-          payload: {
-            'taskId': taskId,
-            'type': 'task_reminder',
-            'taskTitle': title,
-            'dueDate': selectedDate?.toIso8601String(),
-          },
+          dateTime: time.toUtc(),
+          // payload: {
+          //   'taskId': taskId,
+          //   'type': 'task_reminder',
+          //   'taskTitle': title,
+          //   'dueDate': selectedDate?.toIso8601String(),
+          // },
           
         );
         debugPrint("✅ Scheduled notification for: $time");

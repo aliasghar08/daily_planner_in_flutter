@@ -10,8 +10,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
-final notificationService = NotificationService();
-
 class ItemWidget extends StatefulWidget {
   final Task item;
   final VoidCallback? onEditDone;
@@ -292,18 +290,13 @@ class _ItemWidgetState extends State<ItemWidget> {
       if (task.notificationTimes != null &&
           task.notificationTimes!.isNotEmpty) {
         for (final time in task.notificationTimes!) {
-          await notificationService.cancelNotification(
-            task.docId!,
-            time.toUtc(),
-          );
+          String id = generateNotificationId(task.docId!, task.date!);
+          await NativeAlarmHelper.cancelAlarmById(id as int);
         }
       } else {
         if (task.date != null) {
           final fallbackId = generateNotificationId(task.docId!, task.date!);
-          await notificationService.cancelNotification(
-            fallbackId,
-            task.date!.toUtc(),
-          );
+          await NativeAlarmHelper.cancelAlarmById(fallbackId as int);
         }
       }
 

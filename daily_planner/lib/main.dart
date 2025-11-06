@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -18,15 +19,11 @@ import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'package:daily_planner/utils/notification_service.dart';
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-final notificationService = NotificationService();
 
 // Background message handler (must be top-level)
 @pragma('vm:entry-point')
@@ -77,7 +74,8 @@ Future<void> _showNotification({
 
 Future<void> _initializeNotificationService() async {
   try {
-    await NotificationService().initialize();
+    //await NotificationService().initialize();
+    await NativeAlarmHelper.initialize();
     debugPrint('✅ NotificationService initialized successfully');
   } catch (e) {
     debugPrint('❌ Error initializing NotificationService: $e');
@@ -88,7 +86,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ✅ FIXED: Initialize Android Alarm Manager Plus FIRST
-  await AndroidAlarmManager.initialize();
+  // await AndroidAlarmManager.initialize();
 
   // Initialize Firebase with offline persistence
   try {

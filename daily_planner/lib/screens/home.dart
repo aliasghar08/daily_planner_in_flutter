@@ -35,7 +35,7 @@ class _MyHomeState extends State<MyHome> {
   User? user;
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = "";
-  bool _serviceStarted = false;
+  bool _nativeAlarmInitialized = false;
   bool _authChecking = true; 
 
   // Add Medication Manager
@@ -45,6 +45,9 @@ class _MyHomeState extends State<MyHome> {
   void initState() {
     super.initState();
 
+    // Initialize NativeAlarmHelper first
+    _initializeNativeAlarmHelper();
+
     FirebaseAuth.instance.authStateChanges().listen((newUser) {
       setState(() {
         user = newUser;
@@ -53,7 +56,7 @@ class _MyHomeState extends State<MyHome> {
 
       if (user != null) {
         fetchTasksFromFirestore(user!); // async, non-blocking
-        maybeRequestAlarmPermission();
+        _maybeRequestAlarmPermission();
       }
     });
 
@@ -62,6 +65,57 @@ class _MyHomeState extends State<MyHome> {
         searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  // ✅ NEW: Initialize NativeAlarmHelper
+  Future<void> _initializeNativeAlarmHelper() async {
+    try {
+      await NativeAlarmHelper.initialize();
+      setState(() {
+        _nativeAlarmInitialized = true;
+      });
+      debugPrint('✅ NativeAlarmHelper initialized successfully');
+    } catch (e) {
+      debugPrint('❌ NativeAlarmHelper initialization failed: $e');
+      setState(() {
+        _nativeAlarmInitialized = false;
+      });
+    }
+  }
+
+  // ✅ UPDATED: Renamed and updated alarm permission method
+  Future<void> _maybeRequestAlarmPermission() async {
+    if (!_nativeAlarmInitialized) {
+      debugPrint('NativeAlarmHelper not initialized, skipping permission request');
+      return;
+    }
+
+    // For Android, check exact alarm permission
+    if (!await NativeAlarmHelper.checkExactAlarmPermission()) {
+      final shouldRequest = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Allow Alarm Permission"),
+          content: const Text(
+            "We need permission to schedule exact alarms for your tasks and medications.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("No"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text("Yes"),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldRequest == true) {
+        await NativeAlarmHelper.requestExactAlarmPermission();
+      }
+    }
   }
 
   // ✅ FIXED: Order by createdAt instead of date
@@ -119,36 +173,6 @@ class _MyHomeState extends State<MyHome> {
       }
     } catch (e) {
       debugPrint("Server fetch failed (offline?): $e");
-    }
-  }
-
-  Future<void> maybeRequestAlarmPermission() async {
-    final hasPermission = await NativeAlarmHelper.checkExactAlarmPermission();
-    if (!hasPermission) {
-      final shouldRequest = await showDialog<bool>(
-        context: context,
-        builder:
-            (ctx) => AlertDialog(
-              title: const Text("Allow Alarm Permission"),
-              content: const Text(
-                "We need permission to schedule exact alarms for your tasks.",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text("No"),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text("Yes"),
-                ),
-              ],
-            ),
-      );
-
-      if (shouldRequest == true) {
-        await NativeAlarmHelper.requestExactAlarmPermission();
-      }
     }
   }
 
@@ -299,18 +323,33 @@ class _MyHomeState extends State<MyHome> {
     return Column(
       children: [
         buildSearchBar(),
-        // ✅ ADDED: Debug info
-        // if (filtered.isNotEmpty)
-        //   Padding(
-        //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        //     child: Text(
-        //       "Showing ${filtered.length} task${filtered.length == 1 ? '' : 's'} (sorted by newest first)",
-        //       style: TextStyle(
-        //         fontSize: 12,
-        //         color: Colors.grey[600],
-        //       ),
-        //     ),
-        //   ),
+        // ✅ ADDED: Native Alarm System Status
+        if (!_nativeAlarmInitialized)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info, color: Colors.orange[800]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Alarm system initializing...',
+                    style: TextStyle(
+                      color: Colors.orange[800],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: () async => fetchTasksFromFirestore(user!),
@@ -447,6 +486,44 @@ class _MyHomeState extends State<MyHome> {
     );
   }
 
+  // ✅ NEW: Test Native Alarm System
+  Future<void> _testNativeAlarmSystem() async {
+    if (!_nativeAlarmInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Alarm system not initialized yet'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final testTime = DateTime.now().add(const Duration(seconds: 5));
+      
+      await NativeAlarmHelper.scheduleAlarmAtTime(
+        id: DateTime.now().millisecondsSinceEpoch,
+        title: "🔔 Test Alarm",
+        body: "This is a test of the native alarm system",
+        dateTime: testTime,
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Test alarm scheduled for 5 seconds!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Failed to schedule test alarm: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -455,6 +532,15 @@ class _MyHomeState extends State<MyHome> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text("My Tasks"),
+          actions: [
+            // ✅ NEW: Alarm System Test Button
+            if (_nativeAlarmInitialized)
+              IconButton(
+                icon: const Icon(Icons.alarm),
+                tooltip: 'Test Alarm System',
+                onPressed: _testNativeAlarmSystem,
+              ),
+          ],
           bottom: TabBar(
             isScrollable: true,
             tabs: [

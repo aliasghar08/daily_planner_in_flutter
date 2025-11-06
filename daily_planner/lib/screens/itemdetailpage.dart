@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:daily_planner/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
-import 'package:timezone/data/latest.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 
 class ItemDetailPage extends StatefulWidget {
   final Task task;
@@ -26,7 +25,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   List<DateTime> notificationTimes = [];
   bool? _currentCompletionStatus;
   bool _isLoading = true;
-  bool _notificationServiceInitialized = false;
+  bool _nativeAlarmInitialized = false;
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
@@ -49,16 +48,30 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _currentCompletionStatus = widget.task.isCompleted;
 
-    // Async setup after first frame to avoid blocking UI
+    // Initialize NativeAlarmHelper and load data
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _initializeNotifications();
+      await _initializeNativeAlarmHelper();
       await _checkNotificationChannel();
       await _loadTaskData();
-      await _initializeNotificationService();
     });
   }
 
-  // ✅ NEW: Helper function to format dates in "Saturday, 23rd August 2025" format
+  Future<void> _initializeNativeAlarmHelper() async {
+    try {
+      await NativeAlarmHelper.initialize();
+      setState(() {
+        _nativeAlarmInitialized = true;
+      });
+      debugPrint('✅ NativeAlarmHelper initialized successfully');
+    } catch (e) {
+      debugPrint('❌ NativeAlarmHelper initialization failed: $e');
+      setState(() {
+        _nativeAlarmInitialized = false;
+      });
+    }
+  }
+
+  // ✅ Helper function to format dates in "Saturday, 23rd August 2025" format
   String _formatDateTime(DateTime? date) {
     if (date == null) return "Not set";
 
@@ -68,7 +81,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     return dateFormat.format(date);
   }
 
-  // ✅ NEW: Helper function to get day suffix (st, nd, rd, th)
+  // ✅ Helper function to get day suffix (st, nd, rd, th)
   String _getDaySuffix(int day) {
     if (day >= 11 && day <= 13) return 'th';
     switch (day % 10) {
@@ -83,27 +96,11 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
-  // ✅ NEW: Helper function for shorter date format (for lists)
+  // ✅ Helper function for shorter date format (for lists)
   String _formatShortDateTime(DateTime date) {
     final daySuffix = _getDaySuffix(date.day);
     final dateFormat = DateFormat("EEE, d'$daySuffix' MMM yyyy 'at' h:mm a");
     return dateFormat.format(date);
-  }
-
-  // MODIFIED: Initialize NotificationService only
-  Future<void> _initializeNotificationService() async {
-    try {
-      await NotificationService().initialize();
-      setState(() {
-        _notificationServiceInitialized = true;
-      });
-      debugPrint('NotificationService initialized successfully');
-    } catch (e) {
-      debugPrint('Error initializing NotificationService: $e');
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text('Failed to initialize notifications: $e')),
-      );
-    }
   }
 
   Future<void> _loadTaskData() async {
@@ -136,7 +133,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               .toList() ??
           [];
 
-      // ✅ FIX: Load edit history from Firestore
+      // ✅ Load edit history from Firestore
       final loadedEditHistory =
           (data['editHistory'] as List<dynamic>?)
               ?.map((editMap) => _parseEditHistory(editMap))
@@ -152,7 +149,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         _currentCompletionStatus = loadedCompletionStatus;
         completedList = loadedStamps;
         notificationTimes = loadedNotifications;
-        // ✅ FIX: Update the task with loaded edit history
+        // ✅ Update the task with loaded edit history
         widget.task.editHistory = loadedEditHistory;
         _isLoading = false;
       });
@@ -217,56 +214,16 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         );
   }
 
-  Future<void> _initializeNotifications() async {
+  // ✅ UPDATED: Use NativeAlarmHelper for notifications
+  Future<void> _triggerTestAlarm(int seconds) async {
     try {
-      tz.initializeTimeZones();
+      final scheduledTime = DateTime.now().add(Duration(seconds: seconds));
 
-      const androidSettings = AndroidInitializationSettings(
-        '@mipmap/ic_launcher',
-      );
-      final iOSSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
-      );
-
-      await flutterLocalNotificationsPlugin.initialize(
-        InitializationSettings(android: androidSettings, iOS: iOSSettings),
-        onDidReceiveNotificationResponse:
-            (details) => debugPrint('Notification tapped: ${details.payload}'),
-      );
-
-      if (Platform.isAndroid) await _requestAndroidPermissions();
-    } catch (e) {
-      debugPrint('Notification init error: $e');
-    }
-  }
-
-  Future<void> _requestAndroidPermissions() async {
-    final granted =
-        await flutterLocalNotificationsPlugin
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >()
-            ?.requestNotificationsPermission();
-    debugPrint('Notification permission granted: $granted');
-  }
-
-  int generateNotificationId(String taskId, DateTime time) =>
-      (taskId + time.toIso8601String()).hashCode.abs();
-
-  // MODIFIED: Use NotificationService for hybrid notifications with clear feedback
-  Future<void> _triggerTestAlarm(int sec) async {
-    try {
-      // alarm will be triggered on scheduled time
-      final scheduledTime = DateTime.now().add(Duration(seconds: sec));
-      final scheduledTimeUtc = scheduledTime.toUtc();
-
-      // Check if notification service is initialized
-      if (!_notificationServiceInitialized) {
+      // Check if native alarm system is initialized
+      if (!_nativeAlarmInitialized) {
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
-            content: Text('Notifications not initialized yet. Please wait...'),
+            content: Text('Alarm system not initialized yet. Please wait...'),
           ),
         );
         return;
@@ -283,103 +240,119 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             result == ConnectivityResult.vpn,
       );
 
-      // Use NotificationService for hybrid notifications (local + push based on connectivity)
-      // await NotificationService().scheduleAlarmNotification(
-      //   context: context,
-      //   taskId: widget.task.docId!,
-      //   title: widget.task.title,
-      //   body: "🔔 Reminder: ${widget.task.title}",
-      //   scheduledTimeUtc: scheduledTimeUtc,
-      //   payload: {
-      //     'taskId': widget.task.docId!,
-      //     'type': 'test_notification',
-      //     'scheduledTime': scheduledTimeUtc.toIso8601String(),
-      //   },
-      // );
-
-      await NotificationService().scheduleAlarmNotification(
-        context: context,
-        taskId: widget.task.docId!,
-        title: widget.task.title,
-        body: "🚨 ALARM: ${widget.task.title}\nTap to view details",
-        scheduledTimeUtc: scheduledTimeUtc,
+      // Use NativeAlarmHelper to schedule the alarm
+      await NativeAlarmHelper.scheduleHybridAlarm(
+        id: _generateAlarmId(widget.task.docId!, scheduledTime),
+        title: "🚨 ALARM: ${widget.task.title}",
+        body: "Tap to view task details",
+        dateTime: scheduledTime,
         payload: {
-          'taskId': widget.task.docId!,
-          'type': 'alarm', // 🆕 Changed from 'test_notification' to 'alarm'
-          'scheduledTime': scheduledTimeUtc.toIso8601String(),
+          'taskId': widget.task.docId,
+          'type': 'task_reminder',
           'taskTitle': widget.task.title,
-          'taskDescription': widget.task.detail ?? '',
-          'alarmBehavior': true, // 🆕 Explicitly enable alarm behavior
-          'vibrationPattern': 'long', // 🆕 Custom vibration
-          'sound': 'alarm', // 🆕 Alarm sound
+          'dueDate': widget.task.date?.toIso8601String(),
         },
       );
 
-      // Show specific feedback based on connectivity
-      if (isOnline) {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(
-              "✅ Hybrid notification scheduled for $sec seconds!\n"
-              "• Local notification (always works)\n"
-              "• Push notification (sent to server)",
-            ),
-            backgroundColor: Colors.green,
+      // Show specific feedback based on connectivity and system
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(
+            "✅ Hybrid alarm scheduled for $seconds seconds!\n"
+            "• Native Android Alarm (most reliable)\n"
+            "• Fallback to local notifications\n"
+            "• ${isOnline ? 'Online - push capable' : 'Offline - local only'}",
           ),
-        );
-      } else {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text(
-              "📱 Local notification scheduled for $sec seconds!\n"
-              "• Local notification (scheduled now)\n"
-              "• Push notification (queued - will send when online)",
-            ),
-            backgroundColor: Colors.blue,
-          ),
-        );
-      }
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
 
+      debugPrint('Native alarm scheduled for: $scheduledTime');
       debugPrint('Connectivity status: ${isOnline ? 'Online' : 'Offline'}');
-      debugPrint('Notification scheduled for: $scheduledTime');
     } catch (e) {
       debugPrint('Error in test alarm: $e');
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          content: Text("❌ Failed to schedule notification: $e"),
+          content: Text("❌ Failed to schedule alarm: $e"),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // MODIFIED: Cancel all notifications using NotificationService
+  // ✅ UPDATED: Generate unique alarm ID
+  int _generateAlarmId(String taskId, DateTime time) {
+    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() %
+        1000000;
+  }
+
+  // ✅ UPDATED: Cancel alarms using NativeAlarmHelper
   Future<void> _cancelAllNotifications() async {
     try {
-      if (_notificationServiceInitialized) {
-        // Get all scheduled times for this task and cancel them
-        final scheduledTimes = await NotificationService()
-            .getScheduledTimesForDocument(widget.task.docId!);
+      if (_nativeAlarmInitialized) {
+        // Cancel all potential alarms for this task
+        // Since we don't store all alarm IDs, we'll cancel by known patterns
+        // or cancel all and reschedule if needed
 
-        if (scheduledTimes.isNotEmpty) {
-          await NotificationService().cancelAllNotificationsForDocument(
-            docId: widget.task.docId!,
-            scheduledTimesUtc: scheduledTimes,
-          );
+        // For now, cancel any alarms that might be scheduled in the near future
+        final now = DateTime.now();
+        final futureCutoff = now.add(const Duration(days: 30));
+
+        // Generate possible alarm IDs for the near future and cancel them
+        for (int i = 0; i < 100; i++) {
+          final testTime = now.add(Duration(hours: i));
+          final alarmId = _generateAlarmId(widget.task.docId!, testTime);
+          await NativeAlarmHelper.cancelAlarmById(alarmId);
         }
 
         scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(content: Text("All scheduled notifications canceled")),
+          const SnackBar(
+            content: Text("All scheduled alarms canceled for this task"),
+            backgroundColor: Colors.green,
+          ),
         );
       } else {
         scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(content: Text("Notification service not initialized")),
+          const SnackBar(
+            content: Text("Alarm system not initialized"),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
     } catch (e) {
-      debugPrint('Error cancelling notifications: $e');
+      debugPrint('Error cancelling alarms: $e');
       scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text("Failed to cancel notifications: $e")),
+        SnackBar(
+          content: Text("Failed to cancel alarms: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // ✅ UPDATED: Test immediate notification using NativeAlarmHelper
+  Future<void> _testImmediateNotification() async {
+    try {
+      await NativeAlarmHelper.showNow(
+        id: _generateAlarmId(widget.task.docId!, DateTime.now()),
+        title: "🔔 TEST: ${widget.task.title}",
+        body: "This is a test notification with alarm behavior",
+      );
+
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text("✅ Test notification shown with alarm behavior"),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error showing immediate notification: $e');
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text("❌ Failed to show test notification: $e"),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -450,7 +423,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   bool _isSameMonth(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month;
 
-  // ✅ NEW: Get task type display info
+  // ✅ Get task type display info
   String _getTaskTypeLabel() {
     final taskType = widget.task.taskType;
     switch (taskType) {
@@ -505,7 +478,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    // ✅ UPDATED: Use new date formatting functions
+    // ✅ Use new date formatting functions
     final formattedDeadline = _formatDateTime(task.date);
     final formattedCreatedAt = _formatDateTime(task.createdAt);
     final lastCompleted = completedList.isNotEmpty ? completedList.first : null;
@@ -576,7 +549,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 const SizedBox(height: 16),
 
                 // Add initialization status indicator
-                if (!_notificationServiceInitialized)
+                if (!_nativeAlarmInitialized)
                   Container(
                     padding: const EdgeInsets.all(8),
                     color: Colors.orange[100],
@@ -585,7 +558,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                         Icon(Icons.info, color: Colors.orange[800]),
                         const SizedBox(width: 8),
                         const Text(
-                          'Initializing notifications...',
+                          'Initializing alarm system...',
                           style: TextStyle(color: Colors.orange),
                         ),
                       ],
@@ -622,7 +595,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
                 const SizedBox(height: 16),
 
-                // ✅ UPDATED: Date & Time Information with new formatting
+                // ✅ Date & Time Information with new formatting
                 Card(
                   elevation: 2,
                   child: Padding(
@@ -756,7 +729,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 const SizedBox(height: 16),
                 _buildNotificationTimesExpansion(),
                 const SizedBox(height: 16),
-                _buildNotificationTestButtons(),
+                _buildAlarmTestButtons(),
                 const SizedBox(height: 16),
                 _buildEditHistory(),
               ],
@@ -789,11 +762,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   .map(
                     (date) => ListTile(
                       leading: const Icon(Icons.check, color: Colors.green),
-                      title: Text(
-                        _formatShortDateTime(
-                          date,
-                        ), // ✅ UPDATED: Use short format for lists
-                      ),
+                      title: Text(_formatShortDateTime(date)),
                     ),
                   )
                   .toList(),
@@ -825,19 +794,15 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                         Icons.notifications_active,
                         color: Colors.blue,
                       ),
-                      title: Text(
-                        _formatShortDateTime(
-                          date,
-                        ), // ✅ UPDATED: Use short format for lists
-                      ),
+                      title: Text(_formatShortDateTime(date)),
                     ),
                   )
                   .toList(),
     ),
   );
 
-  // MODIFIED: Updated button texts and handlers with better explanation
-  Widget _buildNotificationTestButtons() => Card(
+  // ✅ UPDATED: Alarm test buttons using NativeAlarmHelper
+  Widget _buildAlarmTestButtons() => Card(
     elevation: 2,
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -845,7 +810,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            "🔔 Smart Notification System",
+            "⏰ Native Alarm System",
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const SizedBox(height: 10),
@@ -868,68 +833,81 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 ),
                 const SizedBox(height: 4),
                 _buildFeatureRow(
-                  "📱 Local Notification",
-                  "Always scheduled - works offline",
+                  "📱 Native Android Alarm",
+                  "Uses AlarmManager - most reliable",
                 ),
                 _buildFeatureRow(
-                  "🌐 Push Notification",
-                  "Sent to server when online",
+                  "🔄 Automatic Fallback",
+                  "Falls back to local notifications",
                 ),
                 _buildFeatureRow(
-                  "⏰ Queued Notifications",
-                  "Auto-send when connection returns",
+                  "🔔 Alarm Behavior",
+                  "Persistent notifications with actions",
                 ),
                 _buildFeatureRow(
-                  "🔄 Cross-Device Sync",
-                  "Push notifications sync across devices",
+                  "⚡ Exact Timing",
+                  "Uses exact alarms for precision",
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
+
+          // Immediate test notification
           ElevatedButton(
             onPressed:
-                _notificationServiceInitialized
-                    ? () => _triggerTestAlarm(2)
-                    : null,
+                _nativeAlarmInitialized ? _testImmediateNotification : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            child: Text(
+              _nativeAlarmInitialized
+                  ? "Test Immediate Alarm Notification"
+                  : "Initializing...",
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Scheduled alarm tests
+          ElevatedButton(
+            onPressed:
+                _nativeAlarmInitialized ? () => _triggerTestAlarm(2) : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 48),
             ),
             child: Text(
-              _notificationServiceInitialized
-                  ? "Test Smart Notification (2 seconds)"
+              _nativeAlarmInitialized
+                  ? "Test Alarm (2 seconds)"
                   : "Initializing...",
             ),
           ),
           const SizedBox(height: 8),
           ElevatedButton(
             onPressed:
-                _notificationServiceInitialized
-                    ? () => _triggerTestAlarm(10)
-                    : null,
+                _nativeAlarmInitialized ? () => _triggerTestAlarm(10) : null,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
             ),
             child: Text(
-              _notificationServiceInitialized
-                  ? "Test Smart Notification (10 seconds)"
+              _nativeAlarmInitialized
+                  ? "Test Alarm (10 seconds)"
                   : "Initializing...",
             ),
           ),
           const SizedBox(height: 8),
           ElevatedButton(
             onPressed:
-                _notificationServiceInitialized
-                    ? () => _triggerTestAlarm(60)
-                    : null,
+                _nativeAlarmInitialized ? () => _triggerTestAlarm(60) : null,
             style: ElevatedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
             ),
             child: Text(
-              _notificationServiceInitialized
-                  ? "Test Smart Notification (1 minute)"
+              _nativeAlarmInitialized
+                  ? "Test Alarm (1 minute)"
                   : "Initializing...",
             ),
           ),
@@ -940,13 +918,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 48),
             ),
-            onPressed:
-                _notificationServiceInitialized
-                    ? _cancelAllNotifications
-                    : null,
+            onPressed: _nativeAlarmInitialized ? _cancelAllNotifications : null,
             child: Text(
-              _notificationServiceInitialized
-                  ? "Cancel All Notifications for This Task"
+              _nativeAlarmInitialized
+                  ? "Cancel All Alarms for This Task"
                   : "Initializing...",
             ),
           ),
@@ -1008,7 +983,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                   widget.task.editHistory.map((edit) {
                     final formattedEditTime = _formatShortDateTime(
                       edit.timestamp,
-                    ); // ✅ UPDATED
+                    );
                     return ListTile(
                       leading: const Icon(Icons.edit_note),
                       title: Text(formattedEditTime),

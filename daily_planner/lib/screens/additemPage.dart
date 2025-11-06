@@ -1,12 +1,11 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:daily_planner/main.dart';
-import 'package:daily_planner/utils/notification_service.dart';
+import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/catalog.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 enum TaskType { oneTime, daily, weekly, monthly }
 
@@ -67,6 +66,29 @@ class _AddTaskPageState extends State<AddTaskPage> {
   bool _isSaving = false;
   bool _hasEndDate = true; // ✅ New: Toggle for end date
   List<DateTime> _notificationTimes = [];
+  bool _nativeAlarmInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkNativeAlarmInitialization();
+  }
+
+  Future<void> _checkNativeAlarmInitialization() async {
+    // Try to initialize NativeAlarmHelper if not already done
+    try {
+      await NativeAlarmHelper.initialize();
+      setState(() {
+        _nativeAlarmInitialized = true;
+      });
+      debugPrint('✅ NativeAlarmHelper initialized in AddTaskPage');
+    } catch (e) {
+      debugPrint('❌ NativeAlarmHelper initialization failed: $e');
+      setState(() {
+        _nativeAlarmInitialized = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -120,7 +142,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return _selectedType == TaskType.oneTime;
   }
 
-  // 🚀 OPTIMIZED: Schedule notifications asynchronously without blocking UI
+  // 🚀 UPDATED: Schedule notifications using NativeAlarmHelper
   Future<void> _scheduleNotifications(String taskId, String title, DateTime? taskDate) async {
     final now = DateTime.now();
     int scheduledCount = 0;
@@ -130,29 +152,46 @@ class _AddTaskPageState extends State<AddTaskPage> {
       notificationTime.isAfter(now)
     ).map((notificationTime) async {
       try {
-        final notificationTimeUtc = notificationTime.toUtc();
-        
-        await NotificationService().scheduleTaskNotification(
-          context: context, 
-          taskId: taskId,
+        // Use NativeAlarmHelper for scheduling
+        await NativeAlarmHelper.scheduleAlarmAtTime(
+          id: _generateAlarmId(taskId, notificationTime),
           title: 'Task Reminder: $title',
           body: taskDate != null 
               ? '$title is due at ${DateFormat.jm().format(taskDate)}'
               : '$title reminder',
-          scheduledTimeUtc: notificationTimeUtc,
-          payload: {
-            'taskId': taskId,
-            'type': 'task_reminder',
-            'taskTitle': title,
-            'dueDate': taskDate?.toIso8601String(),
-          },
-          
+          dateTime: notificationTime,
         );
         
         scheduledCount++;
-        debugPrint("✅ Scheduled notification for: $notificationTime");
+        debugPrint("✅ Native alarm scheduled for: $notificationTime");
       } catch (e) {
-        debugPrint("❌ Failed to schedule notification: $e");
+        debugPrint("❌ Failed to schedule native alarm: $e");
+        
+        // Fallback to local notifications if native fails
+        try {
+          final androidDetails = AndroidNotificationDetails(
+            'daily_planner_channel',
+            'Daily Planner',
+            channelDescription: 'Task reminders and alerts',
+            importance: Importance.high,
+            priority: Priority.high,
+          );
+          
+          await FlutterLocalNotificationsPlugin().zonedSchedule(
+            _generateAlarmId(taskId, notificationTime),
+            'Task Reminder: $title',
+            taskDate != null 
+                ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                : '$title reminder',
+            tz.TZDateTime.from(notificationTime, tz.local),
+            NotificationDetails(android: androidDetails),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          );
+          
+          debugPrint("✅ Fallback notification scheduled for: $notificationTime");
+        } catch (fallbackError) {
+          debugPrint("❌ Fallback notification also failed: $fallbackError");
+        }
       }
     }).toList();
 
@@ -165,12 +204,17 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (scheduledCount > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("✅ $scheduledCount notification(s) scheduled."),
+          content: Text("✅ $scheduledCount notification(s) scheduled using ${_nativeAlarmInitialized ? 'Native Alarm System' : 'Fallback System'}."),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
       );
     }
+  }
+
+  // ✅ NEW: Generate unique alarm ID
+  int _generateAlarmId(String taskId, DateTime time) {
+    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() % 1000000;
   }
 
   Future<void> _addTask() async {
@@ -458,6 +502,61 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
+  // ✅ NEW: Build alarm system status indicator
+  Widget _buildAlarmSystemStatus() {
+    if (_nativeAlarmInitialized) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.green),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green[800], size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "✅ Native Alarm System Active",
+                style: TextStyle(
+                  color: Colors.green[800],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.orange),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange[800], size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "⚠️ Using Fallback Notification System",
+                style: TextStyle(
+                  color: Colors.orange[800],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final formattedDate = formatDate(_selectedDate);
@@ -478,6 +577,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Alarm System Status
+              _buildAlarmSystemStatus(),
+              const SizedBox(height: 16),
+
               // Task Type Selection
               Card(
                 elevation: 2,
@@ -730,6 +833,34 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // ✅ UPDATED: Show which system will be used
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: _nativeAlarmInitialized ? Colors.green[50] : Colors.orange[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _nativeAlarmInitialized ? Icons.alarm : Icons.notifications,
+                              color: _nativeAlarmInitialized ? Colors.green : Colors.orange,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _nativeAlarmInitialized 
+                                  ? "Using Native Alarm System" 
+                                  : "Using Fallback Notification System",
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _nativeAlarmInitialized ? Colors.green : Colors.orange,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 12),
