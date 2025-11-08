@@ -8,12 +8,16 @@ import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
-import android.os.Bundle
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Application
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.dart.DartExecutor
+import io.flutter.plugin.common.MethodChannel
+import org.json.JSONObject
 
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -26,6 +30,7 @@ class AlarmReceiver : BroadcastReceiver() {
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_BODY = "body"
         private const val EXTRA_NOTIFICATION_ID = "notificationId"
+        private const val EXTRA_PAYLOAD = "payload"
 
         const val ACTION_STOP_ALARM = "com.example.daily_planner.STOP_ALARM"
         const val ACTION_SNOOZE_ALARM = "com.example.daily_planner.SNOOZE_ALARM"
@@ -65,27 +70,17 @@ class AlarmReceiver : BroadcastReceiver() {
 
         when (intent.action) {
 
-            ACTION_STOP_ALARM -> {
-                stopAlarm(context, intent)
-            }
+            ACTION_STOP_ALARM -> stopAlarm(context, intent)
 
-            ACTION_SNOOZE_ALARM -> {
-                snoozeAlarm(context, intent)
-            }
+            ACTION_SNOOZE_ALARM -> snoozeAlarm(context, intent)
 
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_LOCKED_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                rescheduleAllAlarms(context)
-            }
+            Intent.ACTION_MY_PACKAGE_REPLACED -> rescheduleAllAlarms(context)
 
-            ACTION_KEEP_ALIVE -> {
-                scheduleKeepAliveAlarm(context)
-            }
+            ACTION_KEEP_ALIVE -> scheduleKeepAliveAlarm(context)
 
-            else -> {
-                handleAlarmTrigger(context, intent)
-            }
+            else -> handleAlarmTrigger(context, intent)
         }
     }
 
@@ -103,17 +98,19 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
 
-        // ✅ STOP ACTION
+        // STOP ACTION
         val stopIntent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_STOP_ALARM
             putExtra(EXTRA_NOTIFICATION_ID, id)
+            putExtra(EXTRA_TITLE, title)
+            putExtra(EXTRA_BODY, body)
         }
         val stopPending = PendingIntent.getBroadcast(
             context, id + 10000, stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // ✅ SNOOZE ACTION
+        // SNOOZE ACTION
         val snoozeIntent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_SNOOZE_ALARM
             putExtra(EXTRA_NOTIFICATION_ID, id)
@@ -127,8 +124,9 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("from_notification", true)
+            putExtra("notification_id", id)
         }
-
         val tapPendingIntent = PendingIntent.getActivity(
             context, id, tapIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -153,39 +151,85 @@ class AlarmReceiver : BroadcastReceiver() {
             ?.notify(id, notification)
     }
 
-    /** ✅ STOP ALARM: cancel notification immediately */
     private fun stopAlarm(context: Context, intent: Intent) {
         val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
+        val title = intent.getStringExtra(EXTRA_TITLE)
+        val body = intent.getStringExtra(EXTRA_BODY)
+        
         if (id != -1) {
             val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
             nm?.cancel(id)
             Log.d("AlarmReceiver", "Alarm stopped for ID = $id")
+            
+            // Remove from shared preferences
+            val prefs = context.getSharedPreferences(ALARMS_PREFS, Context.MODE_PRIVATE)
+            prefs.edit().remove(id.toString()).apply()
+            
+            // Notify Flutter
+            notifyFlutterAction(context, "stop", id, title, body)
         }
     }
 
-    /** ✅ SNOOZE ALARM: reschedule after 5 minutes */
     private fun snoozeAlarm(context: Context, intent: Intent) {
         val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
         val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reminder"
         val body = intent.getStringExtra(EXTRA_BODY) ?: "Snoozed Task"
 
+        if (id == -1) return
+
         val snoozeTime = System.currentTimeMillis() + (5 * 60 * 1000)
 
-        scheduleAlarm(context, id, title, body, snoozeTime)
+        // Schedule snoozed alarm
+        scheduleAlarm(context, id + 1000, "Snoozed: $title", body, snoozeTime)
 
-        // cancel existing ringing
+        // Cancel current notification
         val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
         nm?.cancel(id)
 
         Log.d("AlarmReceiver", "Alarm snoozed for ID $id - 5 minutes")
+        
+        // Notify Flutter
+        notifyFlutterAction(context, "snooze", id, title, body)
+    }
+
+    private fun notifyFlutterAction(context: Context, action: String, id: Int, title: String?, body: String?) {
+        try {
+            Log.d("AlarmReceiver", "Notifying Flutter about action: $action for ID: $id")
+            
+            val flutterEngine = getFlutterEngine(context)
+            val methodChannel = MethodChannel(
+                flutterEngine.dartExecutor.binaryMessenger, 
+                "com.example.daily_planner/alarm"
+            )
+            
+            val arguments = HashMap<String, Any>().apply {
+                put("action", action)
+                put("id", id)
+                title?.let { put("title", it) }
+                body?.let { put("body", it) }
+            }
+            
+            methodChannel.invokeMethod("onNotificationAction", arguments)
+            
+            Log.d("AlarmReceiver", "Successfully notified Flutter about action")
+            
+        } catch (e: Exception) {
+            Log.e("AlarmReceiver", "Error notifying Flutter: ${e.message}", e)
+        }
+    }
+
+    private fun getFlutterEngine(context: Context): FlutterEngine {
+        val application = context.applicationContext as Application
+        val flutterEngine = FlutterEngine(application)
+        flutterEngine.dartExecutor.executeDartEntrypoint(
+            DartExecutor.DartEntrypoint.createDefault()
+        )
+        return flutterEngine
     }
 
     private fun scheduleKeepAliveAlarm(context: Context) {
         val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java) ?: return
-
-        val intent = Intent(context, AlarmReceiver::class.java).apply {
-            action = ACTION_KEEP_ALIVE
-        }
+        val intent = Intent(context, AlarmReceiver::class.java).apply { action = ACTION_KEEP_ALIVE }
 
         val pendingIntent = PendingIntent.getBroadcast(
             context, KEEP_ALIVE_ALARM_ID, intent,
@@ -215,7 +259,7 @@ class AlarmReceiver : BroadcastReceiver() {
     private fun scheduleAlarm(context: Context, id: Int, title: String, body: String, time: Long) {
         val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java) ?: return
         val prefs = context.getSharedPreferences(ALARMS_PREFS, Context.MODE_PRIVATE)
-    prefs.edit().putLong(id.toString(), time).apply()
+        prefs.edit().putLong(id.toString(), time).apply()
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(EXTRA_TITLE, title)
@@ -234,4 +278,4 @@ class AlarmReceiver : BroadcastReceiver() {
             pendingIntent
         )
     }
-}  
+}

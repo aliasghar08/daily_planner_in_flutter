@@ -20,21 +20,43 @@ class NativeAlarmHelper {
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   static bool _isOnline = false;
   static final List<Map<String, dynamic>> _pendingNotifications = [];
+  
+  // Add this stream controller to handle action callbacks
+  static final StreamController<Map<String, dynamic>> _actionStreamController = 
+      StreamController<Map<String, dynamic>>.broadcast();
+  static Stream<Map<String, dynamic>> get actionStream => _actionStreamController.stream;
 
   /// MUST call once during app startup
   static Future<void> initialize() async {
+    // Create notification channel first (Android 8.0+)
+    final AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'daily_planner_channel',
+      'Daily Planner',
+      description: 'Task reminders and alerts',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
+    );
+    
+    await _flnp.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+
     // Your existing initialization code
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     final iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
+    
     );
     
-    await _flnp.initialize(InitializationSettings(
-      android: androidSettings, 
-      iOS: iosSettings,
-    ));
+    await _flnp.initialize(
+      InitializationSettings(
+        android: androidSettings, 
+        iOS: iosSettings,
+      ),
+      onDidReceiveNotificationResponse: _handleNotificationResponse,
+    );
 
     // Timezone setup
     tz_data.initializeTimeZones();
@@ -43,6 +65,90 @@ class NativeAlarmHelper {
 
     // Initialize connectivity monitoring
     await _setupConnectivityMonitoring();
+
+    // Setup method channel for native actions
+    _setupMethodChannel();
+  }
+
+  /// Setup method channel to receive native actions
+  static void _setupMethodChannel() {
+    _channel.setMethodCallHandler((MethodCall call) async {
+      debugPrint('📱 Method channel call: ${call.method} with args: ${call.arguments}');
+      
+      switch (call.method) {
+        case 'onNotificationAction':
+          final dynamic args = call.arguments;
+          if (args is Map) {
+            final String action = args['action'] ?? '';
+            final int id = args['id'] ?? 0;
+            final String? title = args['title'];
+            final String? body = args['body'];
+            
+            debugPrint('🎯 Received notification action: $action for ID: $id');
+            
+            _actionStreamController.add({
+              'action': action,
+              'id': id,
+              'title': title,
+              'body': body,
+            });
+            
+            // Handle the action
+            await _handleNativeAction(action, id, title, body);
+          }
+          break;
+        default:
+          debugPrint('❌ Unknown method call: ${call.method}');
+      }
+    });
+  }
+
+  /// Handle notification responses (taps and actions)
+  static void _handleNotificationResponse(NotificationResponse response) {
+    debugPrint('📱 Notification response: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
+    
+    final String? action = response.actionId;
+    final int id = response.id ?? 0;
+    
+    if (action != null && action.isNotEmpty) {
+      _actionStreamController.add({
+        'action': action,
+        'id': id,
+        'payload': response.payload,
+      });
+      
+      // Handle the action
+      _handleNativeAction(action, id, null, null);
+    } else {
+      // This is a tap on the notification itself
+      _actionStreamController.add({
+        'action': 'tap',
+        'id': id,
+        'payload': response.payload,
+      });
+    }
+  }
+
+  /// Handle native actions
+  static Future<void> _handleNativeAction(String action, int id, String? title, String? body) async {
+    debugPrint('🔄 Handling action: $action for ID: $id');
+    
+    switch (action) {
+      case 'stop_action':
+      case 'stop':
+        await handleStopAction(id);
+        break;
+      case 'snooze_action':
+      case 'snooze':
+        await handleSnoozeAction(id, title ?? 'Reminder', body ?? 'Task');
+        break;
+      case 'tap':
+        // Handle notification tap
+        debugPrint('👆 Notification tapped: ID $id');
+        break;
+      default:
+        debugPrint('❌ Unknown action: $action');
+    }
   }
 
   /// HYBRID: Schedule both native alarm and FCM notification based on connectivity
@@ -57,11 +163,12 @@ class NativeAlarmHelper {
   }) async {
     try {
       // Step 1: Always schedule native alarm (works offline)
-      await _scheduleNativeAlarm(
+      await _scheduleNativeAlarmWithActions(
         id: id,
         title: title,
         body: body,
         dateTime: dateTime,
+        payload: payload,
       );
 
       debugPrint('✅ Native alarm scheduled: ID $id at $dateTime');
@@ -105,12 +212,13 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Schedule native Android alarm (most reliable)
-  static Future<void> _scheduleNativeAlarm({
+  /// Schedule native Android alarm with actions (most reliable)
+  static Future<void> _scheduleNativeAlarmWithActions({
     required int id,
     required String title,
     required String body,
     required DateTime dateTime,
+    required Map<String, dynamic> payload,
   }) async {
     try {
       await _channel.invokeMethod('scheduleAlarm', {
@@ -118,6 +226,7 @@ class NativeAlarmHelper {
         'timeInMillis': dateTime.millisecondsSinceEpoch,
         'title': title,
         'body': body,
+        'payload': payload,
       });
     } catch (e) {
       debugPrint('❌ Native alarm failed: $e');
@@ -227,7 +336,7 @@ class NativeAlarmHelper {
     debugPrint('📱 Remaining pending notifications: ${_pendingNotifications.length}');
   }
 
-  /// Fallback to local notifications only
+  /// Fallback to local notifications with actions
   static Future<void> _scheduleFallbackLocalNotification({
     required int id,
     required String title,
@@ -237,12 +346,22 @@ class NativeAlarmHelper {
     try {
       final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
       
-      const androidDetails = AndroidNotificationDetails(
+      final androidDetails = AndroidNotificationDetails(
         'daily_planner_channel',
         'Daily Planner',
         channelDescription: 'Task reminders and alerts',
-        importance: Importance.high,
+        importance: Importance.max,
         priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
+        ongoing: true,
+        autoCancel: false,
+        additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT
+        actions: const <AndroidNotificationAction>[
+          AndroidNotificationAction('stop_action', 'Stop'),
+          AndroidNotificationAction('snooze_action', 'Snooze'),
+        ],
       );
       
       await _flnp.zonedSchedule(
@@ -250,14 +369,41 @@ class NativeAlarmHelper {
         title,
         body,
         tzScheduled,
-        const NotificationDetails(android: androidDetails),
+        NotificationDetails(android: androidDetails),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+       // uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
       );
 
-      debugPrint('🔄 Fallback local notification scheduled: ID $id');
+      debugPrint('🔄 Fallback local notification scheduled with actions: ID $id');
     } catch (e) {
       debugPrint('❌ Fallback local notification also failed: $e');
     }
+  }
+
+  /// Handle stop action
+  static Future<void> handleStopAction(int id) async {
+    debugPrint('🛑 Stop action triggered for alarm ID: $id');
+    await cancelHybridAlarm(id);
+    
+    // You can add additional logic here
+    // e.g., mark task as completed, update UI, etc.
+  }
+
+  /// Handle snooze action
+  static Future<void> handleSnoozeAction(int id, String title, String body) async {
+    debugPrint('⏰ Snooze action triggered for alarm ID: $id');
+    
+    final snoozeTime = DateTime.now().add(Duration(minutes: 5));
+    
+    await scheduleHybridAlarm(
+      id: id + 1000, // Use different ID for snoozed alarm
+      title: title,
+      body: 'Snoozed: $body',
+      dateTime: snoozeTime,
+      payload: {'type': 'snoozed', 'originalId': id},
+    );
+    
+    // You can add additional logic here
   }
 
   /// Setup connectivity monitoring
@@ -374,7 +520,7 @@ class NativeAlarmHelper {
     await cancelHybridAlarm(id);
   }
 
-  // Keep your existing showNow method
+  // Keep your existing showNow method with actions
   static Future<void> showNow({
     required int id,
     required String title,
@@ -426,27 +572,15 @@ class NativeAlarmHelper {
     }
   }
 
-  // Optional: Check if we're on Android 12 or higher
-  static Future<bool> _isAndroid12OrHigher() async {
-    try {
-      if (!_isAndroid()) return false;
-      
-      final int sdkVersion = await _channel.invokeMethod('getAndroidSdkVersion');
-      return sdkVersion >= 31;
-    } catch (e) {
-      debugPrint('Error checking Android version: $e');
-      return false;
-    }
-  }
-
-  /// Dispose connectivity subscription
+  /// Dispose connectivity subscription and stream controller
   static void dispose() {
     _connectivitySubscription?.cancel();
+    _actionStreamController.close();
     _pendingNotifications.clear();
   }
 
   // Snackbar helpers for UI feedback
-  static void _showSuccessSnackBar(BuildContext context, String message) {
+  static void showSuccessSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
@@ -458,7 +592,7 @@ class NativeAlarmHelper {
     );
   }
 
-  static void _showErrorSnackBar(BuildContext context, String message) {
+  static void showErrorSnackBar(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: const TextStyle(color: Colors.white)),
