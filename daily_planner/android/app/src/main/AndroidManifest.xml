@@ -99,6 +99,19 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+    android:name=".AlarmReceiver"
+    android:exported="true">
+    <intent-filter>
+        <action android:name="com.example.daily_planner.STOP_ALARM" />
+        <action android:name="com.example.daily_planner.SNOOZE_ALARM" />
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+    </intent-filter>
+</receiver>
+
+
         <!-- Updated Alarm Manager Receivers -->
         <receiver
             android:name="dev.fluttercommunity.plus.androidalarmmanager.AlarmBroadcastReceiver"
