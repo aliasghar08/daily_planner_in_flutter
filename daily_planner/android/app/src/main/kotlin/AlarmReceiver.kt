@@ -2,18 +2,20 @@ package com.example.daily_planner
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Application
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Application
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
@@ -69,17 +71,12 @@ class AlarmReceiver : BroadcastReceiver() {
         Log.d("AlarmReceiver", "Received action: ${intent.action}")
 
         when (intent.action) {
-
             ACTION_STOP_ALARM -> stopAlarm(context, intent)
-
             ACTION_SNOOZE_ALARM -> snoozeAlarm(context, intent)
-
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> rescheduleAllAlarms(context)
-
             ACTION_KEEP_ALIVE -> scheduleKeepAliveAlarm(context)
-
             else -> handleAlarmTrigger(context, intent)
         }
     }
@@ -132,6 +129,7 @@ class AlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // FIXED: Use Android system icons instead of custom drawables
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(body)
@@ -142,13 +140,20 @@ class AlarmReceiver : BroadcastReceiver() {
             .setContentIntent(tapPendingIntent)
             .setSound(alarmSound)
             .setVibrate(longArrayOf(1000, 1000, 1000))
+            .setOngoing(false)
+            .setAutoCancel(false)
+            .setTimeoutAfter(300000) // Auto cancel after 5 minutes
+            // FIXED: Use Android system icons that exist
             .addAction(android.R.drawable.ic_media_pause, "Stop", stopPending)
             .addAction(android.R.drawable.ic_media_play, "Snooze", snoozePending)
-            .setFullScreenIntent(tapPendingIntent, true)
             .build()
 
+        // FIXED: Remove the problematic FLAG_NO_CLEAR code
+        // This was causing compilation errors
         ContextCompat.getSystemService(context, NotificationManager::class.java)
             ?.notify(id, notification)
+        
+        Log.d("AlarmReceiver", "Notification shown with ID: $id - Buttons should be touchable")
     }
 
     private fun stopAlarm(context: Context, intent: Intent) {
@@ -192,40 +197,30 @@ class AlarmReceiver : BroadcastReceiver() {
         notifyFlutterAction(context, "snooze", id, title, body)
     }
 
+    // FIXED: Simplified Flutter notification - remove FlutterEngine creation
     private fun notifyFlutterAction(context: Context, action: String, id: Int, title: String?, body: String?) {
         try {
             Log.d("AlarmReceiver", "Notifying Flutter about action: $action for ID: $id")
             
-            val flutterEngine = getFlutterEngine(context)
-            val methodChannel = MethodChannel(
-                flutterEngine.dartExecutor.binaryMessenger, 
-                "com.example.daily_planner/alarm"
-            )
-            
-            val arguments = HashMap<String, Any>().apply {
-                put("action", action)
-                put("id", id)
-                title?.let { put("title", it) }
-                body?.let { put("body", it) }
+            // Simple approach: Launch the app with intent extras
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra("notification_action", action)
+                putExtra("notification_id", id)
+                putExtra("notification_title", title)
+                putExtra("notification_body", body)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
+            context.startActivity(launchIntent)
             
-            methodChannel.invokeMethod("onNotificationAction", arguments)
-            
-            Log.d("AlarmReceiver", "Successfully notified Flutter about action")
+            Log.d("AlarmReceiver", "Launched MainActivity with action: $action")
             
         } catch (e: Exception) {
             Log.e("AlarmReceiver", "Error notifying Flutter: ${e.message}", e)
         }
     }
 
-    private fun getFlutterEngine(context: Context): FlutterEngine {
-        val application = context.applicationContext as Application
-        val flutterEngine = FlutterEngine(application)
-        flutterEngine.dartExecutor.executeDartEntrypoint(
-            DartExecutor.DartEntrypoint.createDefault()
-        )
-        return flutterEngine
-    }
+    // FIXED: Remove the problematic getFlutterEngine method entirely
+    // Creating new FlutterEngine in BroadcastReceiver doesn't work well
 
     private fun scheduleKeepAliveAlarm(context: Context) {
         val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java) ?: return
