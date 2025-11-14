@@ -15,21 +15,27 @@ import 'package:http/http.dart' as http;
 
 class NativeAlarmHelper {
   // Channel for alarm scheduling (matches your MainActivity.kt)
-  static const MethodChannel _alarmChannel = MethodChannel('exact_alarm_permission');
-  
+  static const MethodChannel _alarmChannel = MethodChannel(
+    'exact_alarm_permission',
+  );
+
   // Channel for notification actions (matches your AlarmReceiver.kt)
-  static const MethodChannel _notificationChannel = MethodChannel('com.example.daily_planner/alarm');
-  
+  static const MethodChannel _notificationChannel = MethodChannel(
+    'com.example.daily_planner/alarm',
+  );
+
   static final _flnp = FlutterLocalNotificationsPlugin();
   static final Connectivity _connectivity = Connectivity();
-  static StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  static StreamSubscription<List<ConnectivityResult>>?
+  _connectivitySubscription;
   static bool _isOnline = false;
   static final List<Map<String, dynamic>> _pendingNotifications = [];
-  
+
   // Add this stream controller to handle action callbacks
-  static final StreamController<Map<String, dynamic>> _actionStreamController = 
+  static final StreamController<Map<String, dynamic>> _actionStreamController =
       StreamController<Map<String, dynamic>>.broadcast();
-  static Stream<Map<String, dynamic>> get actionStream => _actionStreamController.stream;
+  static Stream<Map<String, dynamic>> get actionStream =>
+      _actionStreamController.stream;
 
   /// MUST call once during app startup
   static Future<void> initialize() async {
@@ -43,27 +49,30 @@ class NativeAlarmHelper {
       enableVibration: true,
       vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
       enableLights: true,
-      audioAttributesUsage: AudioAttributesUsage.alarm
+      audioAttributesUsage: AudioAttributesUsage.alarm,
     );
-    
-    await _flnp.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+
+    await _flnp
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(channel);
 
     // Ensure Kotlin notification channel is created
     await _alarmChannel.invokeMethod('ensureNotificationChannel');
 
     // Your existing initialization code
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     final iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    
+
     await _flnp.initialize(
-      InitializationSettings(
-        android: androidSettings, 
-        iOS: iosSettings,
-      ),
+      InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _handleNotificationResponse,
     );
 
@@ -84,8 +93,10 @@ class NativeAlarmHelper {
   /// Setup method channel to receive native actions from Kotlin
   static void _setupNotificationChannel() {
     _notificationChannel.setMethodCallHandler((MethodCall call) async {
-      debugPrint('📱 Notification channel call: ${call.method} with args: ${call.arguments}');
-      
+      debugPrint(
+        '📱 Notification channel call: ${call.method} with args: ${call.arguments}',
+      );
+
       // Your Kotlin code sends to 'onNotificationAction' method
       if (call.method == 'onNotificationAction') {
         final dynamic args = call.arguments;
@@ -94,9 +105,11 @@ class NativeAlarmHelper {
           final int id = (args['id'] as num?)?.toInt() ?? 0;
           final String? title = args['title']?.toString();
           final String? body = args['body']?.toString();
-          
-          debugPrint('🎯 Received notification action from Kotlin: $action for ID: $id');
-          
+
+          debugPrint(
+            '🎯 Received notification action from Kotlin: $action for ID: $id',
+          );
+
           // Send to stream controller
           _actionStreamController.add({
             'action': action,
@@ -105,23 +118,27 @@ class NativeAlarmHelper {
             'body': body,
             'source': 'kotlin',
           });
-          
+
           // Handle the action
           await _handleNativeAction(action, id, title, body);
         }
       } else {
-        debugPrint('❌ Unknown method call on notification channel: ${call.method}');
+        debugPrint(
+          '❌ Unknown method call on notification channel: ${call.method}',
+        );
       }
     });
   }
 
   /// Handle notification responses (taps and actions from Flutter local notifications)
   static void _handleNotificationResponse(NotificationResponse response) {
-    debugPrint('📱 Flutter notification response: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}');
-    
+    debugPrint(
+      '📱 Flutter notification response: actionId=${response.actionId}, id=${response.id}, payload=${response.payload}',
+    );
+
     final String? action = response.actionId;
     final int id = response.id ?? 0;
-    
+
     if (action != null && action.isNotEmpty) {
       _actionStreamController.add({
         'action': action,
@@ -129,7 +146,7 @@ class NativeAlarmHelper {
         'payload': response.payload,
         'source': 'flutter',
       });
-      
+
       // Handle the action
       _handleNativeAction(action, id, null, null);
     } else {
@@ -144,9 +161,14 @@ class NativeAlarmHelper {
   }
 
   /// Handle native actions from both Kotlin and Flutter
-  static Future<void> _handleNativeAction(String action, int id, String? title, String? body) async {
+  static Future<void> _handleNativeAction(
+    String action,
+    int id,
+    String? title,
+    String? body,
+  ) async {
     debugPrint('🔄 Handling action: $action for ID: $id');
-    
+
     switch (action) {
       case 'stop_action':
       case 'stop':
@@ -164,6 +186,26 @@ class NativeAlarmHelper {
         debugPrint('❌ Unknown action: $action');
     }
   }
+
+  /// Test native alarm immediately
+static Future<void> testNativeAlarmNow() async {
+  final testTime = DateTime.now().add(const Duration(seconds: 10));
+  
+  debugPrint('🧪 Testing native alarm for ${testTime.toString()}');
+  
+  try {
+    await _alarmChannel.invokeMethod('scheduleNativeAlarm', {
+      'id': 9999,
+      'title': 'Test Native Alarm',
+      'body': 'This tests if native alarms work',
+      'time': testTime.millisecondsSinceEpoch,
+    });
+    
+    debugPrint('✅ Test native alarm scheduled successfully');
+  } catch (e) {
+    debugPrint('❌ Test native alarm failed: $e');
+  }
+}
 
   /// HYBRID: Schedule both native alarm and FCM notification based on connectivity
   static Future<void> scheduleHybridAlarm({
@@ -187,13 +229,13 @@ class NativeAlarmHelper {
       debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
 
       // Step 2: Also schedule local notification as backup
-      await _scheduleLocalNotification(
-        id: id,
-        title: title,
-        body: body,
-        dateTime: dateTime,
-        payload: payload,
-      );
+      // await _scheduleLocalNotification(
+      //   id: id,
+      //   title: title,
+      //   body: body,
+      //   dateTime: dateTime,
+      //   payload: payload,
+      // );
 
       // Step 3: Schedule FCM notification if online
       if (_isOnline) {
@@ -220,17 +262,54 @@ class NativeAlarmHelper {
         );
         debugPrint('📱 FCM notification queued (offline): ID $id');
       }
-
     } catch (e) {
       debugPrint('❌ Hybrid alarm failed: $e');
       // Fallback to local notification only
-      await _scheduleLocalNotification(
-        id: id,
-        title: title,
-        body: body,
-        dateTime: dateTime,
-        payload: payload,
+      // await _scheduleLocalNotification(
+      //   id: id,
+      //   title: title,
+      //   body: body,
+      //   dateTime: dateTime,
+      //   payload: payload,
+      // );
+
+      await _scheduleFallbackNotification(id, title, body, dateTime);
+    }
+  }
+
+  /// Simple fallback without actions to avoid conflicts
+  static Future<void> _scheduleFallbackNotification(
+    int id,
+    String title,
+    String body,
+    DateTime dateTime,
+  ) async {
+    try {
+      final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
+
+      final androidDetails = AndroidNotificationDetails(
+        'daily_planner_channel',
+        'Daily Planner',
+        channelDescription: 'Task reminders and alerts',
+        importance: Importance.max,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        // NO ACTION BUTTONS - this prevents conflicts
       );
+
+      await _flnp.zonedSchedule(
+        id,
+        title,
+        body,
+        tzScheduled,
+        NotificationDetails(android: androidDetails),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+
+      debugPrint('🔔 Fallback notification scheduled: ID $id');
+    } catch (e) {
+      debugPrint('❌ Fallback notification failed: $e');
     }
   }
 
@@ -247,9 +326,10 @@ class NativeAlarmHelper {
         'id': id,
         'title': title,
         'body': body,
-        'time': dateTime.millisecondsSinceEpoch, // Use 'time' not 'timeInMillis'
+        'time':
+            dateTime.millisecondsSinceEpoch, // Use 'time' not 'timeInMillis'
       });
-      
+
       debugPrint('🎯 Native alarm scheduled via Kotlin: ID $id');
     } catch (e) {
       debugPrint('❌ Native alarm failed: $e');
@@ -267,7 +347,7 @@ class NativeAlarmHelper {
   }) async {
     try {
       final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
-      
+
       final androidDetails = AndroidNotificationDetails(
         'daily_planner_channel',
         'Daily Planner',
@@ -283,11 +363,19 @@ class NativeAlarmHelper {
         category: AndroidNotificationCategory.alarm,
         visibility: NotificationVisibility.public,
         actions: const <AndroidNotificationAction>[
-          AndroidNotificationAction('stop_action', 'Stop', showsUserInterface: true),
-          AndroidNotificationAction('snooze_action', 'Snooze', showsUserInterface: true),
+          AndroidNotificationAction(
+            'stop_action',
+            'Stop',
+            showsUserInterface: true,
+          ),
+          AndroidNotificationAction(
+            'snooze_action',
+            'Snooze',
+            showsUserInterface: true,
+          ),
         ],
       );
-      
+
       await _flnp.zonedSchedule(
         id,
         title,
@@ -316,8 +404,9 @@ class NativeAlarmHelper {
   }) async {
     try {
       // Replace with your actual FCM scheduling endpoint
-      const String fcmSchedulingUrl = 'https://your-server.com/api/schedule-fcm';
-      
+      const String fcmSchedulingUrl =
+          'https://your-server.com/api/schedule-fcm';
+
       final Map<String, dynamic> fcmData = {
         'notificationId': id,
         'title': title,
@@ -367,14 +456,18 @@ class NativeAlarmHelper {
       'timestamp': DateTime.now(),
     });
 
-    debugPrint('📱 Queued FCM notification. Total pending: ${_pendingNotifications.length}');
+    debugPrint(
+      '📱 Queued FCM notification. Total pending: ${_pendingNotifications.length}',
+    );
   }
 
   /// Process pending FCM notifications when connectivity returns
   static Future<void> _processPendingFcmNotifications() async {
     if (_pendingNotifications.isEmpty) return;
 
-    debugPrint('🔄 Processing ${_pendingNotifications.length} pending FCM notifications...');
+    debugPrint(
+      '🔄 Processing ${_pendingNotifications.length} pending FCM notifications...',
+    );
 
     final successfulNotifications = <Map<String, dynamic>>[];
 
@@ -391,37 +484,47 @@ class NativeAlarmHelper {
         );
 
         successfulNotifications.add(notification);
-        debugPrint('✅ Processed pending FCM notification: ${notification['id']}');
+        debugPrint(
+          '✅ Processed pending FCM notification: ${notification['id']}',
+        );
       } catch (e) {
-        debugPrint('❌ Failed to process pending FCM notification ${notification['id']}: $e');
+        debugPrint(
+          '❌ Failed to process pending FCM notification ${notification['id']}: $e',
+        );
         // Keep it in the queue for next connectivity change
       }
     }
 
     // Remove successfully processed notifications
-    _pendingNotifications.removeWhere((notification) => 
-      successfulNotifications.contains(notification)
+    _pendingNotifications.removeWhere(
+      (notification) => successfulNotifications.contains(notification),
     );
 
-    debugPrint('📱 Remaining pending notifications: ${_pendingNotifications.length}');
+    debugPrint(
+      '📱 Remaining pending notifications: ${_pendingNotifications.length}',
+    );
   }
 
   /// Handle stop action
   static Future<void> handleStopAction(int id) async {
     debugPrint('🛑 Stop action triggered for alarm ID: $id');
-    
+
     await cancelHybridAlarm(id);
-    
+
     // Show confirmation notification
     _showActionNotification('Alarm Stopped', 'Alarm has been stopped');
   }
 
   /// Handle snooze action
-  static Future<void> handleSnoozeAction(int id, String title, String body) async {
+  static Future<void> handleSnoozeAction(
+    int id,
+    String title,
+    String body,
+  ) async {
     debugPrint('⏰ Snooze action triggered for alarm ID: $id');
-    
+
     final snoozeTime = DateTime.now().add(const Duration(minutes: 5));
-    
+
     await scheduleHybridAlarm(
       id: id + 1000, // Use different ID for snoozed alarm
       title: title,
@@ -429,8 +532,11 @@ class NativeAlarmHelper {
       dateTime: snoozeTime,
       payload: {'type': 'snoozed', 'originalId': id},
     );
-    
-    _showActionNotification('Alarm Snoozed', 'Alarm will remind you in 5 minutes');
+
+    _showActionNotification(
+      'Alarm Snoozed',
+      'Alarm will remind you in 5 minutes',
+    );
   }
 
   /// Show action confirmation notification
@@ -444,7 +550,8 @@ class NativeAlarmHelper {
     );
 
     await _flnp.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000, // Unique ID based on timestamp
+      DateTime.now().millisecondsSinceEpoch ~/
+          1000, // Unique ID based on timestamp
       title,
       body,
       NotificationDetails(android: androidDetails),
@@ -497,13 +604,15 @@ class NativeAlarmHelper {
     try {
       // Cancel native alarm using your Kotlin code
       await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
-      
+
       // Cancel local notification
       await _flnp.cancel(id);
-      
+
       // Remove from pending FCM notifications
-      _pendingNotifications.removeWhere((notification) => notification['id'] == id);
-      
+      _pendingNotifications.removeWhere(
+        (notification) => notification['id'] == id,
+      );
+
       debugPrint('✅ Hybrid alarm cancelled: ID $id');
     } catch (e) {
       debugPrint('Error cancelling hybrid alarm: $e');
@@ -514,8 +623,10 @@ class NativeAlarmHelper {
   static Future<bool> checkExactAlarmPermission() async {
     try {
       if (!_isAndroid()) return true;
-      
-      final bool hasPermission = await _alarmChannel.invokeMethod('checkExactAlarmPermission');
+
+      final bool hasPermission = await _alarmChannel.invokeMethod(
+        'checkExactAlarmPermission',
+      );
       debugPrint('✅ Exact alarm permission check: $hasPermission');
       return hasPermission;
     } catch (e) {
@@ -528,7 +639,7 @@ class NativeAlarmHelper {
   static Future<void> requestExactAlarmPermission() async {
     try {
       if (!_isAndroid()) return;
-      
+
       debugPrint('📱 Requesting exact alarm permission...');
       await _alarmChannel.invokeMethod('requestExactAlarmPermission');
       debugPrint('✅ Exact alarm permission request completed');
@@ -579,12 +690,7 @@ class NativeAlarmHelper {
       title: title,
       body: body,
       dateTime: dateTime,
-      payload: {
-        'type': 'alarm',
-        'alarmId': id,
-        'title': title,
-        'body': body,
-      },
+      payload: {'type': 'alarm', 'alarmId': id, 'title': title, 'body': body},
     );
   }
 
@@ -612,8 +718,16 @@ class NativeAlarmHelper {
       autoCancel: false,
       additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT
       actions: const <AndroidNotificationAction>[
-        AndroidNotificationAction('stop_action', 'Stop', showsUserInterface: true),
-        AndroidNotificationAction('snooze_action', 'Snooze', showsUserInterface: true),
+        AndroidNotificationAction(
+          'stop_action',
+          'Stop',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'snooze_action',
+          'Snooze',
+          showsUserInterface: true,
+        ),
       ],
     );
 
