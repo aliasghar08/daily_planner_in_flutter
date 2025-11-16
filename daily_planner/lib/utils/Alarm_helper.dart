@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
 
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -12,6 +13,14 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+
+@pragma('vm:entry-point')
+void alarmCallback(int id, [Map<String, dynamic>? params]) {
+  final title = params?['title']?.toString() ?? 'Reminder';
+  final body = params?['body']?.toString() ?? 'Task';
+
+  NativeAlarmHelper.showNow(id: id, title: title, body: body);
+}
 
 class NativeAlarmHelper {
   // Channel for alarm scheduling (matches your MainActivity.kt)
@@ -187,25 +196,24 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Test native alarm immediately
-static Future<void> testNativeAlarmNow() async {
-  final testTime = DateTime.now().add(const Duration(seconds: 10));
-  
-  debugPrint('🧪 Testing native alarm for ${testTime.toString()}');
-  
-  try {
-    await _alarmChannel.invokeMethod('scheduleNativeAlarm', {
-      'id': 9999,
-      'title': 'Test Native Alarm',
-      'body': 'This tests if native alarms work',
-      'time': testTime.millisecondsSinceEpoch,
-    });
-    
-    debugPrint('✅ Test native alarm scheduled successfully');
-  } catch (e) {
-    debugPrint('❌ Test native alarm failed: $e');
+  static Future<void> scheduleUsingAlarmManager({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime dateTime,
+  }) async {
+    await AndroidAlarmManager.oneShotAt(
+      dateTime,
+      id,
+      alarmCallback,
+      exact: true,
+      wakeup: true,
+      rescheduleOnReboot: true,
+      params: {'id': id, 'title': title, 'body': body},
+    );
+
+    debugPrint("⏰ Alarm Manager alarm scheduled for $dateTime");
   }
-}
 
   /// HYBRID: Schedule both native alarm and FCM notification based on connectivity
   static Future<void> scheduleHybridAlarm({
@@ -237,6 +245,13 @@ static Future<void> testNativeAlarmNow() async {
       //   payload: payload,
       // );
 
+      await scheduleUsingAlarmManager(
+        id: id,
+        title: title,
+        body: body,
+        dateTime: dateTime,
+      );
+
       // Step 3: Schedule FCM notification if online
       if (_isOnline) {
         await _scheduleFcmNotification(
@@ -265,51 +280,13 @@ static Future<void> testNativeAlarmNow() async {
     } catch (e) {
       debugPrint('❌ Hybrid alarm failed: $e');
       // Fallback to local notification only
-      // await _scheduleLocalNotification(
-      //   id: id,
-      //   title: title,
-      //   body: body,
-      //   dateTime: dateTime,
-      //   payload: payload,
-      // );
-
-      await _scheduleFallbackNotification(id, title, body, dateTime);
-    }
-  }
-
-  /// Simple fallback without actions to avoid conflicts
-  static Future<void> _scheduleFallbackNotification(
-    int id,
-    String title,
-    String body,
-    DateTime dateTime,
-  ) async {
-    try {
-      final tzScheduled = tz.TZDateTime.from(dateTime, tz.local);
-
-      final androidDetails = AndroidNotificationDetails(
-        'daily_planner_channel',
-        'Daily Planner',
-        channelDescription: 'Task reminders and alerts',
-        importance: Importance.max,
-        priority: Priority.high,
-        playSound: true,
-        enableVibration: true,
-        // NO ACTION BUTTONS - this prevents conflicts
+      await _scheduleLocalNotification(
+        id: id,
+        title: title,
+        body: body,
+        dateTime: dateTime,
+        payload: payload,
       );
-
-      await _flnp.zonedSchedule(
-        id,
-        title,
-        body,
-        tzScheduled,
-        NotificationDetails(android: androidDetails),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      );
-
-      debugPrint('🔔 Fallback notification scheduled: ID $id');
-    } catch (e) {
-      debugPrint('❌ Fallback notification failed: $e');
     }
   }
 
@@ -511,8 +488,10 @@ static Future<void> testNativeAlarmNow() async {
 
     await cancelHybridAlarm(id);
 
+    await cancelHybridAlarm(id + 1000);
+
     // Show confirmation notification
-    _showActionNotification('Alarm Stopped', 'Alarm has been stopped');
+    // _showActionNotification('Alarm Stopped', 'Alarm has been stopped');
   }
 
   /// Handle snooze action
@@ -533,10 +512,10 @@ static Future<void> testNativeAlarmNow() async {
       payload: {'type': 'snoozed', 'originalId': id},
     );
 
-    _showActionNotification(
-      'Alarm Snoozed',
-      'Alarm will remind you in 5 minutes',
-    );
+    // _showActionNotification(
+    //   'Alarm Snoozed',
+    //   'Alarm will remind you in 5 minutes',
+    // );
   }
 
   /// Show action confirmation notification
@@ -716,7 +695,9 @@ static Future<void> testNativeAlarmNow() async {
       vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
       ongoing: true,
       autoCancel: false,
-      additionalFlags: Int32List.fromList([4]), // FLAG_INSISTENT
+      fullScreenIntent: true,
+      additionalFlags: Int32List.fromList([4]),
+      category: AndroidNotificationCategory.alarm, // FLAG_INSISTENT
       actions: const <AndroidNotificationAction>[
         AndroidNotificationAction(
           'stop_action',

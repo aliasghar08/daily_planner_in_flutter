@@ -102,18 +102,20 @@
 
 <receiver
     android:name=".AlarmReceiver"
-    android:exported="true"
-    android:enabled="true"
-    android:permission="android.permission.SCHEDULE_EXACT_ALARM">
+    android:exported="false"
+    android:enabled="true">
+
     <intent-filter>
-        <action android:name="com.example.daily_planner.STOP_ALARM" />
-        <action android:name="com.example.daily_planner.SNOOZE_ALARM" />
+        <action android:name="daily_planner.STOP" />
+        <action android:name="daily_planner.SNOOZE" />
+
         <action android:name="android.intent.action.BOOT_COMPLETED" />
         <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
         <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
         <action android:name="android.intent.action.QUICKBOOT_POWERON" />
     </intent-filter>
 </receiver>
+
 
     </application>
 

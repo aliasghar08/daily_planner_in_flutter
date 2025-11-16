@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
@@ -109,6 +110,8 @@ Future<void> main() async {
 
   // ✅ FIXED: Initialize NotificationService BEFORE running app
   await _initializeNotificationService();
+
+  await AndroidAlarmManager.initialize();
 
   // ✅ FIXED: Call runApp AFTER all critical initializations
   runApp(const MyApp());
