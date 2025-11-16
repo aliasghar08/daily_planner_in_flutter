@@ -59,6 +59,23 @@ class MainActivity : FlutterActivity() {
                             result.success(null)
                         }
 
+                        "showAlarmNotification" -> {
+    val id = call.argument<Int>("id") ?: 0
+    val title = call.argument<String>("title") ?: "No Title"
+    val body = call.argument<String>("body") ?: "No Body"
+
+    // Trigger AlarmReceiver notification immediately
+    val intent = Intent(this, AlarmReceiver::class.java).apply {
+        putExtra(AlarmReceiver.EXTRA_ID, id)
+        putExtra(AlarmReceiver.EXTRA_TITLE, title)
+        putExtra(AlarmReceiver.EXTRA_BODY, body)
+    }
+
+    sendBroadcast(intent)
+    result.success(null)
+}
+
+
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {

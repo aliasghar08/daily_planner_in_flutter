@@ -19,7 +19,11 @@ void alarmCallback(int id, [Map<String, dynamic>? params]) {
   final title = params?['title']?.toString() ?? 'Reminder';
   final body = params?['body']?.toString() ?? 'Task';
 
-  NativeAlarmHelper.showNow(id: id, title: title, body: body);
+  NativeAlarmHelper._alarmChannel.invokeMethod('showAlarmNotification', {
+    'id': id,
+    'title': title,
+    'body': body,
+  });
 }
 
 class NativeAlarmHelper {
