@@ -37,7 +37,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
                     CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_HIGH
+                    NotificationManager.IMPORTANCE_MAX
                 ).apply {
                     enableLights(true)
                     enableVibration(true)

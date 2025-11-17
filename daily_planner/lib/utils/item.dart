@@ -244,9 +244,13 @@ class _ItemWidgetState extends State<ItemWidget> {
     }
   }
 
-  String generateNotificationId(String taskId, DateTime time) {
-    return (taskId + time.toIso8601String()).hashCode.abs().toString();
-  }
+  // String generateNotificationId(String taskId, DateTime time) {
+  //   return (taskId + time.toIso8601String()).hashCode.abs().toString();
+  // }
+
+  int generateNotificationId(String taskId, DateTime time) {
+  return (taskId + time.toIso8601String()).hashCode.abs();
+}
 
   Future<void> deleteTask(Task task) async {
     final user = FirebaseAuth.instance.currentUser;
@@ -290,13 +294,13 @@ class _ItemWidgetState extends State<ItemWidget> {
       if (task.notificationTimes != null &&
           task.notificationTimes!.isNotEmpty) {
         for (final time in task.notificationTimes!) {
-          String id = generateNotificationId(task.docId!, task.date!);
-          await NativeAlarmHelper.cancelAlarmById(id as int);
+          final id = generateNotificationId(task.docId!, task.date!);
+          await NativeAlarmHelper.cancelAlarmById(id);
         }
       } else {
         if (task.date != null) {
           final fallbackId = generateNotificationId(task.docId!, task.date!);
-          await NativeAlarmHelper.cancelAlarmById(fallbackId as int);
+          await NativeAlarmHelper.cancelAlarmById(fallbackId);
         }
       }
 
