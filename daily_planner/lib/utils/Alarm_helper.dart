@@ -231,29 +231,28 @@ class NativeAlarmHelper {
   }) async {
     try {
       // Step 1: Schedule native alarm using android_alarm_manager-plus
-      
-       await scheduleUsingAlarmManager(
+
+      await scheduleUsingAlarmManager(
         id: id,
         title: title,
         body: body,
         dateTime: dateTime,
       );
 
-      debugPrint('✅ Native alarm scheduled via android_alarm_manager_plus: ID $id at $dateTime');
-  
+      debugPrint(
+        '✅ Native alarm scheduled via android_alarm_manager_plus: ID $id at $dateTime',
+      );
+
       // Step 2: Schedule native alarm using your Kotlin code
 
-      await _scheduleNativeAlarm(
-        id: id,
-        title: title,
-        body: body,
-        dateTime: dateTime,
-      );
+      // await _scheduleNativeAlarm(
+      //   id: id,
+      //   title: title,
+      //   body: body,
+      //   dateTime: dateTime,
+      // );
 
-      debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
-
-
-
+      // debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
 
       // Step 2: Also schedule local notification as backup
       // await _scheduleLocalNotification(
@@ -263,8 +262,6 @@ class NativeAlarmHelper {
       //   dateTime: dateTime,
       //   payload: payload,
       // );
-
-     
 
       // Step 3: Schedule FCM notification if online
       if (_isOnline) {
@@ -596,7 +593,9 @@ class NativeAlarmHelper {
   static Future<void> cancelHybridAlarm(int id) async {
     try {
       // Cancel native alarm using your Kotlin code
-      await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
+      // await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
+
+      await AndroidAlarmManager.cancel(id);
 
       // Cancel local notification
       await _flnp.cancel(id);

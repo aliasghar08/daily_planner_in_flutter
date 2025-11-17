@@ -126,7 +126,8 @@ Future<void> main() async {
   // Perform async initializations in background
   if (!kIsWeb && Platform.isAndroid) {
     try {
-      await BatteryOptimizationHelper.promptDisableBatteryOptimization();
+      // await BatteryOptimizationHelper.promptDisableBatteryOptimization();
+      await NativeAlarmHelper.promptDisableBatteryOptimization();
     } catch (e) {
       print("Battery optimization prompt not available $e");
     }

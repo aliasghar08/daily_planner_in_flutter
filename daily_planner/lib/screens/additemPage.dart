@@ -99,7 +99,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   Future<void> _pickDateTime() async {
     final initialDate = _selectedDate ?? DateTime.now();
-    
+
     final pickedDate = await showDatePicker(
       context: context,
       initialDate: initialDate,
@@ -127,14 +127,16 @@ class _AddTaskPageState extends State<AddTaskPage> {
     });
   }
 
-  String formatDate(DateTime? date) => date != null ? DateFormat.yMMMd().format(date) : "Not set";
-  String formatTime(DateTime? date) => date != null ? DateFormat.jm().format(date) : "Not set";
+  String formatDate(DateTime? date) =>
+      date != null ? DateFormat.yMMMd().format(date) : "Not set";
+  String formatTime(DateTime? date) =>
+      date != null ? DateFormat.jm().format(date) : "Not set";
 
   // ✅ Check if task type supports no end date
   bool get _supportsNoEndDate {
-    return _selectedType == TaskType.daily || 
-           _selectedType == TaskType.weekly || 
-           _selectedType == TaskType.monthly;
+    return _selectedType == TaskType.daily ||
+        _selectedType == TaskType.weekly ||
+        _selectedType == TaskType.monthly;
   }
 
   // ✅ Check if task type requires end date
@@ -143,57 +145,88 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // 🚀 UPDATED: Schedule notifications using NativeAlarmHelper
-  Future<void> _scheduleNotifications(String taskId, String title, DateTime? taskDate) async {
+  Future<void> _scheduleNotifications(
+    String taskId,
+    String title,
+    DateTime? taskDate,
+  ) async {
     final now = DateTime.now();
     int scheduledCount = 0;
 
     // Schedule notifications asynchronously without waiting for each one
-    final notificationFutures = _notificationTimes.where((notificationTime) => 
-      notificationTime.isAfter(now)
-    ).map((notificationTime) async {
-      try {
-        // Use NativeAlarmHelper for scheduling
-        await NativeAlarmHelper.scheduleAlarmAtTime(
-          id: _generateAlarmId(taskId, notificationTime),
-          title: 'Task Reminder: $title',
-          body: taskDate != null 
-              ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-              : '$title reminder',
-          dateTime: notificationTime,
-        );
-        
-        scheduledCount++;
-        debugPrint("✅ Native alarm scheduled for: $notificationTime");
-      } catch (e) {
-        debugPrint("❌ Failed to schedule native alarm: $e");
-        
-        // Fallback to local notifications if native fails
-        try {
-          final androidDetails = AndroidNotificationDetails(
-            'daily_planner_channel',
-            'Daily Planner',
-            channelDescription: 'Task reminders and alerts',
-            importance: Importance.high,
-            priority: Priority.high,
-          );
-          
-          await FlutterLocalNotificationsPlugin().zonedSchedule(
-            _generateAlarmId(taskId, notificationTime),
-            'Task Reminder: $title',
-            taskDate != null 
-                ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                : '$title reminder',
-            tz.TZDateTime.from(notificationTime, tz.local),
-            NotificationDetails(android: androidDetails),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          );
-          
-          debugPrint("✅ Fallback notification scheduled for: $notificationTime");
-        } catch (fallbackError) {
-          debugPrint("❌ Fallback notification also failed: $fallbackError");
-        }
-      }
-    }).toList();
+    final notificationFutures =
+        _notificationTimes
+            .where((notificationTime) => notificationTime.isAfter(now))
+            .map((notificationTime) async {
+              try {
+                // Use NativeAlarmHelper for scheduling
+                // await NativeAlarmHelper.scheduleAlarmAtTime(
+                //   id: _generateAlarmId(taskId, notificationTime),
+                //   title: 'Task Reminder: $title',
+                //   body:
+                //       taskDate != null
+                //           ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                //           : '$title reminder',
+                //   dateTime: notificationTime,
+                // );
+                
+                // use android_alarm_manger and fcm for scheduling
+                await NativeAlarmHelper.scheduleHybridAlarm(
+                  id: _generateAlarmId(taskId, notificationTime),
+                  title: 'Task Reminder: $title',
+                  body:
+                      taskDate != null
+                          ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                          : '$title reminder',
+                  dateTime: notificationTime,
+                  payload: {
+                    'type': 'alarm',
+                    'alarmId': _generateAlarmId(taskId, notificationTime),
+                    'title': title,
+                    'body': taskDate != null
+                          ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                          : '$title reminder',
+                  },
+                );
+
+                scheduledCount++;
+                debugPrint("✅ Native alarm scheduled for: $notificationTime");
+              } catch (e) {
+                debugPrint("❌ Failed to schedule native alarm: $e");
+
+                // Fallback to local notifications if native fails
+                try {
+                  final androidDetails = AndroidNotificationDetails(
+                    'daily_planner_channel',
+                    'Daily Planner',
+                    channelDescription: 'Task reminders and alerts',
+                    importance: Importance.high,
+                    priority: Priority.high,
+                  );
+
+                  await FlutterLocalNotificationsPlugin().zonedSchedule(
+                    _generateAlarmId(taskId, notificationTime),
+                    'Task Reminder: $title',
+                    taskDate != null
+                        ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                        : '$title reminder',
+                    tz.TZDateTime.from(notificationTime, tz.local),
+                    NotificationDetails(android: androidDetails),
+                    androidScheduleMode:
+                        AndroidScheduleMode.exactAllowWhileIdle,
+                  );
+
+                  debugPrint(
+                    "✅ Fallback notification scheduled for: $notificationTime",
+                  );
+                } catch (fallbackError) {
+                  debugPrint(
+                    "❌ Fallback notification also failed: $fallbackError",
+                  );
+                }
+              }
+            })
+            .toList();
 
     // Wait for all notifications to be scheduled, but don't block the main task creation
     if (notificationFutures.isNotEmpty) {
@@ -204,7 +237,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (scheduledCount > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("✅ $scheduledCount notification(s) scheduled using ${_nativeAlarmInitialized ? 'Native Alarm System' : 'Fallback System'}."),
+          content: Text(
+            "✅ $scheduledCount notification(s) scheduled using ${_nativeAlarmInitialized ? 'Native Alarm System' : 'Fallback System'}.",
+          ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
@@ -214,7 +249,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   // ✅ NEW: Generate unique alarm ID
   int _generateAlarmId(String taskId, DateTime time) {
-    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() % 1000000;
+    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() %
+        1000000;
   }
 
   Future<void> _addTask() async {
@@ -275,16 +311,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
       }
 
       final uid = user.uid;
-      final newTaskRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc();
+      final newTaskRef =
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('tasks')
+              .doc();
 
       Task newTask;
 
       // ✅ Use _hasEndDate for recurring tasks to determine if date should be null
-      final DateTime? taskDate = _requiresEndDate ? _selectedDate : (_hasEndDate ? _selectedDate : null);
+      final DateTime? taskDate =
+          _requiresEndDate
+              ? _selectedDate
+              : (_hasEndDate ? _selectedDate : null);
 
       switch (_selectedType) {
         case TaskType.oneTime:
@@ -346,7 +386,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
           break;
       }
 
-      debugPrint("Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}");
+      debugPrint(
+        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}",
+      );
 
       // 🚀 FIRST: Save the task to Firestore immediately
       await newTaskRef.set(newTask.toMap());
@@ -374,7 +416,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
           _scheduleNotifications(newTaskRef.id, title, taskDate);
         });
       }
-
     } catch (e, stack) {
       debugPrint("❌ Error adding task: $e");
       debugPrint("Stack trace:\n$stack");
@@ -488,15 +529,15 @@ class _AddTaskPageState extends State<AddTaskPage> {
       case TaskType.oneTime:
         return "This task will occur only once and requires an end date";
       case TaskType.daily:
-        return _hasEndDate 
+        return _hasEndDate
             ? "This task will repeat every day until the end date"
             : "This task will repeat every day indefinitely";
       case TaskType.weekly:
-        return _hasEndDate 
+        return _hasEndDate
             ? "This task will repeat every week until the end date"
             : "This task will repeat every week indefinitely";
       case TaskType.monthly:
-        return _hasEndDate 
+        return _hasEndDate
             ? "This task will repeat every month until the end date"
             : "This task will repeat every month indefinitely";
     }
@@ -608,25 +649,26 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             horizontal: 16,
                           ),
                         ),
-                        items: TaskType.values.map((type) {
-                          return DropdownMenuItem(
-                            value: type,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  type.icon,
-                                  color: type.color,
-                                  size: 20,
+                        items:
+                            TaskType.values.map((type) {
+                              return DropdownMenuItem(
+                                value: type,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      type.icon,
+                                      color: type.color,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      type.label,
+                                      style: TextStyle(color: type.color),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  type.label,
-                                  style: TextStyle(color: type.color),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                              );
+                            }).toList(),
                         onChanged: (type) {
                           if (type != null) {
                             setState(() {
@@ -670,7 +712,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         Row(
                           children: [
                             Icon(
-                              _hasEndDate ? Icons.event_available : Icons.event_busy,
+                              _hasEndDate
+                                  ? Icons.event_available
+                                  : Icons.event_busy,
                               color: _hasEndDate ? Colors.green : Colors.grey,
                               size: 28,
                             ),
@@ -702,7 +746,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _hasEndDate 
+                          _hasEndDate
                               ? "This task will end on the selected date"
                               : "This task will continue indefinitely",
                           style: TextStyle(
@@ -804,9 +848,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
                           child: ElevatedButton.icon(
                             onPressed: _pickDateTime,
                             icon: const Icon(Icons.edit_calendar),
-                            label: Text(_requiresEndDate 
-                                ? "Change Date & Time" 
-                                : "Set End Date & Time"),
+                            label: Text(
+                              _requiresEndDate
+                                  ? "Change Date & Time"
+                                  : "Set End Date & Time",
+                            ),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
@@ -840,24 +886,35 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: _nativeAlarmInitialized ? Colors.green[50] : Colors.orange[50],
+                          color:
+                              _nativeAlarmInitialized
+                                  ? Colors.green[50]
+                                  : Colors.orange[50],
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
                           children: [
                             Icon(
-                              _nativeAlarmInitialized ? Icons.alarm : Icons.notifications,
-                              color: _nativeAlarmInitialized ? Colors.green : Colors.orange,
+                              _nativeAlarmInitialized
+                                  ? Icons.alarm
+                                  : Icons.notifications,
+                              color:
+                                  _nativeAlarmInitialized
+                                      ? Colors.green
+                                      : Colors.orange,
                               size: 16,
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              _nativeAlarmInitialized 
-                                  ? "Using Native Alarm System" 
+                              _nativeAlarmInitialized
+                                  ? "Using Native Alarm System"
                                   : "Using Fallback Notification System",
                               style: TextStyle(
                                 fontSize: 12,
-                                color: _nativeAlarmInitialized ? Colors.green : Colors.orange,
+                                color:
+                                    _nativeAlarmInitialized
+                                        ? Colors.green
+                                        : Colors.orange,
                               ),
                             ),
                           ],
@@ -879,20 +936,21 @@ class _AddTaskPageState extends State<AddTaskPage> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: _notificationTimes.map((time) {
-                            return Chip(
-                              label: Text(
-                                DateFormat.yMd().add_jm().format(time),
-                              ),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              onDeleted: () {
-                                setState(() {
-                                  _notificationTimes.remove(time);
-                                });
-                              },
-                              backgroundColor: Colors.blue.withOpacity(0.1),
-                            );
-                          }).toList(),
+                          children:
+                              _notificationTimes.map((time) {
+                                return Chip(
+                                  label: Text(
+                                    DateFormat.yMd().add_jm().format(time),
+                                  ),
+                                  deleteIcon: const Icon(Icons.close, size: 16),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _notificationTimes.remove(time);
+                                    });
+                                  },
+                                  backgroundColor: Colors.blue.withOpacity(0.1),
+                                );
+                              }).toList(),
                         ),
                       const SizedBox(height: 12),
                       SizedBox(
