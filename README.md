@@ -9,7 +9,7 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
   - Custom titles, descriptions, and categories
 
 - 🔔 **Alarms & Notifications**
-  - Schedule alarms using native Android code
+  - Schedule alarms using android_alarm_manager_plus and showed them using native kotlin implementation
   - Alarm logic integrated with each task type
   - Multiple alarms for a task
 
@@ -25,7 +25,8 @@ Welcome to **Daily Planner**, a personal productivity and habit tracking app bui
   - Instantly search tasks without reloading from Firestore
 
 - ☁️ **Firebase Integration**
-  - Realtime storage and sync using Cloud Firestore
+  - Real-time storage and sync using Cloud Firestore
+  - Used cache to store changes and pushed them to Cloud Firestore when online in case user was offline during the change
 
 ## 🧱 Project Structure
 
