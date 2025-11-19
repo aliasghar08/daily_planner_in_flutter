@@ -49,7 +49,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('notifications_enabled', val);
 
     if (val) {
-      await NativeAlarmHelper.requestExactAlarmPermission();
+     // await NativeAlarmHelper.requestExactAlarmPermission();
     }
   }
 

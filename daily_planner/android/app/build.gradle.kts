@@ -68,6 +68,10 @@ dependencies {
 
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // WorkManager for background tasks
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
+
 }
 
 // ✅ Important: DO NOT add any `flutter { source = ... }` block here

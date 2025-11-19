@@ -13,18 +13,24 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
+import 'dart:developer';
 
-@pragma('vm:entry-point')
-void alarmCallback(int id, [Map<String, dynamic>? params]) {
-  final title = params?['title']?.toString() ?? 'Reminder';
-  final body = params?['body']?.toString() ?? 'Task';
+import 'package:workmanager/workmanager.dart';
 
-  NativeAlarmHelper._alarmChannel.invokeMethod('showAlarmNotification', {
-    'id': id,
-    'title': title,
-    'body': body,
-  });
-}
+// @pragma('vm:entry-point')
+// void alarmCallback(int id, [Map<String, dynamic>? params]) {
+//   final title = params?['title']?.toString() ?? 'Reminder';
+//   final body = params?['body']?.toString() ?? 'Task';
+
+//   NativeAlarmHelper._alarmChannel.invokeMethod('showAlarmNotification', {
+//     'id': id,
+//     'title': title,
+//     'body': body,
+//   });
+
+//   log("Alarm callback triggered!", name: "AlarmTest");
+
+// }
 
 class NativeAlarmHelper {
   // Channel for alarm scheduling (matches your MainActivity.kt)
@@ -200,24 +206,48 @@ class NativeAlarmHelper {
     }
   }
 
-  static Future<void> scheduleUsingAlarmManager({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime dateTime,
-  }) async {
-    await AndroidAlarmManager.oneShotAt(
-      dateTime,
-      id,
-      alarmCallback,
-      exact: true,
-      wakeup: true,
-      rescheduleOnReboot: true,
-      params: {'id': id, 'title': title, 'body': body},
-    );
+  // static Future<void> scheduleUsingAlarmManager({
+  //   required int id,
+  //   required String title,
+  //   required String body,
+  //   required DateTime dateTime,
+  // }) async {
+  //   await AndroidAlarmManager.oneShotAt(
+  //     dateTime,
+  //     id,
+  //     alarmCallback,
+  //     exact: true,
+  //     wakeup: true,
+  //     rescheduleOnReboot: true,
+  //     params: {'id': id, 'title': title, 'body': body},
+  //   );
 
-    debugPrint("⏰ Alarm Manager alarm scheduled for $dateTime");
-  }
+  //   debugPrint("⏰ Alarm Manager alarm scheduled for $dateTime");
+  // }
+
+static Future<void> scheduleUsingWorkManager({
+  required int id,
+  required String title,
+  required String body,
+  required DateTime dateTime,
+}) async {
+  // Calculate delay from now until the scheduled dateTime
+  final Duration delay = dateTime.difference(DateTime.now());
+
+  // Register one-off task with Workmanager
+  Workmanager().registerOneOffTask(
+    'alarm_task_$id',          // Unique task name
+    'alarmTask',               // Task type
+    initialDelay: delay.isNegative ? Duration.zero : delay, // If in the past, execute immediately
+    inputData: {
+      'title': title,
+      'body': body,
+    },
+  );
+
+  debugPrint("⏰ Work Manager alarm scheduled for $dateTime");
+}
+
 
   /// HYBRID: Schedule both native alarm and FCM notification based on connectivity
   static Future<void> scheduleHybridAlarm({
@@ -230,29 +260,15 @@ class NativeAlarmHelper {
     List<String>? fcmTokens,
   }) async {
     try {
-      // Step 1: Schedule native alarm using android_alarm_manager-plus
-
-      await scheduleUsingAlarmManager(
+      // Step 1: Schedule native alarm using your Kotlin code
+      await _scheduleNativeAlarm(
         id: id,
         title: title,
         body: body,
         dateTime: dateTime,
       );
 
-      debugPrint(
-        '✅ Native alarm scheduled via android_alarm_manager_plus: ID $id at $dateTime',
-      );
-
-      // Step 2: Schedule native alarm using your Kotlin code
-
-      // await _scheduleNativeAlarm(
-      //   id: id,
-      //   title: title,
-      //   body: body,
-      //   dateTime: dateTime,
-      // );
-
-      // debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
+      debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
 
       // Step 2: Also schedule local notification as backup
       // await _scheduleLocalNotification(
@@ -261,6 +277,13 @@ class NativeAlarmHelper {
       //   body: body,
       //   dateTime: dateTime,
       //   payload: payload,
+      // );
+
+      // await scheduleUsingAlarmManager(
+      //   id: id,
+      //   title: title,
+      //   body: body,
+      //   dateTime: dateTime,
       // );
 
       // Step 3: Schedule FCM notification if online
@@ -593,9 +616,7 @@ class NativeAlarmHelper {
   static Future<void> cancelHybridAlarm(int id) async {
     try {
       // Cancel native alarm using your Kotlin code
-      // await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
-
-      await AndroidAlarmManager.cancel(id);
+      await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
 
       // Cancel local notification
       await _flnp.cancel(id);
@@ -628,47 +649,47 @@ class NativeAlarmHelper {
   }
 
   /// Request exact alarm permission (Android 12+) - MATCHES YOUR KOTLIN
-  static Future<void> requestExactAlarmPermission() async {
-    try {
-      if (!_isAndroid()) return;
+  // static Future<void> requestExactAlarmPermission() async {
+  //   try {
+  //     if (!_isAndroid()) return;
 
-      debugPrint('📱 Requesting exact alarm permission...');
-      await _alarmChannel.invokeMethod('requestExactAlarmPermission');
-      debugPrint('✅ Exact alarm permission request completed');
-    } catch (e) {
-      debugPrint('❌ Error requesting exact alarm permission: $e');
-    }
-  }
+  //     debugPrint('📱 Requesting exact alarm permission...');
+  //     await _alarmChannel.invokeMethod('requestExactAlarmPermission');
+  //     debugPrint('✅ Exact alarm permission request completed');
+  //   } catch (e) {
+  //     debugPrint('❌ Error requesting exact alarm permission: $e');
+  //   }
+  // }
 
   /// Disable battery optimization - MATCHES YOUR KOTLIN
-  static Future<void> disableBatteryOptimization() async {
-    try {
-      await _alarmChannel.invokeMethod('disableBatteryOptimization');
-      debugPrint('✅ Battery optimization disable requested');
-    } catch (e) {
-      debugPrint('❌ Error disabling battery optimization: $e');
-    }
-  }
+  // static Future<void> disableBatteryOptimization() async {
+  //   try {
+  //     await _alarmChannel.invokeMethod('disableBatteryOptimization');
+  //     debugPrint('✅ Battery optimization disable requested');
+  //   } catch (e) {
+  //     debugPrint('❌ Error disabling battery optimization: $e');
+  //   }
+  // }
 
   /// Prompt disable battery optimization - MATCHES YOUR KOTLIN
-  static Future<void> promptDisableBatteryOptimization() async {
-    try {
-      await _alarmChannel.invokeMethod('promptDisableBatteryOptimization');
-      debugPrint('✅ Battery optimization prompt requested');
-    } catch (e) {
-      debugPrint('❌ Error prompting battery optimization: $e');
-    }
-  }
+  // static Future<void> promptDisableBatteryOptimization() async {
+  //   try {
+  //     await _alarmChannel.invokeMethod('promptDisableBatteryOptimization');
+  //     debugPrint('✅ Battery optimization prompt requested');
+  //   } catch (e) {
+  //     debugPrint('❌ Error prompting battery optimization: $e');
+  //   }
+  // }
 
   /// Open manufacturer settings - MATCHES YOUR KOTLIN
-  static Future<void> openManufacturerSettings() async {
-    try {
-      await _alarmChannel.invokeMethod('openManufacturerSettings');
-      debugPrint('✅ Manufacturer settings opened');
-    } catch (e) {
-      debugPrint('❌ Error opening manufacturer settings: $e');
-    }
-  }
+  // static Future<void> openManufacturerSettings() async {
+  //   try {
+  //     await _alarmChannel.invokeMethod('openManufacturerSettings');
+  //     debugPrint('✅ Manufacturer settings opened');
+  //   } catch (e) {
+  //     debugPrint('❌ Error opening manufacturer settings: $e');
+  //   }
+  // }
 
   /// Original schedule method (backward compatibility)
   static Future<void> scheduleAlarmAtTime({

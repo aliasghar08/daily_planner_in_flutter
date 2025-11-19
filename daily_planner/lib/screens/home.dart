@@ -113,7 +113,7 @@ class _MyHomeState extends State<MyHome> {
       );
 
       if (shouldRequest == true) {
-        await NativeAlarmHelper.requestExactAlarmPermission();
+       // await NativeAlarmHelper.requestExactAlarmPermission();
       }
     }
   }

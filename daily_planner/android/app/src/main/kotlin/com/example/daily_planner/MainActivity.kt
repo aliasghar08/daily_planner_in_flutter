@@ -18,30 +18,14 @@ class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "exact_alarm_permission"
 
-      override fun onCreate(savedInstanceState: Bundle?) {
-       super.onCreate(savedInstanceState)
- 
-       // Create notification channel
-       AlarmReceiver.createNotificationChannel(this)
- 
-       // 🔥 Allow full-screen Activity for alarms
-       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-           setShowWhenLocked(true)
-          setTurnScreenOn(true)
-      }
-
-      // 🔥 Ensure screen wakes + show over lockscreen
-      window.addFlags(
-          android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-          android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-          android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-      )
-  }
-
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        AlarmReceiver.createNotificationChannel(this)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-       // AlarmReceiver.createNotificationChannel(this)
+        AlarmReceiver.createNotificationChannel(this)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
@@ -65,10 +49,10 @@ class MainActivity : FlutterActivity() {
                             result.success(canScheduleExactAlarms())
                         }
 
-                        "promptDisableBatteryOptimization" -> {
-    promptDisableBatteryOptimization()
-    result.success(null)
-}
+                        "disableBatteryOptimization" -> {
+                            promptDisableBatteryOptimization()
+                            result.success(null)
+                        }
 
                         "ensureNotificationChannel" -> {
                             AlarmReceiver.createNotificationChannel(this)

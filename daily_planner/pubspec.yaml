@@ -51,6 +51,9 @@ dependencies:
   provider: ^6.0.5
   audioplayers: ^5.2.1
   android_alarm_manager_plus: ^5.0.0
+  workmanager: ^0.9.0+3
+  disable_battery_optimization: ^1.1.2
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

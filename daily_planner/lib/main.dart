@@ -20,6 +20,7 @@ import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'package:workmanager/workmanager.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -39,6 +40,40 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       body: message.notification!.body ?? 'New notification',
     );
   }
+}
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    // Pull values from inputData map
+    final title = inputData?['title'] ?? 'Default Title';
+    final body = inputData?['body'] ?? 'Default Body';
+
+    await showNotification(title: title, body: body);
+
+    return Future.value(true);
+  });
+}
+
+Future<void> showNotification({
+  required String title,
+  required String body,
+}) async {
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'alarm_channel', // channel id
+    'Alarm Notifications', // channel name
+    channelDescription: 'This channel is for alarm notifications',
+    importance: Importance.max,
+    priority: Priority.max,
+    ticker: 'ticker',
+    playSound: true,
+    category: AndroidNotificationCategory.alarm,
+  );
+
+  const NotificationDetails platformDetails = NotificationDetails(
+    android: androidDetails,
+  );
+
+  await flutterLocalNotificationsPlugin.show(0, title, body, platformDetails);
 }
 
 // Show notification helper
@@ -124,10 +159,13 @@ Future<void> main() async {
   // await testNotificationSystem(); // Remove this line - test separately
 
   // Perform async initializations in background
+
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
   if (!kIsWeb && Platform.isAndroid) {
     try {
       // await BatteryOptimizationHelper.promptDisableBatteryOptimization();
-      await NativeAlarmHelper.promptDisableBatteryOptimization();
+      await BatteryOptimizationHelper.ensureDisabled();
+      await BatteryOptimizationHelper.ensureManufacturerBatteryOptimizationDisabled();
     } catch (e) {
       print("Battery optimization prompt not available $e");
     }
