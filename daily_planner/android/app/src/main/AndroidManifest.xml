@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
+    <!-- Add this for Android 12+ to keep alarms after reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:label="daily_planner"
         android:icon="@mipmap/ic_launcher"
@@ -83,6 +86,14 @@
             android:foregroundServiceType="dataSync"
             android:stopWithTask="false" />
 
+        <!-- ✅ ADD YOUR CUSTOM FOREGROUND SERVICE HERE -->
+        <service
+            android:name=".AlarmForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
+
         <!-- Updated flutter_local_notifications Receivers -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
@@ -101,23 +112,40 @@
             </intent-filter>
         </receiver>
 
+        <!-- ✅ UPDATED ALARM RECEIVER - FIXED INTENT FILTERS -->
+        <receiver
+            android:name=".AlarmReceiver"
+            android:exported="true"
+            android:enabled="true">
 
-<receiver
-    android:name=".AlarmReceiver"
-    android:exported="false"
-    android:enabled="true">
+            <!-- Regular alarm intents -->
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.TIME_SET" />
+            </intent-filter>
 
-    <intent-filter>
-        <action android:name="daily_planner.STOP" />
-        <action android:name="daily_planner.SNOOZE" />
+            <!-- Custom actions for stop/snooze -->
+            <intent-filter>
+                <action android:name="daily_planner.STOP" />
+                <action android:name="daily_planner.SNOOZE" />
+            </intent-filter>
+        </receiver>
 
-        <action android:name="android.intent.action.BOOT_COMPLETED" />
-        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
-        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-    </intent-filter>
-</receiver>
-
+        <!-- ✅ ADD BOOT COMPLETED RECEIVER TO RESTART ALARMS AFTER REBOOT -->
+        <receiver
+            android:name=".BootCompleteReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

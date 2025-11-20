@@ -43,6 +43,10 @@ class NativeAlarmHelper {
     'com.example.daily_planner/alarm',
   );
 
+  static const MethodChannel _foregroundServiceChannel = MethodChannel(
+    "daily_planner/alarm_service",
+  );
+
   static final _flnp = FlutterLocalNotificationsPlugin();
   static final Connectivity _connectivity = Connectivity();
   static StreamSubscription<List<ConnectivityResult>>?
@@ -225,29 +229,62 @@ class NativeAlarmHelper {
   //   debugPrint("⏰ Alarm Manager alarm scheduled for $dateTime");
   // }
 
-static Future<void> scheduleUsingWorkManager({
-  required int id,
-  required String title,
-  required String body,
-  required DateTime dateTime,
-}) async {
-  // Calculate delay from now until the scheduled dateTime
-  final Duration delay = dateTime.difference(DateTime.now());
+  static Future<void> scheduleUsingWorkManager({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime dateTime,
+  }) async {
+    // Calculate delay from now until the scheduled dateTime
+    final Duration delay = dateTime.difference(DateTime.now());
 
-  // Register one-off task with Workmanager
-  Workmanager().registerOneOffTask(
-    'alarm_task_$id',          // Unique task name
-    'alarmTask',               // Task type
-    initialDelay: delay.isNegative ? Duration.zero : delay, // If in the past, execute immediately
-    inputData: {
-      'title': title,
-      'body': body,
-    },
-  );
+    // Register one-off task with Workmanager
+    Workmanager().registerOneOffTask(
+      'alarm_task_$id', // Unique task name
+      'alarmTask', // Task type
+      initialDelay:
+          delay.isNegative
+              ? Duration.zero
+              : delay, // If in the past, execute immediately
+      inputData: {'title': title, 'body': body},
+    );
 
-  debugPrint("⏰ Work Manager alarm scheduled for $dateTime");
+    debugPrint("⏰ Work Manager alarm scheduled for $dateTime");
+  }
+
+  Future<void> openAutoStartSettings() async {
+  try {
+    await _alarmChannel.invokeMethod('openAutoStartSettings');
+  } catch (e) {
+    print("Failed to open auto-start settings: $e");
+  }
 }
 
+   static Future<void> startForegroundService() async {
+    try {
+      await _foregroundServiceChannel.invokeMethod('startForegroundService');
+      print('🔔 Foreground service started');
+    } on PlatformException catch (e) {
+      print('❌ Failed to start service: ${e.message}');
+    }
+  }
+
+    static Future<void> openExactAlarmSettings() async {
+    try {
+      await _alarmChannel.invokeMethod('openExactAlarmSettings');
+    } catch (e) {
+      print("Error opening exacte alarm settings: $e");
+    }
+  }
+
+  static Future<void> stopForegroundService() async {
+    try {
+      await _foregroundServiceChannel.invokeMethod('stopForegroundService');
+      print('🔔 Foreground service stopped');
+    } on PlatformException catch (e) {
+      print('❌ Failed to stop service: ${e.message}');
+    }
+  }
 
   /// HYBRID: Schedule both native alarm and FCM notification based on connectivity
   static Future<void> scheduleHybridAlarm({
@@ -269,6 +306,15 @@ static Future<void> scheduleUsingWorkManager({
       );
 
       debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
+
+      // await scheduleUsingWorkManager(
+      //   id: id,
+      //   title: title,
+      //   body: body,
+      //   dateTime: dateTime,
+      // );
+
+      // debugPrint('✅ Native alarm scheduled via workmanager: ID $id at $dateTime');
 
       // Step 2: Also schedule local notification as backup
       // await _scheduleLocalNotification(
