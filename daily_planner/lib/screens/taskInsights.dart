@@ -1287,6 +1287,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
 
     // 2. Calculate current streak (working backwards from today)
     if (normalizedStamps.contains(todayNormalized)) {
+      // Task completed today - count backwards
       currentStreak = 1;
       DateTime checkDate = todayNormalized.subtract(recurrence);
 
@@ -1295,20 +1296,21 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
         checkDate = checkDate.subtract(recurrence);
       }
     }
-    // If not completed today, check yesterday's streak
-    else if (normalizedStamps.isNotEmpty) {
-      DateTime lastDate = normalizedStamps.last;
-      DateTime checkDate = lastDate;
-      currentStreak = 1;
+    else {
+      // Task NOT completed today
+      final yesterdayNormalized = todayNormalized.subtract(Duration(days: 1));
+      
+      if (normalizedStamps.contains(yesterdayNormalized)) {
+        // Task completed yesterday but not today - count backwards from yesterday
+        currentStreak = 1;
+        DateTime checkDate = yesterdayNormalized.subtract(recurrence);
 
-      // Walk backwards through consecutive completions
-      while (normalizedStamps.contains(checkDate.subtract(recurrence))) {
-        currentStreak++;
-        checkDate = checkDate.subtract(recurrence);
-      }
-
-      // Only count as current streak if it reaches to yesterday
-      if (lastDate.difference(todayNormalized).inDays > recurrence.inDays) {
+        while (normalizedStamps.contains(checkDate)) {
+          currentStreak++;
+          checkDate = checkDate.subtract(recurrence);
+        }
+      } else {
+        // Task not completed today OR yesterday - streak is broken
         currentStreak = 0;
       }
     }
