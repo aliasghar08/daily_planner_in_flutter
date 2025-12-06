@@ -105,7 +105,7 @@ class MainActivity : FlutterActivity() {
                         }
 
                         "openAutoStartSettings" -> {
-                            openInfinixAutoStartSettings()
+                            openAutoStartSettings()
                             result.success(true)
                         }
 
@@ -162,24 +162,80 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun openInfinixAutoStartSettings() {
+    private fun openAutoStartSettings() {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val intent = Intent()
+        
         try {
-            val intent = Intent().apply {
-                component = android.content.ComponentName(
-                    "com.transsion.phonemanager",
-                    "com.transsion.phonemanager.activity.StartupAppListActivity"
-                )
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            when {
+                manufacturer.contains("xiaomi") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                    )
+                }
+                manufacturer.contains("oppo") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.coloros.safecenter",
+                        "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+                    )
+                }
+                manufacturer.contains("vivo") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.vivo.permissionmanager",
+                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
+                    )
+                }
+                manufacturer.contains("huawei") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.huawei.systemmanager",
+                        "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+                    )
+                }
+                manufacturer.contains("samsung") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.samsung.android.lool",
+                        "com.samsung.android.sm.ui.battery.BatteryActivity"
+                    )
+                }
+                manufacturer.contains("oneplus") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.oneplus.security",
+                        "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"
+                    )
+                }
+                manufacturer.contains("infinix") -> {
+                    intent.component = android.content.ComponentName(
+                        "com.transsion.phonemanager",
+                        "com.transsion.phonemanager.activity.StartupAppListActivity"
+                    )
+                }
+                else -> {
+                    // Fallback to generic settings
+                    intent.action = Settings.ACTION_SETTINGS
+                }
             }
-            startActivity(intent)
-            Log.d("AutoStart", "Opened Infinix AutoStart settings")
+            
+            if (intent.component != null) {
+                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                 startActivity(intent)
+                 Log.d("AutoStart", "Opened AutoStart settings for $manufacturer")
+            } else {
+                 // Try generic fallback if no component matched but we want to do something
+                 val genericIntent = Intent(Settings.ACTION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                 }
+                 startActivity(genericIntent)
+                 Log.d("AutoStart", "Opened generic settings for $manufacturer")
+            }
+
         } catch (e: Exception) {
             Log.e("AutoStart", "Specific screen not found, opening generic settings", e)
             try {
-                val intent = Intent(Settings.ACTION_SETTINGS).apply {
+                val genericIntent = Intent(Settings.ACTION_SETTINGS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
-                startActivity(intent)
+                startActivity(genericIntent)
             } catch (_: Exception) {}
         }
     }
