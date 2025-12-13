@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class CatlalogModel {
   static List<Task> items = [
@@ -61,6 +62,11 @@ class Task {
   List<DateTime> notificationTimes;
   List<DateTime> completionStamps;
 
+  // New fields for recurring notifications
+  String? notificationRecurrence;
+  Map<String, int>? notificationRecurrenceTime; // {'hour': 21, 'minute': 0}
+  Map<String, bool>? selectedDays; // For custom days selection
+
   Task({
     this.docId,
     required this.title,
@@ -73,10 +79,47 @@ class Task {
     this.taskType = 'oneTime',
     List<DateTime>? notificationTimes,
     List<DateTime>? completionStamps,
+
+    // New fields
+    this.notificationRecurrence,
+    this.notificationRecurrenceTime,
+    this.selectedDays,
   }) : createdAt = createdAt ?? DateTime.now(),
        editHistory = editHistory ?? [],
        notificationTimes = notificationTimes ?? [],
        completionStamps = completionStamps ?? [];
+
+  // ✅ ADDED: Safe getter for notificationRecurrence with default
+  String get safeNotificationRecurrence {
+    return notificationRecurrence ?? 'none';
+  }
+
+  // ✅ ADDED: Safe getter for notificationRecurrenceTime with default
+  Map<String, int> get safeNotificationRecurrenceTime {
+    if (notificationRecurrenceTime != null) {
+      return notificationRecurrenceTime!;
+    }
+    // Default to 9 PM
+    return {'hour': 21, 'minute': 0};
+  }
+
+  // ✅ ADDED: Safe getter for selectedDays with default
+  Map<String, bool> get safeSelectedDays {
+    if (selectedDays != null) {
+      return selectedDays!;
+    }
+    // Return empty map
+    return {};
+  }
+
+  // ✅ ADDED: Safe getter for notificationRecurrenceTime as TimeOfDay
+  TimeOfDay get safeRecurrenceTimeAsTimeOfDay {
+    final timeMap = safeNotificationRecurrenceTime;
+    return TimeOfDay(
+      hour: timeMap['hour'] ?? 21,
+      minute: timeMap['minute'] ?? 0,
+    );
+  }
 
   factory Task.fromMap(Map<String, dynamic> map, {String? docId}) {
     return parseTaskFromMap(map, docId: docId);
@@ -91,8 +134,15 @@ class Task {
       'createdAt': Timestamp.fromDate(createdAt),
       'editHistory': editHistory.map((e) => e.toMap()).toList(),
       'taskType': taskType,
-      'notificationTimes': notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
-      'completionStamps': completionStamps.map((dt) => Timestamp.fromDate(dt)).toList(),
+      'notificationTimes':
+          notificationTimes.map((dt) => Timestamp.fromDate(dt)).toList(),
+      'completionStamps':
+          completionStamps.map((dt) => Timestamp.fromDate(dt)).toList(),
+
+      // ✅ FIXED: Use safe getters to ensure data is never null
+      'notificationRecurrence': safeNotificationRecurrence,
+      'notificationRecurrenceTime': safeNotificationRecurrenceTime,
+      'selectedDays': safeSelectedDays,
     };
 
     if (date != null) {
@@ -120,6 +170,11 @@ class Task {
     String? taskType,
     List<DateTime>? notificationTimes,
     List<DateTime>? completionStamps,
+
+    // New fields
+    String? notificationRecurrence,
+    Map<String, int>? notificationRecurrenceTime,
+    Map<String, bool>? selectedDays,
   }) {
     return Task(
       docId: docId ?? this.docId,
@@ -133,6 +188,13 @@ class Task {
       taskType: taskType ?? this.taskType,
       notificationTimes: notificationTimes ?? this.notificationTimes,
       completionStamps: completionStamps ?? this.completionStamps,
+
+      // ✅ FIXED: Use null-coalescing with safe getters
+      notificationRecurrence:
+          notificationRecurrence ?? this.notificationRecurrence,
+      notificationRecurrenceTime:
+          notificationRecurrenceTime ?? this.notificationRecurrenceTime,
+      selectedDays: selectedDays ?? this.selectedDays,
     );
   }
 }
@@ -151,17 +213,27 @@ class DailyTask extends Task {
     this.morning = true,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+
+    // New fields
+    String? notificationRecurrence,
+    Map<String, int>? notificationRecurrenceTime,
+    Map<String, bool>? selectedDays,
   }) : super(
          docId: docId,
          title: title,
          detail: detail,
-         date: date, // ✅ FIXED: This is the key fix - pass date to super
+         date: date,
          isCompleted: isCompleted,
          createdAt: createdAt,
          completedAt: completedAt,
          taskType: 'DailyTask',
          notificationTimes: notificationTimes,
          completionStamps: completionStamps,
+
+         // ✅ FIXED: Use null-coalescing
+         notificationRecurrence: notificationRecurrence ?? 'none',
+         notificationRecurrenceTime: notificationRecurrenceTime,
+         selectedDays: selectedDays,
        );
 
   @override
@@ -203,25 +275,53 @@ class DailyTask extends Task {
       return null;
     }
 
+    // Parse notification recurrence time
+    Map<String, int>? parseRecurrenceTime(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return {
+          'hour': (val['hour'] ?? 21) as int,
+          'minute': (val['minute'] ?? 0) as int,
+        };
+      }
+      return null;
+    }
+
+    // Parse selected days
+    Map<String, bool>? parseSelectedDays(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return val.map((key, value) => MapEntry(key, value as bool));
+      }
+      return null;
+    }
+
     return DailyTask(
       docId: docId,
       title: map['title'] ?? '',
       detail: map['detail'] ?? '',
-      date: parseTimeNullable(map['date']), // ✅ This should work now
+      date: parseTimeNullable(map['date']),
       isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
       completedAt: parseTimeNullable(map['completedAt']),
       morning: map['morning'] ?? true,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
+
+      // ✅ FIXED: Use null-coalescing for safety
+      notificationRecurrence: map['notificationRecurrence'] ?? 'none',
+      notificationRecurrenceTime: parseRecurrenceTime(
+        map['notificationRecurrenceTime'],
+      ),
+      selectedDays: parseSelectedDays(map['selectedDays']),
     );
   }
 
   bool shouldResetToday() {
     if (completedAt == null) return true;
 
-    final lastCompleted = completedAt!;
-    final now = DateTime.now();
+    final lastCompleted = completedAt!.toUtc();
+    final now = DateTime.now().toUtc();
 
     return !(lastCompleted.year == now.year &&
         lastCompleted.month == now.month &&
@@ -240,17 +340,27 @@ class WeeklyTask extends Task {
     DateTime? completedAt,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+
+    // New fields
+    String? notificationRecurrence,
+    Map<String, int>? notificationRecurrenceTime,
+    Map<String, bool>? selectedDays,
   }) : super(
          docId: docId,
          title: title,
          detail: detail,
-         date: date, // ✅ FIXED: Pass date to super
+         date: date,
          isCompleted: isCompleted,
          createdAt: createdAt,
          completedAt: completedAt,
          taskType: 'WeeklyTask',
          notificationTimes: notificationTimes,
          completionStamps: completionStamps,
+
+         // ✅ FIXED: Use null-coalescing
+         notificationRecurrence: notificationRecurrence ?? 'none',
+         notificationRecurrenceTime: notificationRecurrenceTime,
+         selectedDays: selectedDays,
        );
 
   @override
@@ -291,26 +401,58 @@ class WeeklyTask extends Task {
       return null;
     }
 
+    // Parse notification recurrence time
+    Map<String, int>? parseRecurrenceTime(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return {
+          'hour': (val['hour'] ?? 21) as int,
+          'minute': (val['minute'] ?? 0) as int,
+        };
+      }
+      return null;
+    }
+
+    // Parse selected days
+    Map<String, bool>? parseSelectedDays(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return val.map((key, value) => MapEntry(key, value as bool));
+      }
+      return null;
+    }
+
     return WeeklyTask(
       docId: docId,
       title: map['title'] ?? '',
       detail: map['detail'] ?? '',
-      date: parseTimeNullable(map['date']), // ✅ This should work now
+      date: parseTimeNullable(map['date']),
       isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
       completedAt: parseTimeNullable(map['completedAt']),
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
+
+      // ✅ FIXED: Use null-coalescing for safety
+      notificationRecurrence: map['notificationRecurrence'] ?? 'none',
+      notificationRecurrenceTime: parseRecurrenceTime(
+        map['notificationRecurrenceTime'],
+      ),
+      selectedDays: parseSelectedDays(map['selectedDays']),
     );
   }
 
   bool shouldResetThisWeek() {
-    if (completedAt == null) return true;
+  if (completedAt == null) return true;
 
-    final now = DateTime.now();
-    final last = completedAt!;
-    return !(now.difference(last).inDays < 7 && now.weekday != last.weekday);
-  }
+  final now = DateTime.now().toUtc();
+  final last = completedAt!.toUtc();
+  
+  // Calculate the difference in days using UTC times
+  final daysDifference = now.difference(last).inDays;
+  
+  return !(daysDifference < 7 && now.weekday != last.weekday);
+}
 }
 
 class MonthlyTask extends Task {
@@ -327,17 +469,27 @@ class MonthlyTask extends Task {
     required this.dayOfMonth,
     List<DateTime>? completionStamps,
     required List<DateTime> notificationTimes,
+
+    // New fields
+    String? notificationRecurrence,
+    Map<String, int>? notificationRecurrenceTime,
+    Map<String, bool>? selectedDays,
   }) : super(
          docId: docId,
          title: title,
          detail: detail,
-         date: date, // ✅ FIXED: Pass date to super
+         date: date,
          isCompleted: isCompleted,
          createdAt: createdAt,
          completedAt: completedAt,
          taskType: 'MonthlyTask',
          notificationTimes: notificationTimes,
          completionStamps: completionStamps,
+
+         // ✅ FIXED: Use null-coalescing
+         notificationRecurrence: notificationRecurrence ?? 'none',
+         notificationRecurrenceTime: notificationRecurrenceTime,
+         selectedDays: selectedDays,
        );
 
   @override
@@ -379,25 +531,53 @@ class MonthlyTask extends Task {
       return null;
     }
 
+    // Parse notification recurrence time
+    Map<String, int>? parseRecurrenceTime(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return {
+          'hour': (val['hour'] ?? 21) as int,
+          'minute': (val['minute'] ?? 0) as int,
+        };
+      }
+      return null;
+    }
+
+    // Parse selected days
+    Map<String, bool>? parseSelectedDays(dynamic val) {
+      if (val == null) return null;
+      if (val is Map<String, dynamic>) {
+        return val.map((key, value) => MapEntry(key, value as bool));
+      }
+      return null;
+    }
+
     return MonthlyTask(
       docId: docId,
       title: map['title'] ?? '',
       detail: map['detail'] ?? '',
-      date: parseTimeNullable(map['date']), // ✅ This should work now
+      date: parseTimeNullable(map['date']),
       isCompleted: map['isCompleted'] ?? false,
       createdAt: parseTime(map['createdAt']),
       completedAt: parseTimeNullable(map['completedAt']),
       dayOfMonth: map['dayOfMonth'] ?? 1,
       completionStamps: parseStamps(map['completionStamps']),
       notificationTimes: parseNotificationTimes(map['notificationTimes']),
+
+      // ✅ FIXED: Use null-coalescing for safety
+      notificationRecurrence: map['notificationRecurrence'] ?? 'none',
+      notificationRecurrenceTime: parseRecurrenceTime(
+        map['notificationRecurrenceTime'],
+      ),
+      selectedDays: parseSelectedDays(map['selectedDays']),
     );
   }
 
   bool shouldResetThisMonth() {
     if (completedAt == null) return true;
 
-    final now = DateTime.now();
-    final last = completedAt!;
+    final now = DateTime.now().toUtc();
+    final last = completedAt!.toUtc();
 
     return !(now.year == last.year &&
         now.month == last.month &&
@@ -408,7 +588,7 @@ class MonthlyTask extends Task {
 /// Helper to determine correct subclass when decoding
 Task parseTaskFromMap(Map<String, dynamic> map, {String? docId}) {
   final String type = map['type'] ?? map['taskType'] ?? 'oneTime';
-  
+
   switch (type) {
     case 'DailyTask':
       return DailyTask.fromMap(map, docId: docId);
@@ -447,18 +627,40 @@ Task parseTaskFromMap(Map<String, dynamic> map, {String? docId}) {
         return null;
       }
 
+      // Parse notification recurrence time
+      Map<String, int>? parseRecurrenceTime(dynamic val) {
+        if (val == null) return null;
+        if (val is Map<String, dynamic>) {
+          return {
+            'hour': (val['hour'] ?? 21) as int,
+            'minute': (val['minute'] ?? 0) as int,
+          };
+        }
+        return null;
+      }
+
+      // Parse selected days
+      Map<String, bool>? parseSelectedDays(dynamic val) {
+        if (val == null) return null;
+        if (val is Map<String, dynamic>) {
+          return val.map((key, value) => MapEntry(key, value as bool));
+        }
+        return null;
+      }
+
       List<TaskEdit> history = [];
       if (map['editHistory'] is List) {
-        history = (map['editHistory'] as List)
-            .map((e) => TaskEdit.fromMap(Map<String, dynamic>.from(e)))
-            .toList();
+        history =
+            (map['editHistory'] as List)
+                .map((e) => TaskEdit.fromMap(Map<String, dynamic>.from(e)))
+                .toList();
       }
 
       return Task(
         docId: docId,
         title: map['title'] ?? '',
         detail: map['detail'] ?? '',
-        date: parseTimeNullable(map['date']), // ✅ This should work now
+        date: parseTimeNullable(map['date']),
         isCompleted: map['isCompleted'] ?? false,
         createdAt: parseTime(map['createdAt']),
         completedAt: parseTimeNullable(map['completedAt']),
@@ -466,6 +668,13 @@ Task parseTaskFromMap(Map<String, dynamic> map, {String? docId}) {
         taskType: type,
         notificationTimes: parseNotificationTimes(map['notificationTimes']),
         completionStamps: parseStamps(map['completionStamps']),
+
+        // ✅ FIXED: Use null-coalescing for safety
+        notificationRecurrence: map['notificationRecurrence'] ?? 'none',
+        notificationRecurrenceTime: parseRecurrenceTime(
+          map['notificationRecurrenceTime'],
+        ),
+        selectedDays: parseSelectedDays(map['selectedDays']),
       );
   }
 }

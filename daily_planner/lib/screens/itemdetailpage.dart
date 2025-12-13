@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
-import 'package:daily_planner/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -29,6 +28,11 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
+  // Store recurrence information from task
+  NotificationRecurrence? _notificationRecurrence;
+  TimeOfDay? _recurrenceTime;
+  Map<String, bool>? _selectedDays;
+
   final AndroidNotificationDetails _androidDetails =
       const AndroidNotificationDetails(
         'daily_planner_channel',
@@ -48,12 +52,42 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _currentCompletionStatus = widget.task.isCompleted;
 
+    // Parse recurrence information from task
+    _parseRecurrenceInfo();
+
     // Initialize NativeAlarmHelper and load data
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeNativeAlarmHelper();
       await _checkNotificationChannel();
       await _loadTaskData();
     });
+  }
+
+  void _parseRecurrenceInfo() {
+    // Parse notification recurrence type
+    if (widget.task.notificationRecurrence != null) {
+      final recurrenceString = widget.task.notificationRecurrence!;
+      _notificationRecurrence = NotificationRecurrence.values.firstWhere(
+        (e) => e.name == recurrenceString,
+        orElse: () => NotificationRecurrence.none,
+      );
+    } else {
+      _notificationRecurrence = NotificationRecurrence.none;
+    }
+
+    // Parse recurrence time
+    if (widget.task.notificationRecurrenceTime != null) {
+      final timeMap = widget.task.notificationRecurrenceTime!;
+      _recurrenceTime = TimeOfDay(
+        hour: timeMap['hour'] ?? 21,
+        minute: timeMap['minute'] ?? 0,
+      );
+    }
+
+    // Parse selected days
+    if (widget.task.selectedDays != null) {
+      _selectedDays = widget.task.selectedDays!;
+    }
   }
 
   Future<void> _initializeNativeAlarmHelper() async {
@@ -214,12 +248,103 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         );
   }
 
-  // ✅ UPDATED: Use NativeAlarmHelper for notifications
+  // ✅ NEW: Format recurrence information for display
+  String _getRecurrenceDescription() {
+    if (_notificationRecurrence == null || 
+        _notificationRecurrence == NotificationRecurrence.none) {
+      return "No recurring notifications";
+    }
+
+    final timeStr = _recurrenceTime != null
+        ? " at ${_formatTimeOfDay(_recurrenceTime!)}"
+        : "";
+
+    switch (_notificationRecurrence!) {
+      case NotificationRecurrence.daily:
+        return "Daily$timeStr";
+      case NotificationRecurrence.weekly:
+        final dayOfWeek = widget.task.date?.weekday ?? DateTime.now().weekday;
+        final dayName = DateFormat('EEEE').format(
+          DateTime(2024, 1, dayOfWeek)
+        );
+        return "Every $dayName$timeStr";
+      case NotificationRecurrence.monthly:
+        final dayOfMonth = widget.task.date?.day ?? DateTime.now().day;
+        return "Monthly on ${dayOfMonth}${_getDaySuffix(dayOfMonth)}$timeStr";
+      case NotificationRecurrence.custom:
+        if (_selectedDays != null && _selectedDays!.isNotEmpty) {
+          final selectedDayNames = _getSelectedDayNames();
+          return "Custom: ${selectedDayNames.join(', ')} at ${_recurrenceTime != null ? _formatTimeOfDay(_recurrenceTime!) : 'specified time'}";
+        }
+        return "Custom schedule";
+      default:
+        return "Single notifications";
+    }
+  }
+
+  // ✅ NEW: Get selected day names
+  List<String> _getSelectedDayNames() {
+    if (_selectedDays == null) return [];
+    
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return _selectedDays!.entries
+        .where((entry) => entry.value)
+        .map((entry) {
+          final index = int.tryParse(entry.key);
+          return index != null && index >= 1 && index <= 7 
+              ? days[index - 1] 
+              : 'Day $entry.key';
+        })
+        .toList();
+  }
+
+  String _formatTimeOfDay(TimeOfDay time) {
+    final now = DateTime.now();
+    final dateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateFormat.jm().format(dateTime);
+  }
+
+  // ✅ NEW: Get recurrence icon
+  IconData _getRecurrenceIcon() {
+    switch (_notificationRecurrence) {
+      case NotificationRecurrence.daily:
+        return Icons.repeat;
+      case NotificationRecurrence.weekly:
+        return Icons.calendar_today;
+      case NotificationRecurrence.monthly:
+        return Icons.date_range;
+      case NotificationRecurrence.custom:
+        return Icons.settings;
+      case NotificationRecurrence.none:
+        return Icons.notifications_none;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  // ✅ NEW: Get recurrence color
+  Color _getRecurrenceColor() {
+    switch (_notificationRecurrence) {
+      case NotificationRecurrence.daily:
+        return Colors.blue;
+      case NotificationRecurrence.weekly:
+        return Colors.green;
+      case NotificationRecurrence.monthly:
+        return Colors.orange;
+      case NotificationRecurrence.custom:
+        return Colors.purple;
+      case NotificationRecurrence.none:
+        return Colors.grey;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
+  // ✅ UPDATED: Trigger test alarm based on notification type
   Future<void> _triggerTestAlarm(int seconds) async {
     try {
       final scheduledTime = DateTime.now().add(Duration(seconds: seconds));
 
-      // Check if native alarm system is initialized
       if (!_nativeAlarmInitialized) {
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(
@@ -240,27 +365,47 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             result == ConnectivityResult.vpn,
       );
 
-      // Use NativeAlarmHelper to schedule the alarm
+      // Prepare payload with recurrence info
+      final payload = {
+        'taskId': widget.task.docId,
+        'type': 'task_reminder',
+        'taskTitle': widget.task.title,
+        'dueDate': widget.task.date?.toIso8601String(),
+        'notificationType': _notificationRecurrence?.name ?? 'none',
+      };
+
+      // Add recurrence info if applicable
+      if (_notificationRecurrence != NotificationRecurrence.none) {
+        payload['recurrence'] = _notificationRecurrence!.name;
+        if (_recurrenceTime != null) {
+          payload['recurrenceTime'] = {
+            'hour': _recurrenceTime!.hour,
+            'minute': _recurrenceTime!.minute,
+          } as String?;
+        }
+        if (_selectedDays != null && _selectedDays!.isNotEmpty) {
+          payload['selectedDays'] = _selectedDays as String?;
+        }
+      }
+
       await NativeAlarmHelper.scheduleHybridAlarm(
         id: _generateAlarmId(widget.task.docId!, scheduledTime),
-        title: "🚨 ALARM: ${widget.task.title}",
-        body: "Tap to view task details",
+        title: "🚨 TEST ALARM: ${widget.task.title}",
+        body: _getTestAlarmBody(),
         dateTime: scheduledTime,
-        payload: {
-          'taskId': widget.task.docId,
-          'type': 'task_reminder',
-          'taskTitle': widget.task.title,
-          'dueDate': widget.task.date?.toIso8601String(),
-        },
+        payload: payload,
       );
 
-      // Show specific feedback based on connectivity and system
+      // Show specific feedback based on notification type
+      final notificationTypeText = _notificationRecurrence != NotificationRecurrence.none
+          ? "Recurring (${_notificationRecurrence!.name})"
+          : "Single";
+      
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text(
-            "✅ Hybrid alarm scheduled for $seconds seconds!\n"
+            "✅ $notificationTypeText test alarm scheduled for $seconds seconds!\n"
             "• Native Android Alarm (most reliable)\n"
-            "• Fallback to local notifications\n"
             "• ${isOnline ? 'Online - push capable' : 'Offline - local only'}",
           ),
           backgroundColor: Colors.green,
@@ -268,34 +413,36 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         ),
       );
 
-      debugPrint('Native alarm scheduled for: $scheduledTime');
-      debugPrint('Connectivity status: ${isOnline ? 'Online' : 'Offline'}');
+      debugPrint('Test alarm scheduled for: $scheduledTime');
+      debugPrint('Notification type: $notificationTypeText');
     } catch (e) {
       debugPrint('Error in test alarm: $e');
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          content: Text("❌ Failed to schedule alarm: $e"),
+          content: Text("❌ Failed to schedule test alarm: $e"),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // ✅ UPDATED: Generate unique alarm ID
+  // ✅ NEW: Get appropriate body text for test alarm
+  String _getTestAlarmBody() {
+    if (_notificationRecurrence != NotificationRecurrence.none) {
+      return "This is a test for ${_getRecurrenceDescription()}";
+    }
+    return "This is a test alarm - Tap to view task details";
+  }
+
   int _generateAlarmId(String taskId, DateTime time) {
     return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() %
         1000000;
   }
 
-  // ✅ UPDATED: Cancel alarms using NativeAlarmHelper
   Future<void> _cancelAllNotifications() async {
     try {
       if (_nativeAlarmInitialized) {
         // Cancel all potential alarms for this task
-        // Since we don't store all alarm IDs, we'll cancel by known patterns
-        // or cancel all and reschedule if needed
-
-        // For now, cancel any alarms that might be scheduled in the near future
         final now = DateTime.now();
         final futureCutoff = now.add(const Duration(days: 30));
 
@@ -331,18 +478,18 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
-  // ✅ UPDATED: Test immediate notification using NativeAlarmHelper
+  // ✅ UPDATED: Test immediate notification
   Future<void> _testImmediateNotification() async {
     try {
       await NativeAlarmHelper.showNow(
         id: _generateAlarmId(widget.task.docId!, DateTime.now()),
         title: "🔔 TEST: ${widget.task.title}",
-        body: "This is a test notification with alarm behavior",
+        body: _getRecurrenceDescription(),
       );
 
       scaffoldMessengerKey.currentState?.showSnackBar(
-        const SnackBar(
-          content: Text("✅ Test notification shown with alarm behavior"),
+        SnackBar(
+          content: Text("✅ Test notification shown for ${_getRecurrenceDescription()}"),
           backgroundColor: Colors.green,
         ),
       );
@@ -661,6 +808,84 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
                 const SizedBox(height: 16),
 
+                // ✅ NEW: Notification Type Information
+                Card(
+                  elevation: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _getRecurrenceIcon(),
+                              color: _getRecurrenceColor(),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "Notification Schedule",
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _getRecurrenceColor(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _getRecurrenceColor().withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _getRecurrenceColor().withOpacity(0.3),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _getRecurrenceDescription(),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: _getRecurrenceColor(),
+                                ),
+                              ),
+                              if (_notificationRecurrence != NotificationRecurrence.none)
+                                ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _getNotificationDetails(),
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (_notificationRecurrence == NotificationRecurrence.none && 
+                            notificationTimes.isNotEmpty)
+                          Text(
+                            "${notificationTimes.length} single notification(s) scheduled",
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
                 // Completion Status
                 Card(
                   elevation: 2,
@@ -740,6 +965,28 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
   }
 
+  // ✅ NEW: Get detailed notification information
+  String _getNotificationDetails() {
+    switch (_notificationRecurrence) {
+      case NotificationRecurrence.daily:
+        return "• Will repeat every day\n• Uses exact Android alarms for reliability\n• Can work offline";
+      case NotificationRecurrence.weekly:
+        return "• Will repeat every week on the same day\n• Android AlarmManager ensures delivery\n• Persistent until dismissed";
+      case NotificationRecurrence.monthly:
+        return "• Will repeat every month on the same date\n• Hybrid system: Android alarms + push\n• Adaptive to system restrictions";
+      case NotificationRecurrence.custom:
+        if (_selectedDays != null && _selectedDays!.isNotEmpty) {
+          final selectedCount = _selectedDays!.values.where((v) => v).length;
+          return "• Will repeat on $selectedCount selected day(s)\n• Smart scheduling to avoid conflicts\n• Battery-optimized where possible";
+        }
+        return "• Custom schedule configured\n• Flexible notification timing";
+      case NotificationRecurrence.none:
+        return "• Single notifications only\n• Schedule multiple times if needed\n• Direct to alarm system for reliability";
+      default:
+        return "• Standard notification schedule";
+    }
+  }
+
   Widget _buildCompletionTimesExpansion() => Card(
     elevation: 2,
     child: ExpansionTile(
@@ -790,18 +1037,21 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               : notificationTimes
                   .map(
                     (date) => ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.notifications_active,
-                        color: Colors.blue,
+                        color: _getRecurrenceColor(),
                       ),
                       title: Text(_formatShortDateTime(date)),
+                      subtitle: _notificationRecurrence != NotificationRecurrence.none
+                          ? Text(_getRecurrenceDescription())
+                          : const Text("Single notification"),
                     ),
                   )
                   .toList(),
     ),
   );
 
-  // ✅ UPDATED: Alarm test buttons using NativeAlarmHelper
+  // ✅ UPDATED: Alarm test buttons with notification type context
   Widget _buildAlarmTestButtons() => Card(
     elevation: 2,
     child: Padding(
@@ -809,9 +1059,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "⏰ Native Alarm System",
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          Text(
+            "⏰ ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring' : 'Single'} Alarm System",
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
           const SizedBox(height: 10),
           Container(
@@ -824,47 +1074,67 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "How it works:",
+                Text(
+                  "Notification Type: ${_getRecurrenceDescription()}",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: _getRecurrenceColor(),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 _buildFeatureRow(
                   "📱 Native Android Alarm",
-                  "Uses AlarmManager - most reliable",
+                  "Uses AlarmManager for ${_notificationRecurrence != NotificationRecurrence.none ? 'recurring' : 'exact'} timing",
                 ),
                 _buildFeatureRow(
-                  "🔄 Automatic Fallback",
-                  "Falls back to local notifications",
+                  "🔄 Smart Fallback System",
+                  "Automatically switches to local notifications if needed",
                 ),
                 _buildFeatureRow(
-                  "🔔 Alarm Behavior",
-                  "Persistent notifications with actions",
+                  "🔔 Persistent Alarms",
+                  _notificationRecurrence != NotificationRecurrence.none
+                      ? "Will repeat according to schedule"
+                      : "Single alarm with full system integration",
                 ),
                 _buildFeatureRow(
                   "⚡ Exact Timing",
-                  "Uses exact alarms for precision",
+                  "Precision scheduling with system-level integration",
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
 
+          // Test buttons with context
+          if (_notificationRecurrence != NotificationRecurrence.none)
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: _getRecurrenceColor().withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                "Testing ${_getRecurrenceDescription()}",
+                style: TextStyle(
+                  color: _getRecurrenceColor(),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+
           // Immediate test notification
           ElevatedButton(
             onPressed:
                 _nativeAlarmInitialized ? _testImmediateNotification : null,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple,
+              backgroundColor: _getRecurrenceColor(),
               foregroundColor: Colors.white,
               minimumSize: const Size(double.infinity, 48),
             ),
             child: Text(
               _nativeAlarmInitialized
-                  ? "Test Immediate Alarm Notification"
+                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring' : ''} Notification Now"
                   : "Initializing...",
             ),
           ),
@@ -881,7 +1151,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             ),
             child: Text(
               _nativeAlarmInitialized
-                  ? "Test Alarm (2 seconds)"
+                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (2 seconds)"
                   : "Initializing...",
             ),
           ),
@@ -894,7 +1164,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             ),
             child: Text(
               _nativeAlarmInitialized
-                  ? "Test Alarm (10 seconds)"
+                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (10 seconds)"
                   : "Initializing...",
             ),
           ),
@@ -907,7 +1177,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             ),
             child: Text(
               _nativeAlarmInitialized
-                  ? "Test Alarm (1 minute)"
+                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (1 minute)"
                   : "Initializing...",
             ),
           ),
@@ -921,7 +1191,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             onPressed: _nativeAlarmInitialized ? _cancelAllNotifications : null,
             child: Text(
               _nativeAlarmInitialized
-                  ? "Cancel All Alarms for This Task"
+                  ? "Cancel All ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarms"
                   : "Initializing...",
             ),
           ),
@@ -1000,3 +1270,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     ),
   );
 }
+
+// ✅ ADD: NotificationRecurrence enum (same as in AddTaskPage)
+enum NotificationRecurrence { none, daily, weekly, monthly, custom }

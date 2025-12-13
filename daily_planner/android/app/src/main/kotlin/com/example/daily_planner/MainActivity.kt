@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import androidx.core.content.ContextCompat  // For ContextCompat.getSystemService
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -47,7 +48,7 @@ class MainActivity : FlutterActivity() {
                         }
 
                         "requestExactAlarmPermission" -> {
-                            requestExactAlarmPermission()
+                            requestExactAlarmPermission(this)
                             result.success(null)
                         }
 
@@ -241,25 +242,45 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun canScheduleExactAlarms(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.canScheduleExactAlarms()
-        } else {
-            true
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val alarmManager = ContextCompat.getSystemService(this, AlarmManager::class.java)
+        alarmManager?.canScheduleExactAlarms() ?: false
+    } else {
+        true
+    }
+}
+
+    private fun requestExactAlarmPermission(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        return  // No permission needed before Android 12
+    }
+
+    val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java)
+    alarmManager?.let { am: AlarmManager ->
+        if (am.canScheduleExactAlarms()) {
+            return  // Permission already granted
         }
     }
 
-    private fun requestExactAlarmPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            if (intent.resolveActivity(packageManager) != null) {
-                startActivity(intent)
-            }
-        }
+    // Primary method: Standard system intent
+    val primaryIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+        data = android.net.Uri.parse("package:${context.packageName}")
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
 
+    // Backup method: App info page
+    val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = android.net.Uri.parse("package:${context.packageName}")
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+
+    // Try intents in order
+    if (primaryIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(primaryIntent)
+    } else {
+        context.startActivity(fallbackIntent)
+    }
+}
     private fun promptDisableBatteryOptimization() {
         try {
             val packageName = applicationContext.packageName

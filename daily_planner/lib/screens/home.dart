@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/add_medication_page.dart';
 import 'package:daily_planner/screens/additemPage.dart';
@@ -8,8 +9,6 @@ import 'package:daily_planner/utils/drawer.dart';
 import 'package:daily_planner/utils/item.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
-// Add these imports for medication
 
 enum TaskFilter { all, completed, incomplete, overdue }
 
@@ -31,12 +30,14 @@ class MyHome extends StatefulWidget {
 
 class _MyHomeState extends State<MyHome> {
   List<Task> tasks = [];
+  List<Task> displayTasks = []; // Tasks after applying completion status checks
   bool isLoading = true;
   User? user;
   final TextEditingController _searchController = TextEditingController();
   String searchQuery = "";
   bool _nativeAlarmInitialized = false;
-  bool _authChecking = true; 
+  bool _authChecking = true;
+  StreamSubscription<User?>? _authSubscription;
 
   // Add Medication Manager
   final MedicationManager _medicationManager = MedicationManager();
@@ -48,17 +49,8 @@ class _MyHomeState extends State<MyHome> {
     // Initialize NativeAlarmHelper first
     _initializeNativeAlarmHelper();
 
-    FirebaseAuth.instance.authStateChanges().listen((newUser) {
-      setState(() {
-        user = newUser;
-        _authChecking = false; // Auth check complete
-      });
-
-      if (user != null) {
-        fetchTasksFromFirestore(user!); // async, non-blocking
-        _maybeRequestAlarmPermission();
-      }
-    });
+    // Check for existing user first (cached/session)
+    _checkExistingUser();
 
     _searchController.addListener(() {
       setState(() {
@@ -67,7 +59,171 @@ class _MyHomeState extends State<MyHome> {
     });
   }
 
-  // ✅ NEW: Initialize NativeAlarmHelper
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Helper to get start of week (Monday)
+  DateTime _getWeekStart(DateTime date) {
+    final weekday = date.weekday;
+    final daysFromMonday = (weekday + 6) % 7;
+    return DateTime(date.year, date.month, date.day - daysFromMonday);
+  }
+
+  // ✅ FIXED: Check and update ALL tasks' completion status when fetched
+  Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks) async {
+    if (user == null) return fetchedTasks;
+
+    final List<Task> updatedTasks = [];
+    final List<Task> tasksToReset = [];
+
+    for (var task in fetchedTasks) {
+      // Create a copy of the task
+      Task updatedTask = Task(
+        docId: task.docId,
+        title: task.title,
+        detail: task.detail,
+        date: task.date,
+        createdAt: task.createdAt,
+        isCompleted: task.isCompleted,
+        completedAt: task.completedAt,
+        taskType: task.taskType,
+        // Copy any other properties your Task class has
+      );
+
+      // For one-time tasks, just use the stored status
+      if (task.taskType == 'oneTime') {
+        updatedTasks.add(updatedTask);
+        continue;
+      }
+
+      // For recurring tasks that are marked as completed
+      if (task.isCompleted && task.completedAt != null) {
+        final now = DateTime.now();
+        final completedDate = task.completedAt!;
+        bool needsReset = false;
+
+        switch (task.taskType) {
+          case 'DailyTask':
+            final today = DateTime(now.year, now.month, now.day);
+            final completedDay = DateTime(
+              completedDate.year,
+              completedDate.month,
+              completedDate.day,
+            );
+            needsReset = completedDay.isBefore(today);
+            break;
+
+          case 'WeeklyTask':
+            final currentWeekStart = _getWeekStart(now);
+            final completedWeekStart = _getWeekStart(completedDate);
+            needsReset = completedWeekStart.isBefore(currentWeekStart);
+            break;
+
+          case 'MonthlyTask':
+            final currentMonth = DateTime(now.year, now.month);
+            final completedMonth = DateTime(completedDate.year, completedDate.month);
+            needsReset = completedMonth.isBefore(currentMonth);
+            break;
+        }
+
+        if (needsReset) {
+          // Mark task as incomplete for display
+          updatedTask = updatedTask.copyWith(
+            isCompleted: false,
+            completedAt: null,
+          );
+          
+          // Add to list to update in Firestore
+          tasksToReset.add(task);
+        }
+      }
+
+      updatedTasks.add(updatedTask);
+    }
+
+    // Update Firestore for tasks that need reset
+    if (tasksToReset.isNotEmpty) {
+      await _resetTasksInFirestore(tasksToReset);
+    }
+
+    return updatedTasks;
+  }
+
+  // ✅ FIXED: Reset tasks in Firestore
+  Future<void> _resetTasksInFirestore(List<Task> tasksToReset) async {
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      
+      for (var task in tasksToReset) {
+        final taskRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user!.uid)
+            .collection('tasks')
+            .doc(task.docId);
+        
+        batch.update(taskRef, {
+          'isCompleted': false,
+          'completedAt': null,
+          'lastResetAt': FieldValue.serverTimestamp(),
+        });
+      }
+      
+      await batch.commit();
+      debugPrint("✅ Auto-reset ${tasksToReset.length} recurring tasks");
+    } catch (e) {
+      debugPrint("❌ Error auto-resetting tasks: $e");
+    }
+  }
+
+  // ✅ FIXED: Get effective completion status for display (synchronous)
+  bool _getEffectiveCompletionStatus(Task task) {
+    // For one-time tasks, just return the stored status
+    if (task.taskType == 'oneTime') {
+      return task.isCompleted;
+    }
+    
+    // For recurring tasks that aren't completed, return false
+    if (!task.isCompleted) {
+      return false;
+    }
+    
+    // If completedAt is null, treat as not completed
+    if (task.completedAt == null) {
+      return false;
+    }
+    
+    final now = DateTime.now();
+    final completedDate = task.completedAt!;
+    
+    switch (task.taskType) {
+      case 'DailyTask':
+        final today = DateTime(now.year, now.month, now.day);
+        final completedDay = DateTime(
+          completedDate.year,
+          completedDate.month,
+          completedDate.day,
+        );
+        return completedDay.isAtSameMomentAs(today);
+        
+      case 'WeeklyTask':
+        final currentWeekStart = _getWeekStart(now);
+        final completedWeekStart = _getWeekStart(completedDate);
+        return completedWeekStart.isAtSameMomentAs(currentWeekStart);
+        
+      case 'MonthlyTask':
+        final currentMonth = DateTime(now.year, now.month);
+        final completedMonth = DateTime(completedDate.year, completedDate.month);
+        return completedMonth.isAtSameMomentAs(currentMonth);
+        
+      default:
+        return task.isCompleted;
+    }
+  }
+
   Future<void> _initializeNativeAlarmHelper() async {
     try {
       await NativeAlarmHelper.initialize();
@@ -83,14 +239,61 @@ class _MyHomeState extends State<MyHome> {
     }
   }
 
-  // ✅ UPDATED: Renamed and updated alarm permission method
+  Future<void> _checkExistingUser() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      
+      if (currentUser != null) {
+        debugPrint('✅ User found in cache: ${currentUser.email}');
+        
+        setState(() {
+          user = currentUser;
+          _authChecking = false;
+        });
+        
+        await fetchTasksFromFirestore(currentUser);
+        _maybeRequestAlarmPermission();
+      } else {
+        debugPrint('⚠️ No cached user found, listening for auth changes');
+        setState(() {
+          _authChecking = false;
+        });
+      }
+      
+      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
+        if (mounted) {
+          setState(() {
+            user = newUser;
+          });
+          
+          if (newUser != null) {
+            debugPrint('🔄 User logged in/updated: ${newUser.email}');
+            await fetchTasksFromFirestore(newUser);
+            _maybeRequestAlarmPermission();
+          } else {
+            debugPrint('🔴 User logged out');
+            setState(() {
+              tasks.clear();
+              displayTasks.clear();
+            });
+          }
+        }
+      });
+      
+    } catch (e) {
+      debugPrint('❌ Error checking existing user: $e');
+      setState(() {
+        _authChecking = false;
+      });
+    }
+  }
+
   Future<void> _maybeRequestAlarmPermission() async {
     if (!_nativeAlarmInitialized) {
       debugPrint('NativeAlarmHelper not initialized, skipping permission request');
       return;
     }
 
-    // For Android, check exact alarm permission
     if (!await NativeAlarmHelper.checkExactAlarmPermission()) {
       final shouldRequest = await showDialog<bool>(
         context: context,
@@ -113,24 +316,27 @@ class _MyHomeState extends State<MyHome> {
       );
 
       if (shouldRequest == true) {
-       // await NativeAlarmHelper.requestExactAlarmPermission();
+        // await NativeAlarmHelper.requestExactAlarmPermission();
       }
     }
   }
 
-  // ✅ FIXED: Order by createdAt instead of date
   Future<void> fetchTasksFromFirestore(User user) async {
     if (!mounted) return;
 
+    setState(() {
+      isLoading = true;
+    });
+
     List<Task> allTasks = [];
 
-    // 1. Load cached tasks first (works offline)
     try {
+      // Try cache first
       final cachedSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('tasks')
-          .orderBy('createdAt', descending: true) // ✅ Order by createdAt (newest first)
+          .orderBy('createdAt', descending: true)
           .get(const GetOptions(source: Source.cache));
 
       allTasks =
@@ -139,24 +345,28 @@ class _MyHomeState extends State<MyHome> {
               .toList();
               
       debugPrint("✅ Loaded ${allTasks.length} tasks from cache");
+      
+      // Update completion status and get display tasks
+      final updatedTasks = await _updateTasksCompletionStatus(allTasks);
+      
+      if (mounted) {
+        setState(() {
+          tasks = allTasks;
+          displayTasks = updatedTasks;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint("Error loading cached tasks: $e");
     }
 
-    if (mounted) {
-      setState(() {
-        tasks = allTasks;
-        isLoading = false; // show UI immediately
-      });
-    }
-
-    // 2. Fetch from server in background (if online)
     try {
+      // Then try server
       final serverSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('tasks')
-          .orderBy('createdAt', descending: true) // ✅ Order by createdAt (newest first)
+          .orderBy('createdAt', descending: true)
           .get(const GetOptions(source: Source.server));
 
       final serverTasks =
@@ -166,36 +376,50 @@ class _MyHomeState extends State<MyHome> {
 
       debugPrint("✅ Loaded ${serverTasks.length} tasks from server");
 
+      // Update completion status and get display tasks
+      final updatedTasks = await _updateTasksCompletionStatus(serverTasks);
+      
       if (mounted) {
         setState(() {
-          tasks = serverTasks; // update UI with fresh data
+          tasks = serverTasks;
+          displayTasks = updatedTasks;
+          isLoading = false;
         });
       }
     } catch (e) {
       debugPrint("Server fetch failed (offline?): $e");
+      
+      if (mounted && isLoading) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
-  // ✅ FIXED: Correct overdue calculation that matches ItemWidget logic
   bool _isTaskOverdue(Task task) {
-    // If task is completed, it's not overdue
-    if (task.isCompleted) return false;
+    // Use displayTasks for accurate completion status
+    final taskToCheck = displayTasks.firstWhere(
+      (t) => t.docId == task.docId,
+      orElse: () => task,
+    );
     
-    // If no deadline is set, it's never overdue
+    if (_getEffectiveCompletionStatus(taskToCheck)) return false;
+    
     if (task.date == null) return false;
     
-    // Task is overdue if deadline has passed
     final now = DateTime.now();
     return task.date!.isBefore(now);
   }
 
-  // ✅ FIXED: Updated filtering logic to use consistent overdue calculation
   List<Task> getFilteredTasks(TaskFilter filter) {
-    return tasks.where((task) {
+    return displayTasks.where((task) {
+      final effectiveCompleted = _getEffectiveCompletionStatus(task);
+      
       final matchesFilter = switch (filter) {
-        TaskFilter.completed => task.isCompleted,
-        TaskFilter.incomplete => !task.isCompleted && !_isTaskOverdue(task),
-        TaskFilter.overdue =>   !task.isCompleted && _isTaskOverdue(task),
+        TaskFilter.completed => effectiveCompleted,
+        TaskFilter.incomplete => !effectiveCompleted && !_isTaskOverdue(task),
+        TaskFilter.overdue => !effectiveCompleted && _isTaskOverdue(task),
         TaskFilter.all => true,
       };
 
@@ -205,12 +429,10 @@ class _MyHomeState extends State<MyHome> {
     }).toList();
   }
 
-  // NEW: Get task count for each filter
   int getTaskCount(TaskFilter filter) {
     return getFilteredTasks(filter).length;
   }
 
-  // NEW: Get color for each filter
   Color getFilterColor(TaskFilter filter) {
     return switch (filter) {
       TaskFilter.all => Colors.blue,
@@ -243,22 +465,6 @@ class _MyHomeState extends State<MyHome> {
 
   Widget buildTaskList(TaskFilter filter) {
     final filtered = getFilteredTasks(filter);
-    
-    // ✅ ADDED: Debug logging to see what's happening
-    debugPrint("Filter: $filter, Total tasks: ${tasks.length}, Filtered: ${filtered.length}");
-    
-    // ✅ ADDED: More detailed debug info for overdue filter
-    if (filter == TaskFilter.overdue) {
-      final overdueTasks = tasks.where(_isTaskOverdue).toList();
-      debugPrint("Overdue tasks breakdown:");
-      for (var task in overdueTasks) {
-        debugPrint("  - ${task.title}: completed=${task.isCompleted}, date=${task.date}, isOverdue=${_isTaskOverdue(task)}");
-      }
-    }
-    
-    if (filtered.isNotEmpty) {
-      debugPrint("First task: ${filtered.first.title}, date: ${filtered.first.date}, type: ${filtered.first.taskType}, createdAt: ${filtered.first.createdAt}");
-    }
     
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -293,7 +499,6 @@ class _MyHomeState extends State<MyHome> {
       );
     }
 
-    // Group tasks by type
     Map<String, List<Task>> groupedTasks = {
       "One-Time Tasks": [],
       "Daily Tasks": [],
@@ -316,14 +521,13 @@ class _MyHomeState extends State<MyHome> {
           groupedTasks["Monthly Tasks"]!.add(task);
           break;
         default:
-          debugPrint("Unknown task type: ${task.taskType}"); // ✅ Debug unknown types
+          debugPrint("Unknown task type: ${task.taskType}");
       }
     }
 
     return Column(
       children: [
         buildSearchBar(),
-        // ✅ ADDED: Native Alarm System Status
         if (!_nativeAlarmInitialized)
           Container(
             width: double.infinity,
@@ -352,7 +556,7 @@ class _MyHomeState extends State<MyHome> {
           ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () async => fetchTasksFromFirestore(user!),
+            onRefresh: () async => await fetchTasksFromFirestore(user!),
             child: ListView(
               padding: const EdgeInsets.only(bottom: 100),
               children:
@@ -378,7 +582,6 @@ class _MyHomeState extends State<MyHome> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  // NEW: Task type count with filter color
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 8,
@@ -406,7 +609,7 @@ class _MyHomeState extends State<MyHome> {
                               (task) => ItemWidget(
                                 item: task,
                                 onEditDone:
-                                    () => fetchTasksFromFirestore(user!),
+                                    () async => await fetchTasksFromFirestore(user!),
                               ),
                             ),
                           ],
@@ -426,11 +629,10 @@ class _MyHomeState extends State<MyHome> {
       MaterialPageRoute(builder: (_) => AddTaskPage()),
     );
     if (added == true && user != null) {
-      fetchTasksFromFirestore(user!);
+      await fetchTasksFromFirestore(user!);
     }
   }
 
-  // NEW: Navigate to Add Medication Page
   Future<void> _navigateToAddMedication() async {
     await Navigator.push(
       context,
@@ -439,10 +641,8 @@ class _MyHomeState extends State<MyHome> {
             (_) => AddMedicationPage(medicationManager: _medicationManager),
       ),
     );
-    // You can refresh medication data here if needed
   }
 
-  // NEW: Show options for FAB
   void _showAddOptions() {
     showModalBottomSheet(
       context: context,
@@ -486,7 +686,6 @@ class _MyHomeState extends State<MyHome> {
     );
   }
 
-  // ✅ NEW: Test Native Alarm System
   Future<void> _testNativeAlarmSystem() async {
     if (!_nativeAlarmInitialized) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -533,7 +732,6 @@ class _MyHomeState extends State<MyHome> {
         appBar: AppBar(
           title: const Text("My Tasks"),
           actions: [
-            // ✅ NEW: Alarm System Test Button
             if (_nativeAlarmInitialized)
               IconButton(
                 icon: const Icon(Icons.alarm),
@@ -555,14 +753,6 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.blue,
                         shape: BoxShape.circle,
                       ),
-                      // child: Text(
-                      //   '${getTaskCount(TaskFilter.all)}',
-                      //   style: const TextStyle(
-                      //     fontSize: 10,
-                      //     color: Colors.white,
-                      //     fontWeight: FontWeight.bold,
-                      //   ),
-                      // ),
                     ),
                   ],
                 ),
@@ -578,14 +768,6 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.green,
                         shape: BoxShape.circle,
                       ),
-                      // child: Text(
-                      //   '${getTaskCount(TaskFilter.completed)}',
-                      //   style: const TextStyle(
-                      //     fontSize: 10,
-                      //     color: Colors.white,
-                      //     fontWeight: FontWeight.bold,
-                      //   ),
-                      // ),
                     ),
                   ],
                 ),
@@ -601,14 +783,6 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.orange,
                         shape: BoxShape.circle,
                       ),
-                      // child: Text(
-                      //   '${getTaskCount(TaskFilter.incomplete)}',
-                      //   style: const TextStyle(
-                      //     fontSize: 10,
-                      //     color: Colors.white,
-                      //     fontWeight: FontWeight.bold,
-                      //   ),
-                      // ),
                     ),
                   ],
                 ),
@@ -624,14 +798,6 @@ class _MyHomeState extends State<MyHome> {
                         color: Colors.red,
                         shape: BoxShape.circle,
                       ),
-                      // child: Text(
-                      //   '${getTaskCount(TaskFilter.overdue)}',
-                      //   style: const TextStyle(
-                      //     fontSize: 10,
-                      //     color: Colors.white,
-                      //     fontWeight: FontWeight.bold,
-                      //   ),
-                      // ),
                     ),
                   ],
                 ),

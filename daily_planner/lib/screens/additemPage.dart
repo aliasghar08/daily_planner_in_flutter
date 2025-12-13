@@ -9,6 +9,56 @@ import 'package:timezone/timezone.dart' as tz;
 
 enum TaskType { oneTime, daily, weekly, monthly }
 
+// New enum for notification recurrence
+enum NotificationRecurrence { none, daily, weekly, monthly, custom }
+
+extension NotificationRecurrenceExtension on NotificationRecurrence {
+  String get label {
+    switch (this) {
+      case NotificationRecurrence.none:
+        return "Once";
+      case NotificationRecurrence.daily:
+        return "Daily";
+      case NotificationRecurrence.weekly:
+        return "Weekly";
+      case NotificationRecurrence.monthly:
+        return "Monthly";
+      case NotificationRecurrence.custom:
+        return "Custom Days";
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case NotificationRecurrence.none:
+        return Icons.notifications_none;
+      case NotificationRecurrence.daily:
+        return Icons.repeat;
+      case NotificationRecurrence.weekly:
+        return Icons.calendar_today;
+      case NotificationRecurrence.monthly:
+        return Icons.date_range;
+      case NotificationRecurrence.custom:
+        return Icons.settings;
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case NotificationRecurrence.none:
+        return Colors.grey;
+      case NotificationRecurrence.daily:
+        return Colors.blue;
+      case NotificationRecurrence.weekly:
+        return Colors.green;
+      case NotificationRecurrence.monthly:
+        return Colors.orange;
+      case NotificationRecurrence.custom:
+        return Colors.purple;
+    }
+  }
+}
+
 extension TaskTypeExtension on TaskType {
   String get label {
     switch (this) {
@@ -60,13 +110,27 @@ class AddTaskPage extends StatefulWidget {
 class _AddTaskPageState extends State<AddTaskPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _detailController = TextEditingController();
-  DateTime? _selectedDate; // ✅ Made nullable
+  DateTime? _selectedDate;
   TaskType _selectedType = TaskType.oneTime;
   bool _isCompleted = false;
   bool _isSaving = false;
-  bool _hasEndDate = true; // ✅ New: Toggle for end date
-  List<DateTime> _notificationTimes = [];
+  bool _hasEndDate = true;
+  List<DateTime> _notificationTimes = []; // For single notifications only
   bool _nativeAlarmInitialized = false;
+
+  // New variables for recurring notifications
+  NotificationRecurrence _notificationRecurrence = NotificationRecurrence.none;
+  TimeOfDay _recurringTime = const TimeOfDay(hour: 21, minute: 0); // Default 9 PM
+  Map<String, bool> _selectedDays = {
+    '1': false, // Monday
+    '2': false, // Tuesday
+    '3': false, // Wednesday
+    '4': false, // Thursday
+    '5': false, // Friday
+    '6': false, // Saturday
+    '7': false, // Sunday
+  };
+  bool _showCustomDays = false;
 
   @override
   void initState() {
@@ -75,7 +139,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   Future<void> _checkNativeAlarmInitialization() async {
-    // Try to initialize NativeAlarmHelper if not already done
     try {
       await NativeAlarmHelper.initialize();
       setState(() {
@@ -127,24 +190,158 @@ class _AddTaskPageState extends State<AddTaskPage> {
     });
   }
 
+  Future<void> _pickRecurringTime() async {
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _recurringTime,
+    );
+
+    if (pickedTime != null) {
+      setState(() {
+        _recurringTime = pickedTime;
+      });
+    }
+  }
+
   String formatDate(DateTime? date) =>
       date != null ? DateFormat.yMMMd().format(date) : "Not set";
   String formatTime(DateTime? date) =>
       date != null ? DateFormat.jm().format(date) : "Not set";
 
-  // ✅ Check if task type supports no end date
+  String _formatTimeOfDay(TimeOfDay time) {
+    final now = DateTime.now();
+    final dateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    return DateFormat.jm().format(dateTime);
+  }
+
   bool get _supportsNoEndDate {
     return _selectedType == TaskType.daily ||
         _selectedType == TaskType.weekly ||
         _selectedType == TaskType.monthly;
   }
 
-  // ✅ Check if task type requires end date
   bool get _requiresEndDate {
     return _selectedType == TaskType.oneTime;
   }
 
-  // 🚀 UPDATED: Schedule notifications using NativeAlarmHelper
+  // ✅ NEW: Calculate recurring notification times dynamically (not stored)
+  List<DateTime> _calculateNextRecurringNotifications(DateTime? taskDate, int count) {
+    final now = DateTime.now();
+    final List<DateTime> times = [];
+    
+    if (_notificationRecurrence == NotificationRecurrence.none) {
+      return times;
+    }
+
+    // Start from tomorrow or task date
+    DateTime startDate = taskDate ?? now;
+    if (taskDate != null && taskDate.isBefore(now)) {
+      startDate = now;
+    }
+
+    // Create base time with the selected recurring time
+    DateTime baseTime = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      _recurringTime.hour,
+      _recurringTime.minute,
+    );
+
+    // If base time is in the past, move to next day
+    if (baseTime.isBefore(now)) {
+      baseTime = baseTime.add(const Duration(days: 1));
+    }
+
+    int scheduled = 0;
+    DateTime currentTime = baseTime;
+
+    while (scheduled < count) {
+      // Check if this time is before task end date (if exists)
+      if (taskDate != null && currentTime.isAfter(taskDate)) {
+        break;
+      }
+
+      // Apply recurrence pattern
+      bool shouldSchedule = true;
+      
+      switch (_notificationRecurrence) {
+        case NotificationRecurrence.daily:
+          // Schedule every day
+          break;
+          
+        case NotificationRecurrence.weekly:
+          // Schedule weekly on the same weekday
+          if (currentTime.weekday != startDate.weekday) {
+            shouldSchedule = false;
+            currentTime = currentTime.add(const Duration(days: 1));
+            continue;
+          }
+          break;
+          
+        case NotificationRecurrence.monthly:
+          // Schedule monthly on the same day
+          if (currentTime.day != startDate.day) {
+            shouldSchedule = false;
+            currentTime = DateTime(
+              currentTime.year,
+              currentTime.month + 1,
+              startDate.day,
+              _recurringTime.hour,
+              _recurringTime.minute,
+            );
+            continue;
+          }
+          break;
+          
+        case NotificationRecurrence.custom:
+          // Schedule only on selected days
+          if (!(_selectedDays[currentTime.weekday.toString()] ?? false)) {
+            shouldSchedule = false;
+            currentTime = currentTime.add(const Duration(days: 1));
+            continue;
+          }
+          break;
+          
+        case NotificationRecurrence.none:
+          shouldSchedule = false;
+          break;
+      }
+
+      if (shouldSchedule) {
+        times.add(currentTime);
+        scheduled++;
+        
+        // Move to next occurrence based on pattern
+        switch (_notificationRecurrence) {
+          case NotificationRecurrence.daily:
+            currentTime = currentTime.add(const Duration(days: 1));
+            break;
+          case NotificationRecurrence.weekly:
+            currentTime = currentTime.add(const Duration(days: 7));
+            break;
+          case NotificationRecurrence.monthly:
+            currentTime = DateTime(
+              currentTime.year,
+              currentTime.month + 1,
+              currentTime.day,
+              _recurringTime.hour,
+              _recurringTime.minute,
+            );
+            break;
+          case NotificationRecurrence.custom:
+            currentTime = currentTime.add(const Duration(days: 1));
+            break;
+          case NotificationRecurrence.none:
+            break;
+        }
+      }
+    }
+
+    return times;
+  }
+
+  // ✅ UPDATED: Schedule notifications dynamically
   Future<void> _scheduleNotifications(
     String taskId,
     String title,
@@ -153,92 +350,83 @@ class _AddTaskPageState extends State<AddTaskPage> {
     final now = DateTime.now();
     int scheduledCount = 0;
 
-    // Schedule notifications asynchronously without waiting for each one
-    final notificationFutures =
-        _notificationTimes
-            .where((notificationTime) => notificationTime.isAfter(now))
-            .map((notificationTime) async {
-              try {
-                // Use NativeAlarmHelper for scheduling
-                // await NativeAlarmHelper.scheduleAlarmAtTime(
-                //   id: _generateAlarmId(taskId, notificationTime),
-                //   title: 'Task Reminder: $title',
-                //   body:
-                //       taskDate != null
-                //           ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                //           : '$title reminder',
-                //   dateTime: notificationTime,
-                // );
-                
-                // use android_alarm_manger and fcm for scheduling
-                await NativeAlarmHelper.scheduleHybridAlarm(
-                  id: _generateAlarmId(taskId, notificationTime),
-                  title: 'Task Reminder: $title',
-                  body:
-                      taskDate != null
-                          ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                          : '$title reminder',
-                  dateTime: notificationTime,
-                  payload: {
-                    'type': 'alarm',
-                    'alarmId': _generateAlarmId(taskId, notificationTime),
-                    'title': title,
-                    'body': taskDate != null
-                          ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                          : '$title reminder',
-                  },
-                );
-
-                scheduledCount++;
-                debugPrint("✅ Native alarm scheduled for: $notificationTime");
-              } catch (e) {
-                debugPrint("❌ Failed to schedule native alarm: $e");
-
-                // Fallback to local notifications if native fails
-                try {
-                  final androidDetails = AndroidNotificationDetails(
-                    'daily_planner_channel',
-                    'Daily Planner',
-                    channelDescription: 'Task reminders and alerts',
-                    importance: Importance.high,
-                    priority: Priority.high,
-                  );
-
-                  await FlutterLocalNotificationsPlugin().zonedSchedule(
-                    _generateAlarmId(taskId, notificationTime),
-                    'Task Reminder: $title',
-                    taskDate != null
-                        ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                        : '$title reminder',
-                    tz.TZDateTime.from(notificationTime, tz.local),
-                    NotificationDetails(android: androidDetails),
-                    androidScheduleMode:
-                        AndroidScheduleMode.exactAllowWhileIdle,
-                  );
-
-                  debugPrint(
-                    "✅ Fallback notification scheduled for: $notificationTime",
-                  );
-                } catch (fallbackError) {
-                  debugPrint(
-                    "❌ Fallback notification also failed: $fallbackError",
-                  );
-                }
-              }
-            })
-            .toList();
-
-    // Wait for all notifications to be scheduled, but don't block the main task creation
-    if (notificationFutures.isNotEmpty) {
-      await Future.wait(notificationFutures);
+    // For recurring notifications, calculate next occurrences and schedule them
+    if (_notificationRecurrence != NotificationRecurrence.none) {
+      // Calculate next 10 recurring notifications (or until task end date)
+      final List<DateTime> recurringTimes = _calculateNextRecurringNotifications(taskDate, 10);
+      
+      debugPrint("📅 Will schedule ${recurringTimes.length} recurring notifications");
+      
+      for (final notificationTime in recurringTimes) {
+        if (notificationTime.isAfter(now)) {
+          try {
+            await NativeAlarmHelper.scheduleHybridAlarm(
+              id: _generateAlarmId(taskId, notificationTime),
+              title: 'Task Reminder: $title',
+              body: taskDate != null
+                  ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                  : '$title reminder',
+              dateTime: notificationTime,
+              payload: {
+                'type': 'alarm',
+                'alarmId': _generateAlarmId(taskId, notificationTime),
+                'taskId': taskId,
+                'title': title,
+                'body': taskDate != null
+                    ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                    : '$title reminder',
+                'recurrence': _notificationRecurrence.name,
+                'recurrenceTime': {
+                  'hour': _recurringTime.hour,
+                  'minute': _recurringTime.minute,
+                },
+                'selectedDays': _selectedDays,
+              },
+            );
+            scheduledCount++;
+            debugPrint("✅ Recurring alarm scheduled for: $notificationTime");
+          } catch (e) {
+            debugPrint("❌ Failed to schedule recurring alarm: $e");
+            // Fallback logic if needed
+          }
+        }
+      }
+    } else {
+      // For single notifications, schedule only the stored times
+      for (final notificationTime in _notificationTimes) {
+        if (notificationTime.isAfter(now)) {
+          try {
+            await NativeAlarmHelper.scheduleHybridAlarm(
+              id: _generateAlarmId(taskId, notificationTime),
+              title: 'Task Reminder: $title',
+              body: taskDate != null
+                  ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                  : '$title reminder',
+              dateTime: notificationTime,
+              payload: {
+                'type': 'alarm',
+                'alarmId': _generateAlarmId(taskId, notificationTime),
+                'taskId': taskId,
+                'title': title,
+                'body': taskDate != null
+                    ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                    : '$title reminder',
+              },
+            );
+            scheduledCount++;
+            debugPrint("✅ Single alarm scheduled for: $notificationTime");
+          } catch (e) {
+            debugPrint("❌ Failed to schedule single alarm: $e");
+          }
+        }
+      }
     }
 
-    // Show success message only if we actually scheduled something
     if (scheduledCount > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            "✅ $scheduledCount notification(s) scheduled using ${_nativeAlarmInitialized ? 'Native Alarm System' : 'Fallback System'}.",
+            "✅ $scheduledCount notification(s) scheduled",
           ),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
@@ -247,10 +435,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
-  // ✅ NEW: Generate unique alarm ID
   int _generateAlarmId(String taskId, DateTime time) {
-    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() %
-        1000000;
+    // Combine taskId and timestamp for unique ID
+    final combined = '${taskId}_${time.millisecondsSinceEpoch}';
+    return combined.hashCode.abs() % 1000000;
   }
 
   Future<void> _addTask() async {
@@ -269,7 +457,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    // ✅ Validation for one-time tasks (require end date)
     if (_requiresEndDate && _selectedDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -280,11 +467,22 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    // ✅ Validation for date if set
     if (_selectedDate != null && _selectedDate!.isBefore(now)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("⚠️ Please choose a future date and time."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    // Validate custom days selection
+    if (_notificationRecurrence == NotificationRecurrence.custom &&
+        !_selectedDays.values.any((selected) => selected)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ Please select at least one day for custom notifications."),
           backgroundColor: Colors.orange,
         ),
       );
@@ -320,11 +518,17 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       Task newTask;
 
-      // ✅ Use _hasEndDate for recurring tasks to determine if date should be null
       final DateTime? taskDate =
           _requiresEndDate
               ? _selectedDate
               : (_hasEndDate ? _selectedDate : null);
+
+      // 🚀 CRITICAL FIX: Don't store recurring notification times in Firestore
+      // Only store single notification times, not recurring ones
+      final List<DateTime> notificationTimesToStore = 
+          _notificationRecurrence == NotificationRecurrence.none 
+              ? _notificationTimes 
+              : [];
 
       switch (_selectedType) {
         case TaskType.oneTime:
@@ -337,7 +541,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             taskType: _selectedType.name,
-            notificationTimes: _notificationTimes,
+            notificationTimes: notificationTimesToStore,
+            // Store recurrence pattern only, not individual times
+            notificationRecurrence: _notificationRecurrence.name,
+            notificationRecurrenceTime: {
+              'hour': _recurringTime.hour,
+              'minute': _recurringTime.minute,
+            },
+            selectedDays: _selectedDays,
           );
           break;
 
@@ -351,7 +562,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
-            notificationTimes: _notificationTimes,
+            notificationTimes: notificationTimesToStore,
+            // Store recurrence pattern only, not individual times
+            notificationRecurrence: _notificationRecurrence.name,
+            notificationRecurrenceTime: {
+              'hour': _recurringTime.hour,
+              'minute': _recurringTime.minute,
+            },
+            selectedDays: _selectedDays,
           );
           break;
 
@@ -365,7 +583,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
             createdAt: now,
             completedAt: _isCompleted ? now : null,
             completionStamps: _isCompleted ? [now] : [],
-            notificationTimes: _notificationTimes,
+            notificationTimes: notificationTimesToStore,
+            // Store recurrence pattern only, not individual times
+            notificationRecurrence: _notificationRecurrence.name,
+            notificationRecurrenceTime: {
+              'hour': _recurringTime.hour,
+              'minute': _recurringTime.minute,
+            },
+            selectedDays: _selectedDays,
           );
           break;
 
@@ -381,20 +606,25 @@ class _AddTaskPageState extends State<AddTaskPage> {
             completedAt: _isCompleted ? now : null,
             dayOfMonth: dayOfMonth,
             completionStamps: _isCompleted ? [now] : [],
-            notificationTimes: _notificationTimes,
+            notificationTimes: notificationTimesToStore,
+            // Store recurrence pattern only, not individual times
+            notificationRecurrence: _notificationRecurrence.name,
+            notificationRecurrenceTime: {
+              'hour': _recurringTime.hour,
+              'minute': _recurringTime.minute,
+            },
+            selectedDays: _selectedDays,
           );
           break;
       }
 
       debugPrint(
-        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}",
+        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}"
       );
 
-      // 🚀 FIRST: Save the task to Firestore immediately
       await newTaskRef.set(newTask.toMap());
       debugPrint("✅ Task '$title' successfully added to Firestore");
 
-      // 🚀 SECOND: Show immediate success message
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -405,17 +635,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
         );
       }
 
-      // 🚀 THIRD: Navigate back immediately without waiting for notifications
       if (mounted) {
         Navigator.pop(context, true);
       }
 
-      // 🚀 FOURTH: Schedule notifications in the background (after navigation)
-      if (_notificationTimes.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scheduleNotifications(newTaskRef.id, title, taskDate);
-        });
-      }
+      // Schedule notifications in background
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduleNotifications(newTaskRef.id, title, taskDate);
+      });
     } catch (e, stack) {
       debugPrint("❌ Error adding task: $e");
       debugPrint("Stack trace:\n$stack");
@@ -430,7 +657,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
         setState(() => _isSaving = false);
       }
     }
-    // 🚀 REMOVED: Don't set _isSaving to false here since we navigated away
   }
 
   Future<void> _pickNotificationTime() async {
@@ -543,7 +769,258 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
-  // ✅ NEW: Build alarm system status indicator
+  String _getSelectedDaysText() {
+    final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final selectedDayNames = _selectedDays.entries
+        .where((entry) => entry.value)
+        .map((entry) => days[int.parse(entry.key) - 1])
+        .toList();
+    
+    return selectedDayNames.isEmpty ? "No days selected" : selectedDayNames.join(', ');
+  }
+
+  Widget _buildCustomDaysSelector() {
+    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Select days:",
+            style: TextStyle(fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: List.generate(7, (index) {
+              final dayKey = (index + 1).toString();
+              final isSelected = _selectedDays[dayKey] ?? false;
+              
+              return FilterChip(
+                label: Text(days[index]),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    _selectedDays[dayKey] = selected;
+                  });
+                },
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : Colors.black,
+                ),
+                selectedColor: Theme.of(context).primaryColor,
+                checkmarkColor: Colors.white,
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Selected: ${_getSelectedDaysText()}",
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecurringNotificationSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Notification Schedule",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Recurrence Type Selection
+            DropdownButtonFormField<NotificationRecurrence>(
+              value: _notificationRecurrence,
+              decoration: InputDecoration(
+                labelText: "How often?",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                ),
+              ),
+              items: NotificationRecurrence.values.map((recurrence) {
+                return DropdownMenuItem(
+                  value: recurrence,
+                  child: Row(
+                    children: [
+                      Icon(
+                        recurrence.icon,
+                        color: recurrence.color,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        recurrence.label,
+                        style: TextStyle(color: recurrence.color),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (recurrence) {
+                if (recurrence != null) {
+                  setState(() {
+                    _notificationRecurrence = recurrence;
+                    _showCustomDays = recurrence == NotificationRecurrence.custom;
+                    // Clear single notifications if switching to recurring
+                    if (recurrence != NotificationRecurrence.none) {
+                      _notificationTimes.clear();
+                    }
+                  });
+                }
+              },
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Time Picker for Recurring Notifications
+            if (_notificationRecurrence != NotificationRecurrence.none)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Notification Time:",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: _pickRecurringTime,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, color: Colors.grey),
+                          const SizedBox(width: 12),
+                          Text(
+                            _formatTimeOfDay(_recurringTime),
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const Spacer(),
+                          const Icon(Icons.edit, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Next 10 occurrences will be scheduled",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            
+            // Custom Days Selector
+            if (_showCustomDays)
+              Column(
+                children: [
+                  const SizedBox(height: 16),
+                  _buildCustomDaysSelector(),
+                ],
+              ),
+            
+            // Single Notifications (only when recurrence is "none")
+            if (_notificationRecurrence == NotificationRecurrence.none)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Single Notifications:",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_notificationTimes.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        "No notifications added",
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children:
+                          _notificationTimes.map((time) {
+                            return Chip(
+                              label: Text(
+                                DateFormat.yMd().add_jm().format(time),
+                              ),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () {
+                                setState(() {
+                                  _notificationTimes.remove(time);
+                                });
+                              },
+                              backgroundColor: Colors.blue.withOpacity(0.1),
+                            );
+                          }).toList(),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _pickNotificationTime,
+                      icon: const Icon(Icons.add_alert),
+                      label: const Text("Add Single Notification"),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAlarmSystemStatus() {
     if (_nativeAlarmInitialized) {
       return Container(
@@ -865,109 +1342,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 const SizedBox(height: 20),
               ],
 
-              // Notifications Section
-              Card(
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Notifications",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // ✅ UPDATED: Show which system will be used
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color:
-                              _nativeAlarmInitialized
-                                  ? Colors.green[50]
-                                  : Colors.orange[50],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _nativeAlarmInitialized
-                                  ? Icons.alarm
-                                  : Icons.notifications,
-                              color:
-                                  _nativeAlarmInitialized
-                                      ? Colors.green
-                                      : Colors.orange,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _nativeAlarmInitialized
-                                  ? "Using Native Alarm System"
-                                  : "Using Fallback Notification System",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color:
-                                    _nativeAlarmInitialized
-                                        ? Colors.green
-                                        : Colors.orange,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_notificationTimes.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text(
-                            "No notifications added",
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        )
-                      else
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children:
-                              _notificationTimes.map((time) {
-                                return Chip(
-                                  label: Text(
-                                    DateFormat.yMd().add_jm().format(time),
-                                  ),
-                                  deleteIcon: const Icon(Icons.close, size: 16),
-                                  onDeleted: () {
-                                    setState(() {
-                                      _notificationTimes.remove(time);
-                                    });
-                                  },
-                                  backgroundColor: Colors.blue.withOpacity(0.1),
-                                );
-                              }).toList(),
-                        ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _pickNotificationTime,
-                          icon: const Icon(Icons.add_alert),
-                          label: const Text("Add Notification"),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // Recurring Notifications Section
+              _buildRecurringNotificationSection(),
 
               const SizedBox(height: 20),
 

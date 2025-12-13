@@ -77,9 +77,13 @@ Future<void> _processTaskReset(QuerySnapshot snapshot, CollectionReference taskC
 bool _shouldSkipResetDueToRecentCompletion(DateTime? completedAt, DateTime now) {
   if (completedAt == null) return false;
   
-  return completedAt.day == now.day &&
-         completedAt.month == now.month &&
-         completedAt.year == now.year;
+  // Convert both times to UTC for comparison
+  final completedAtUtc = completedAt.toUtc();
+  final nowUtc = now.toUtc();
+  
+  return completedAtUtc.day == nowUtc.day &&
+         completedAtUtc.month == nowUtc.month &&
+         completedAtUtc.year == nowUtc.year;
 }
 
 Map<String, dynamic> _prepareResetUpdates(Task task) {

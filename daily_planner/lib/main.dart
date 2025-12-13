@@ -1,9 +1,8 @@
 import 'dart:io' show Platform;
-import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/battery_optimization_helper.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, Int64List;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -20,7 +19,6 @@ import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'package:workmanager/workmanager.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -42,65 +40,26 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-@pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((task, inputData) async {
-    // Pull values from inputData map
-    final title = inputData?['title'] ?? 'Default Title';
-    final body = inputData?['body'] ?? 'Default Body';
-
-    await showNotification(title: title, body: body);
-
-    return Future.value(true);
-  });
-}
-
 Future<void> showNotification({
   required String title,
   required String body,
 }) async {
-  final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    'alarm_channel',
-    'Alarm Notifications',
+  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    'alarm_channel', // channel id
+    'Alarm Notifications', // channel name
     channelDescription: 'This channel is for alarm notifications',
     importance: Importance.max,
     priority: Priority.max,
     ticker: 'ticker',
     playSound: true,
-    ongoing: true,
-    enableVibration: true,
-    vibrationPattern: Int64List.fromList(const [0, 1000, 500, 1000, 500, 1000]),
     category: AndroidNotificationCategory.alarm,
-    fullScreenIntent: true, // Makes it full-screen
-    actions: const <AndroidNotificationAction>[
-      AndroidNotificationAction(
-        'STOP_ACTION',
-        'Stop',
-        showsUserInterface: true,
-        cancelNotification: true,
-      ),
-      AndroidNotificationAction(
-        'SNOOZE_ACTION',
-        'Snooze',
-        showsUserInterface: true,
-        cancelNotification: true,
-      ),
-    ],
   );
 
-  final NotificationDetails platformDetails = NotificationDetails(
+  const NotificationDetails platformDetails = NotificationDetails(
     android: androidDetails,
   );
 
-  await flutterLocalNotificationsPlugin.show(
-    DateTime.now().millisecondsSinceEpoch.remainder(100000),
-    title,
-    body,
-    platformDetails,
-    payload: 'alarm_payload',
-  );
-
-  debugPrint("ShowNotofication method triggered");
+  await flutterLocalNotificationsPlugin.show(0, title, body, platformDetails);
 }
 
 // Show notification helper
@@ -148,10 +107,8 @@ Future<void> _initializeNotificationService() async {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Initialize Android Alarm Manager Plus FIRST
-  await AndroidAlarmManager.initialize();
-
   // Initialize Firebase with offline persistence
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -164,89 +121,25 @@ Future<void> main() async {
     );
   } catch (e) {
     debugPrint("Firebase initialization error: $e");
+    // Continue anyway - we'll use offline capabilities
   }
 
-  // Initialize timezone
+  // ✅ FIXED: Initialize timezone FIRST
   tz.initializeTimeZones();
 
-  // Initialize Flutter Local Notifications Plugin
-  await _initializeFlutterLocalNotifications();
-
-  // Initialize your NotificationService / NativeAlarmHelper
+  // ✅ FIXED: Initialize NotificationService BEFORE running app
   await _initializeNotificationService();
 
-  // Initialize FCM and Android services
+  // ✅ FIXED: Call runApp AFTER all critical initializations
+  runApp(const MyApp());
+
+  // ✅ FIXED: Initialize FCM and other services
   await _initializeFCM();
   await _initializeAndroidServices();
 
-  NativeAlarmHelper.startForegroundService();
+  // Perform async initializations in background
 
-  // Initialize WorkManager
-  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
-
-  // Disable battery optimizations for alarms
-  if (!kIsWeb && Platform.isAndroid) {
-    try {
-      await BatteryOptimizationHelper.ensureDisabled();
-      await BatteryOptimizationHelper.ensureManufacturerBatteryOptimizationDisabled();
-    } catch (e) {
-      debugPrint("Battery optimization prompt not available: $e");
-    }
-  }
-
-  // Run the app
-  runApp(const MyApp());
-}
-
-/// Initialize FlutterLocalNotificationsPlugin with full-screen alarm support
-Future<void> _initializeFlutterLocalNotifications() async {
-  const AndroidInitializationSettings androidInit =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
-
-  final DarwinInitializationSettings iosInit = DarwinInitializationSettings(
-    requestAlertPermission: true,
-    requestBadgePermission: true,
-    requestSoundPermission: true,
-  );
-
-  final InitializationSettings initSettings = InitializationSettings(
-    android: androidInit,
-    iOS: iosInit,
-  );
-
-  await flutterLocalNotificationsPlugin.initialize(
-    initSettings,
-    onDidReceiveNotificationResponse: (NotificationResponse response) {
-      debugPrint('Notification tapped: ${response.payload}');
-
-      if (response.actionId == 'STOP_ACTION') {
-        flutterLocalNotificationsPlugin.cancel(response.id!);
-      } else if (response.actionId == 'SNOOZE_ACTION') {
-        flutterLocalNotificationsPlugin.cancel(response.id!);
-        flutterLocalNotificationsPlugin.zonedSchedule(
-          response.id!,
-          'Snoozed Alarm',
-          'Reminder after snooze!',
-          tz.TZDateTime.now(tz.local).add(const Duration(minutes: 5)),
-          const NotificationDetails(
-            android: AndroidNotificationDetails(
-              'alarm_channel',
-              'Alarm Notifications',
-              channelDescription: 'Full-screen alarm notifications',
-              importance: Importance.max,
-              priority: Priority.max,
-              fullScreenIntent: true,
-            ),
-          ),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        );
-      } else {
-        navigatorKey.currentState?.pushNamed('/home');
-      }
-    },
-  );
-
-  debugPrint('✅ FlutterLocalNotificationsPlugin initialized');
+  resetAllTasksIfNeeded();
 }
 
 // Test method - call this somewhere in your app
@@ -423,10 +316,6 @@ Future<void> _initializeAndroidServices() async {
         }
       },
     );
-
-    NativeAlarmHelper().openAutoStartSettings();
-
-    NativeAlarmHelper.openExactAlarmSettings();
 
     debugPrint('✅ Android services initialized successfully');
   } catch (e) {
