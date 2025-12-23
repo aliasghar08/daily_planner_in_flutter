@@ -54,14 +54,19 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d("AlarmReceiver", "Triggered: ${intent.action}")
-
-        when (intent.action) {
-            ACTION_STOP -> handleStop(context, intent)
-            ACTION_SNOOZE -> handleSnooze(context, intent)
-            else -> showNotification(context, intent)
+    Log.d("AlarmReceiver", "Triggered: ${intent.action}")
+    
+    // Add this check to prevent unwanted triggers
+    when {
+        intent.action == null && !intent.hasExtra(EXTRA_ID) -> {
+            Log.d("AlarmReceiver", "Ignoring null intent without ID")
+            return
         }
+        intent.action == ACTION_STOP -> handleStop(context, intent)
+        intent.action == ACTION_SNOOZE -> handleSnooze(context, intent)
+        else -> showNotification(context, intent)
     }
+}
 
     private fun showNotification(context: Context, intent: Intent) {
         createNotificationChannel(context)

@@ -1,5 +1,7 @@
 import 'package:daily_planner/screens/login.dart';
+import 'package:daily_planner/screens/medication_list_page.dart';
 import 'package:daily_planner/screens/settings.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
 import 'package:daily_planner/utils/performance_page/total_tasks.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,8 +9,9 @@ import 'package:flutter/material.dart';
 
 class MyDrawer extends StatefulWidget {
   final User? user;
+  final MedicationManager medicationManager;
 
-  const MyDrawer({super.key, required this.user});
+  const MyDrawer({super.key, required this.user, required this.medicationManager});
 
   @override
   State<MyDrawer> createState() => _MyDrawerState();
@@ -82,7 +85,7 @@ class _MyDrawerState extends State<MyDrawer> {
                     title: 'Home',
                     onTap: () => Navigator.pop(context),
                   ),
-                  
+
                   _buildDrawerItem(
                     icon: Icons.settings_outlined,
                     activeIcon: Icons.settings_rounded,
@@ -91,6 +94,23 @@ class _MyDrawerState extends State<MyDrawer> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => SettingsPage()),
+                      );
+                    },
+                  ),
+
+                  _buildDrawerItem(
+                    icon: Icons.medication_outlined,
+                    activeIcon: Icons.medication_rounded,
+                    title: 'Medications',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder:
+                              (context) => MedicationListPage(
+                                medicationManager: widget.medicationManager, // Just pass the manager, not create new page
+                              ),
+                        ),
                       );
                     },
                   ),
@@ -135,11 +155,7 @@ class _MyDrawerState extends State<MyDrawer> {
             color: (color ?? Colors.blueAccent).withOpacity(0.1),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(
-            icon,
-            color: color ?? Colors.blueAccent,
-            size: 22,
-          ),
+          child: Icon(icon, color: color ?? Colors.blueAccent, size: 22),
         ),
         title: Text(
           title,
@@ -159,9 +175,7 @@ class _MyDrawerState extends State<MyDrawer> {
   Widget _buildExpandableInsightsSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
       child: Column(
         children: [
           ListTile(
@@ -180,18 +194,17 @@ class _MyDrawerState extends State<MyDrawer> {
             ),
             title: const Text(
               "Insights",
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
             ),
             trailing: Icon(
-              _isinsightsexpanded 
-                  ? Icons.keyboard_arrow_up_rounded 
+              _isinsightsexpanded
+                  ? Icons.keyboard_arrow_up_rounded
                   : Icons.keyboard_arrow_down_rounded,
               color: Colors.grey.shade600,
             ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             onTap: () {
               setState(() {
                 _isinsightsexpanded = !_isinsightsexpanded;
@@ -249,18 +262,11 @@ class _MyDrawerState extends State<MyDrawer> {
       child: ListTile(
         leading: const SizedBox(
           width: 32,
-          child: Icon(
-            Icons.circle,
-            size: 6,
-            color: Colors.grey,
-          ),
+          child: Icon(Icons.circle, size: 6, color: Colors.grey),
         ),
         title: Text(
           title,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade700,
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
         ),
         minLeadingWidth: 20,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -273,31 +279,30 @@ class _MyDrawerState extends State<MyDrawer> {
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(
-          "Log out Confirmation",
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: const Text(
-          "Are you sure you want to log out?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(color: Colors.grey),
+      builder:
+          (context) => AlertDialog(
+            title: const Text(
+              "Log out Confirmation",
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
+            content: const Text("Are you sure you want to log out?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text(
+                  "Cancel",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text("Logout"),
+              ),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Logout"),
-          ),
-        ],
-      ),
     );
 
     if (shouldLogout == true) {

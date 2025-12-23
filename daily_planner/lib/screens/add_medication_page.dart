@@ -1,10 +1,13 @@
 // lib/pages/medication/add_medication_page.dart
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 
 class AddMedicationPage extends StatefulWidget {
   final MedicationManager medicationManager;
@@ -117,56 +120,144 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     super.dispose();
   }
 
-  void _saveMedication() {
-    if (_formKey.currentState!.validate()) {
-      _formKey.currentState!.save();
+  Future<void> _saveMedication() async {
+  if (_formKey.currentState!.validate()) {
+    _formKey.currentState!.save();
 
-      // Validate scheduling
-      if (_selectedTimes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please add at least one intake time')),
-        );
-        return;
-      }
+    // Validate scheduling
+    if (_selectedTimes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one intake time')),
+      );
+      return;
+    }
 
-      if (_selectedFrequency == MedicationFrequency.weekly &&
-          _selectedDays.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select at least one day for weekly schedule'),
+    if (_selectedFrequency == MedicationFrequency.weekly &&
+        _selectedDays.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one day for weekly schedule'),
+        ),
+      );
+      return;
+    }
+
+    if (_selectedFrequency == MedicationFrequency.custom &&
+        _selectedCustomDates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select at least one date for custom schedule',
           ),
-        );
-        return;
-      }
+        ),
+      );
+      return;
+    }
 
-      if (_selectedFrequency == MedicationFrequency.custom &&
-          _selectedCustomDates.isEmpty) {
+    try {
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final String? userId = _getCurrentUserId();
+
+      if (userId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Please select at least one date for custom schedule',
-            ),
-          ),
+          const SnackBar(content: Text('User not authenticated')),
         );
         return;
       }
 
+      // =============================================
+      // PART 1: Save Medication
+      // =============================================
+      Map<String, dynamic> medicationData = {
+        'name': _nameController.text.trim(),
+        'dosage': _dosage,
+        'unit': _selectedUnit.toString().split('.').last,
+        'description': _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
+        'color': _selectedColor,
+        'icon': _selectedIcon,
+        'createdAt': FieldValue.serverTimestamp(),
+        'userId': userId,
+      };
+
+      final userMedicationsRef = firestore
+          .collection('users')
+          .doc(userId)
+          .collection('medications');
+
+      DocumentReference medicationRef;
+      String firebaseMedicationId;
+
+      if (widget.existingMedication != null &&
+          widget.existingMedication!.medicationId != null) {
+        medicationRef = userMedicationsRef.doc(widget.existingMedication!.medicationId);
+        await medicationRef.update(medicationData);
+        firebaseMedicationId = widget.existingMedication!.medicationId!;
+      } else {
+        medicationRef = await userMedicationsRef.add(medicationData);
+        firebaseMedicationId = medicationRef.id;
+      }
+
+      // =============================================
+      // PART 2: Save Schedule
+      // =============================================
+      Map<String, dynamic> scheduleData = {
+        'medicationId': firebaseMedicationId,
+        'medicationName': _nameController.text.trim(),
+        'startDate': Timestamp.fromDate(_startDate),
+        'endDate': _endDate != null ? Timestamp.fromDate(_endDate!) : null,
+        'frequency': _selectedFrequency.toString().split('.').last,
+        'timesPerDay': _selectedTimes
+            .map((time) => {'hour': time.hour, 'minute': time.minute})
+            .toList(),
+        'daysOfWeek': _selectedDays,
+        'specificDates': _selectedCustomDates
+            .map((date) => Timestamp.fromDate(date))
+            .toList(),
+        'instructions': _instructionsController.text.trim().isEmpty
+            ? null
+            : _instructionsController.text.trim(),
+        'reminderMinutesBefore': _reminderMinutesBefore,
+        'createdAt': FieldValue.serverTimestamp(),
+        'userId': userId,
+      };
+
+      final userSchedulesRef = firestore
+          .collection('users')
+          .doc(userId)
+          .collection('schedules');
+
+      String? firebaseScheduleId;
+
+      if (widget.existingSchedule != null &&
+          widget.existingSchedule!.scheduleId != null) {
+        await userSchedulesRef
+            .doc(widget.existingSchedule!.scheduleId)
+            .update(scheduleData);
+        firebaseScheduleId = widget.existingSchedule!.scheduleId;
+      } else {
+        DocumentReference scheduleRef = await userSchedulesRef.add(scheduleData);
+        firebaseScheduleId = scheduleRef.id;
+      }
+
+      // =============================================
+      // PART 3: Create local objects (SKIP allMedications for now!)
+      // =============================================
       final medication = Medication(
-        medicationId: widget.existingMedication?.medicationId,
+        medicationId: firebaseMedicationId,
         name: _nameController.text.trim(),
         dosage: _dosage,
         unit: _selectedUnit,
-        description:
-            _descriptionController.text.trim().isEmpty
-                ? null
-                : _descriptionController.text.trim(),
+        description: _descriptionController.text.trim().isEmpty
+            ? null
+            : _descriptionController.text.trim(),
         color: _selectedColor,
         icon: _selectedIcon,
       );
 
-      // Create schedule
       final schedule = MedicationSchedule(
-        scheduleId: widget.existingSchedule?.scheduleId,
+        scheduleId: firebaseScheduleId,
         medication: medication,
         startDate: _startDate,
         endDate: _endDate,
@@ -174,29 +265,41 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         timesPerDay: _selectedTimes,
         daysOfWeek: _selectedDays,
         specificDates: _selectedCustomDates,
-        instructions:
-            _instructionsController.text.trim().isEmpty
-                ? null
-                : _instructionsController.text.trim(),
+        instructions: _instructionsController.text.trim().isEmpty
+            ? null
+            : _instructionsController.text.trim(),
         reminderMinutesBefore: _reminderMinutesBefore,
       );
 
-      // Add medication and schedule to manager
       widget.medicationManager.addMedication(medication);
       widget.medicationManager.createSchedule(schedule);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '${medication.name} ${widget.existingMedication != null ? 'updated' : 'added'} successfully',
-          ),
+          content: Text('${medication.name} saved successfully!'),
+          backgroundColor: Colors.green,
         ),
       );
 
       Navigator.pop(context, medication);
+    } catch (error) {
+      print('Firebase save error: $error');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save: ${error.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
+}
 
+  // Helper function to get current user ID
+  String? _getCurrentUserId() {
+
+      return FirebaseAuth.instance.currentUser?.uid;
+
+  }
   void _showColorPicker() {
     showDialog(
       context: context,

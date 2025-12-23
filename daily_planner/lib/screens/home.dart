@@ -21,8 +21,10 @@ const taskTypeLabels = {
   'MonthlyTask': 'Monthly Tasks',
 };
 
+final MedicationManager medicationManager = MedicationManager();
+
 class MyHome extends StatefulWidget {
-  const MyHome({super.key});
+  const MyHome({super.key, });
 
   @override
   State<MyHome> createState() => _MyHomeState();
@@ -805,7 +807,7 @@ class _MyHomeState extends State<MyHome> {
             ],
           ),
         ),
-        drawer: MyDrawer(user: user),
+        drawer: MyDrawer(user: user, medicationManager: medicationManager),
         body: _authChecking
             ? const Scaffold(
                 body: Center(

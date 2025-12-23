@@ -144,4 +144,61 @@ class MedicationManager {
           intake.scheduledTime.day == date.day;
     }).toList();
   }
+
+  // Add these methods to your MedicationManager class
+
+  void deleteMedication(String medicationId) {
+    // Remove medication
+    _medications.remove(medicationId);
+
+    // Remove associated schedules
+    final schedulesToRemove =
+        _schedules.values
+            .where(
+              (schedule) => schedule.medication.medicationId == medicationId,
+            )
+            .map((schedule) => schedule.scheduleId)
+            .toList();
+
+    for (final scheduleId in schedulesToRemove) {
+      if (scheduleId != null) {
+        _schedules.remove(scheduleId);
+      }
+    }
+
+    // Remove associated intakes
+    final intakesToRemove =
+        _intakes.values
+            .where(
+              (intake) =>
+                  intake.schedule.medication.medicationId == medicationId,
+            )
+            .map((intake) => intake.intakeId)
+            .toList();
+
+    for (final intakeId in intakesToRemove) {
+      _intakes.remove(intakeId);
+    }
+  }
+
+  void deleteSchedule(String scheduleId) {
+    // Remove schedule
+    _schedules.remove(scheduleId);
+
+    // Remove associated intakes
+    final intakesToRemove =
+        _intakes.values
+            .where((intake) => intake.schedule.scheduleId == scheduleId)
+            .map((intake) => intake.intakeId)
+            .toList();
+
+    for (final intakeId in intakesToRemove) {
+      _intakes.remove(intakeId);
+    }
+  }
+
+  void clearSchedules() {
+    _schedules.clear();
+    _intakes.clear();
+  }
 }
