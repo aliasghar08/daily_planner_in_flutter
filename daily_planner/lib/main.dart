@@ -119,6 +119,11 @@ Future<void> main() async {
       persistenceEnabled: true,
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
+
+    // Set persistence to LOCAL (this is the default but good to be explicit)
+  await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+
+    debugPrint("Firebase initialized with offline persistence");
   } catch (e) {
     debugPrint("Firebase initialization error: $e");
     // Continue anyway - we'll use offline capabilities

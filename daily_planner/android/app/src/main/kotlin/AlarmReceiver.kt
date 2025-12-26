@@ -53,83 +53,100 @@ class AlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
+   override fun onReceive(context: Context, intent: Intent) {
     Log.d("AlarmReceiver", "Triggered: ${intent.action}")
-    
-    // Add this check to prevent unwanted triggers
-    when {
-        intent.action == null && !intent.hasExtra(EXTRA_ID) -> {
-            Log.d("AlarmReceiver", "Ignoring null intent without ID")
-            return
-        }
-        intent.action == ACTION_STOP -> handleStop(context, intent)
-        intent.action == ACTION_SNOOZE -> handleSnooze(context, intent)
-        else -> showNotification(context, intent)
+
+    val id = intent.getIntExtra(EXTRA_ID, -1)
+
+    // HARD GUARD
+    if (id <= 0 && intent.action == null) {
+        Log.d("AlarmReceiver", "Ignoring system broadcast")
+        return
+    }
+
+    when (intent.action) {
+        ACTION_STOP -> handleStop(context, intent)
+        ACTION_SNOOZE -> handleSnooze(context, intent)
+        null -> showNotification(context, intent)
     }
 }
 
+
     private fun showNotification(context: Context, intent: Intent) {
-        createNotificationChannel(context)
 
-        val id = intent.getIntExtra(EXTRA_ID, 0)
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reminder"
-        val body = intent.getStringExtra(EXTRA_BODY) ?: "You have a reminder!"
-
-        val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-
-        // Stop action
-        val stopIntent = Intent(context, AlarmReceiver::class.java).apply {
-            action = ACTION_STOP
-            putExtra(EXTRA_ID, id)
-        }
-        val stopPending = PendingIntent.getBroadcast(
-            context, id + 1000, stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Snooze action
-        val snoozeIntent = Intent(context, AlarmReceiver::class.java).apply {
-            action = ACTION_SNOOZE
-            putExtra(EXTRA_ID, id)
-            putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_BODY, body)
-        }
-        val snoozePending = PendingIntent.getBroadcast(
-            context, id + 2000, snoozeIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Full-screen intent → opens MainActivity
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            putExtra("alarm_id", id)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val tapPending = PendingIntent.getActivity(
-            context, id, tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setContentIntent(tapPending)
-            .setAutoCancel(false)
-            .setOngoing(true) // prevent dismissal
-            .setSound(alarmUri)
-            .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
-            .addAction(android.R.drawable.ic_media_pause, "Stop", stopPending)
-            .addAction(android.R.drawable.ic_media_play, "Snooze", snoozePending)
-            .setPriority(NotificationCompat.PRIORITY_MAX) // highest priority
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setFullScreenIntent(tapPending, true) // triggers full-screen alarm
-            .build()
-
-        val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
-        nm?.notify(id, notification)
-
-        Log.d("AlarmReceiver", "Notification displayed with ID: $id")
+    // SAFETY: Reject invalid / system-triggered alarms
+    val id = intent.getIntExtra(EXTRA_ID, -1)
+    if (id <= 0) {
+        Log.d("AlarmReceiver", "Invalid alarm ID, notification skipped")
+        return
     }
+
+    createNotificationChannel(context)
+
+    val title = intent.getStringExtra(EXTRA_TITLE) ?: "Reminder"
+    val body = intent.getStringExtra(EXTRA_BODY) ?: "You have a reminder!"
+
+    val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+
+    // ---- STOP ACTION ----
+    val stopIntent = Intent(context, AlarmReceiver::class.java).apply {
+        action = ACTION_STOP
+        putExtra(EXTRA_ID, id)
+    }
+    val stopPending = PendingIntent.getBroadcast(
+        context,
+        id + 1000,
+        stopIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    // ---- SNOOZE ACTION ----
+    val snoozeIntent = Intent(context, AlarmReceiver::class.java).apply {
+        action = ACTION_SNOOZE
+        putExtra(EXTRA_ID, id)
+        putExtra(EXTRA_TITLE, title)
+        putExtra(EXTRA_BODY, body)
+    }
+    val snoozePending = PendingIntent.getBroadcast(
+        context,
+        id + 2000,
+        snoozeIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    // ---- TAP / FULL-SCREEN INTENT ----
+    val tapIntent = Intent(context, MainActivity::class.java).apply {
+        putExtra("alarm_id", id)
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val tapPending = PendingIntent.getActivity(
+        context,
+        id,
+        tapIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setContentIntent(tapPending)
+        .setAutoCancel(false)
+        .setOngoing(true) // prevent swipe dismissal
+        .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+        .addAction(android.R.drawable.ic_media_pause, "Stop", stopPending)
+        .addAction(android.R.drawable.ic_media_play, "Snooze", snoozePending)
+        .setPriority(NotificationCompat.PRIORITY_MAX)
+        .setCategory(NotificationCompat.CATEGORY_ALARM)
+        .setFullScreenIntent(tapPending, true)
+        .build()
+
+    val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
+    nm?.notify(id, notification)
+
+    Log.d("AlarmReceiver", "Alarm notification shown for ID: $id")
+}
+
 
     private fun handleStop(context: Context, intent: Intent) {
         val id = intent.getIntExtra(EXTRA_ID, -1)

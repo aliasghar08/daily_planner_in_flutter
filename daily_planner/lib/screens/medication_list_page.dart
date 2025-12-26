@@ -1076,38 +1076,172 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
   }
 
   /// Shows confirmation dialog and deletes medication (same as before)
-  void _deleteMedication(Medication medication) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Medication'),
-        content: Text('Are you sure you want to delete "${medication.name}"? This will also delete all associated schedules and intake records.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+  // void _deleteMedication(Medication medication) {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('Delete Medication'),
+  //       content: Text('Are you sure you want to delete "${medication.name}"? This will also delete all associated schedules and intake records.'),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         TextButton(
+  //           onPressed: () {
+  //             widget.medicationManager.deleteMedication(medication.medicationId!);
+  //             _loadMedications();
+  //             Navigator.pop(context);
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //               SnackBar(
+  //                 content: Text('"${medication.name}" deleted successfully'),
+  //                 backgroundColor: Colors.red,
+  //               ),
+  //             );
+  //           },
+  //           child: const Text(
+  //             'Delete',
+  //             style: TextStyle(color: Colors.red),
+  //           ),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  /// Shows confirmation dialog and deletes medication from both local and Firebase
+Future<void> _deleteMedication(Medication medication) async {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Medication'),
+      content: Text('Are you sure you want to delete "${medication.name}"? This will also delete all associated schedules and intake records.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(context);
+            await _deleteMedicationFromFirebase(medication);
+          },
+          child: const Text(
+            'Delete',
+            style: TextStyle(color: Colors.red),
           ),
-          TextButton(
-            onPressed: () {
-              widget.medicationManager.deleteMedication(medication.medicationId!);
-              _loadMedications();
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('"${medication.name}" deleted successfully'),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
+        ),
+      ],
+    ),
+  );
+}
+
+/// Deletes medication from Firebase and local storage
+Future<void> _deleteMedicationFromFirebase(Medication medication) async {
+  final String? userId = _getCurrentUserId();
+  
+  if (userId == null) {
+    // If not authenticated, only delete locally
+    widget.medicationManager.deleteMedication(medication.medicationId!);
+    _loadMedications();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${medication.name}" deleted locally'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    return;
+  }
+  
+  try {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final String medicationId = medication.medicationId!;
+    
+    // First, delete the medication document
+    await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('medications')
+        .doc(medicationId)
+        .delete();
+    
+    print('Deleted medication $medicationId from Firebase');
+    
+    // Delete associated schedules
+    final schedulesQuery = await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('schedules')
+        .where('medicationId', isEqualTo: medicationId)
+        .get();
+    
+    // Delete all schedule documents
+    final batch = firestore.batch();
+    for (final doc in schedulesQuery.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+    
+    print('Deleted ${schedulesQuery.docs.length} schedules for medication $medicationId');
+    
+    // Delete associated intakes (if you store them in Firebase)
+    await _deleteIntakesForMedication(userId, medicationId);
+    
+    // Finally, delete from local manager
+    widget.medicationManager.deleteMedication(medicationId);
+    
+    // Refresh the UI
+    _loadMedications();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${medication.name}" deleted successfully'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    
+  } catch (e) {
+    print('Error deleting medication from Firebase: $e');
+    
+    // Fallback: delete locally if Firebase fails
+    widget.medicationManager.deleteMedication(medication.medicationId!);
+    _loadMedications();
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error deleting from cloud, removed locally only'),
+        backgroundColor: Colors.orange,
       ),
     );
   }
+}
+
+/// Deletes intakes associated with a medication
+Future<void> _deleteIntakesForMedication(String userId, String medicationId) async {
+  try {
+    final firestore = FirebaseFirestore.instance;
+    
+    // If you store intakes in Firebase, delete them
+    final intakesQuery = await firestore
+        .collection('users')
+        .doc(userId)
+        .collection('intakes')
+        .where('medicationId', isEqualTo: medicationId)
+        .get();
+    
+    if (intakesQuery.docs.isNotEmpty) {
+      final batch = firestore.batch();
+      for (final doc in intakesQuery.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      print('Deleted ${intakesQuery.docs.length} intakes for medication $medicationId');
+    }
+  } catch (e) {
+    print('Error deleting intakes: $e');
+    // Continue even if intakes deletion fails
+  }
+}
 
   /// Navigates to add new medication page (same as before)
   void _addNewMedication() {

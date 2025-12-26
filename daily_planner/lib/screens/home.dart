@@ -44,22 +44,27 @@ class _MyHomeState extends State<MyHome> {
   // Add Medication Manager
   final MedicationManager _medicationManager = MedicationManager();
 
-  @override
-  void initState() {
-    super.initState();
-
-    // Initialize NativeAlarmHelper first
-    _initializeNativeAlarmHelper();
-
-    // Check for existing user first (cached/session)
-    _checkExistingUser();
-
-    _searchController.addListener(() {
-      setState(() {
-        searchQuery = _searchController.text.trim().toLowerCase();
-      });
+@override
+void initState() {
+  super.initState();
+  
+  // Initialize NativeAlarmHelper first
+  _initializeNativeAlarmHelper();
+  
+  // Check and refresh token first
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    await _checkAndRefreshToken();
+  });
+  
+  // Then check for existing user
+  _checkExistingUser();
+  
+  _searchController.addListener(() {
+    setState(() {
+      searchQuery = _searchController.text.trim().toLowerCase();
     });
-  }
+  });
+}
 
   @override
   void dispose() {
@@ -241,54 +246,138 @@ class _MyHomeState extends State<MyHome> {
     }
   }
 
-  Future<void> _checkExistingUser() async {
-    try {
-      final currentUser = FirebaseAuth.instance.currentUser;
+  // Future<void> _checkExistingUser() async {
+  //   try {
+  //     final currentUser = FirebaseAuth.instance.currentUser;
       
-      if (currentUser != null) {
-        debugPrint('✅ User found in cache: ${currentUser.email}');
+  //     if (currentUser != null) {
+  //       debugPrint('✅ User found in cache: ${currentUser.email}');
         
+  //       setState(() {
+  //         user = currentUser;
+  //         _authChecking = false;
+  //       });
+        
+  //       await fetchTasksFromFirestore(currentUser);
+  //       _maybeRequestAlarmPermission();
+  //     } else {
+  //       debugPrint('⚠️ No cached user found, listening for auth changes');
+  //       setState(() {
+  //         _authChecking = false;
+  //       });
+  //     }
+      
+  //     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
+  //       if (mounted) {
+  //         setState(() {
+  //           user = newUser;
+  //         });
+          
+  //         if (newUser != null) {
+  //           debugPrint('🔄 User logged in/updated: ${newUser.email}');
+  //           await fetchTasksFromFirestore(newUser);
+  //           _maybeRequestAlarmPermission();
+  //         } else {
+  //           debugPrint('🔴 User logged out');
+  //           setState(() {
+  //             tasks.clear();
+  //             displayTasks.clear();
+  //           });
+  //         }
+  //       }
+  //     });
+      
+  //   } catch (e) {
+  //     debugPrint('❌ Error checking existing user: $e');
+  //     setState(() {
+  //       _authChecking = false;
+  //     });
+  //   }
+  // }
+
+  Future<void> _checkExistingUser() async {
+  try {
+    debugPrint('🔍 Checking for cached user...');
+    
+    // Wait for Firebase Auth to initialize completely
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    if (currentUser != null) {
+      debugPrint('✅ User found in cache: ${currentUser.uid}');
+      debugPrint('📧 Email: ${currentUser.email}');
+      debugPrint('🕒 Last sign-in: ${currentUser.metadata.lastSignInTime}');
+      
+      if (mounted) {
         setState(() {
           user = currentUser;
           _authChecking = false;
         });
         
+        // Fetch tasks immediately
         await fetchTasksFromFirestore(currentUser);
         _maybeRequestAlarmPermission();
-      } else {
-        debugPrint('⚠️ No cached user found, listening for auth changes');
+      }
+    } else {
+      debugPrint('⚠️ No cached user found');
+      if (mounted) {
         setState(() {
           _authChecking = false;
         });
       }
+    }
+    
+    // Set up auth state listener
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
+      debugPrint('🔄 Auth state changed: ${newUser != null ? "User logged in" : "User logged out"}');
       
-      _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
-        if (mounted) {
+      if (mounted) {
+        setState(() {
+          user = newUser;
+        });
+        
+        if (newUser != null) {
+          debugPrint('👤 New user detected: ${newUser.email}');
+          await fetchTasksFromFirestore(newUser);
+          _maybeRequestAlarmPermission();
+        } else {
+          debugPrint('🔴 User logged out');
           setState(() {
-            user = newUser;
+            tasks.clear();
+            displayTasks.clear();
           });
           
-          if (newUser != null) {
-            debugPrint('🔄 User logged in/updated: ${newUser.email}');
-            await fetchTasksFromFirestore(newUser);
-            _maybeRequestAlarmPermission();
-          } else {
-            debugPrint('🔴 User logged out');
-            setState(() {
-              tasks.clear();
-              displayTasks.clear();
-            });
-          }
+          // Optionally navigate to login page
+          // WidgetsBinding.instance.addPostFrameCallback((_) {
+          //   Navigator.pushReplacementNamed(context, '/login');
+          // });
         }
-      });
-      
-    } catch (e) {
-      debugPrint('❌ Error checking existing user: $e');
+      }
+    });
+    
+  } catch (e) {
+    debugPrint('❌ Error checking existing user: $e');
+    if (mounted) {
       setState(() {
         _authChecking = false;
       });
     }
   }
+}
+
+Future<void> _checkAndRefreshToken() async {
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Get the ID token, this will refresh it if expired
+      await user.getIdToken(true);
+      debugPrint('✅ Token refreshed for user: ${user.email}');
+    }
+  } catch (e) {
+    debugPrint('❌ Token refresh error: $e');
+  }
+}
 
   Future<void> _maybeRequestAlarmPermission() async {
     if (!_nativeAlarmInitialized) {
