@@ -201,4 +201,19 @@ class MedicationManager {
     _schedules.clear();
     _intakes.clear();
   }
+
+  void clearIntakes() {
+  _intakes.clear();
 }
+
+/// Add an intake
+void addIntake(MedicationIntake intake) {
+  _intakes.putIfAbsent(intake.intakeId, () => intake);
+}
+
+List<MedicationIntake> getAllIntakes() {
+    return List<MedicationIntake>.from(_intakes as Iterable<dynamic>);
+  }
+}
+
+

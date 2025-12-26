@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/add_medication_page.dart';
+import 'package:daily_planner/screens/medication_detail_page.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -52,7 +53,7 @@ Future<void> _loadMedications() async {
       return;
     }
     
-    // Clear existing local data
+    // Clear existing data
     _medications.clear();
     
     // =============================================
@@ -101,7 +102,6 @@ Future<void> _loadMedications() async {
     print('Loaded ${schedulesSnapshot.docs.length} schedules for user $userId');
     
     // Clear existing schedules in local manager
-    // You might need to add this method to MedicationManager:
     widget.medicationManager.schedules.clear();
     
     for (final doc in schedulesSnapshot.docs) {
@@ -110,20 +110,24 @@ Future<void> _loadMedications() async {
         final medicationId = data['medicationId'];
         
         // Find the corresponding medication
-        final medication = _medications.firstWhere(
-          (med) => med.medicationId == medicationId,
-          orElse: () {
-            // Create a placeholder medication if not found
-            return Medication(
-              medicationId: medicationId,
-              name: data['medicationName'] ?? 'Unknown Medication',
-              dosage: 0.0,
-              unit: DosageUnit.mg,
-              color: '#3498db',
-              icon: '💊',
-            );
-          },
-        );
+        Medication? medication;
+        try {
+          medication = _medications.firstWhere(
+            (med) => med.medicationId == medicationId,
+          );
+        } catch (e) {
+          // Create a placeholder medication if not found
+          medication = Medication(
+            medicationId: medicationId,
+            name: data['medicationName'] ?? 'Unknown Medication',
+            dosage: (data['dosage'] as num?)?.toDouble() ?? 0.0,
+            unit: _parseDosageUnit(data['unit']),
+            color: data['color'] ?? '#3498db',
+            icon: data['icon'] ?? '💊',
+          );
+          _medications.add(medication);
+          widget.medicationManager.addMedication(medication);
+        }
         
         // Parse schedule data
         final schedule = MedicationSchedule(
@@ -145,24 +149,44 @@ Future<void> _loadMedications() async {
         widget.medicationManager.createSchedule(schedule);
       } catch (e) {
         print('Error parsing schedule ${doc.id}: $e');
+        print('Schedule data: ${doc.data()}');
       }
     }
     
     // =============================================
-    // PART 3: Get today's intakes
+    // PART 3: Generate intakes for today
     // =============================================
-    // This will use the local manager which now has Firebase data
+    // Clear existing intakes
+    widget.medicationManager.clearIntakes();
+    
+    // Generate intakes for the selected date
+    for (final schedule in widget.medicationManager.schedules) {
+      try {
+        final intakes = schedule.generateIntakesForDate(_selectedDate);
+        for (final intake in intakes) {
+          widget.medicationManager.addIntake(intake);
+        }
+      } catch (e) {
+        print('Error generating intakes for schedule ${schedule.scheduleId}: $e');
+      }
+    }
+    
+    // Get today's intakes from the manager
     _todaysIntakes = widget.medicationManager.getIntakesForDate(_selectedDate);
     
     // Sort intakes by scheduled time
     _todaysIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     
-    // Optional: Load intakes from Firebase directly if you store them
-    // You might store intakes in: users/{userId}/intakes
+    print('Generated ${_todaysIntakes.length} intakes for ${_formatDate(_selectedDate)}');
+    
+    // =============================================
+    // PART 4: Load existing intake statuses from Firebase
+    // =============================================
     await _loadIntakesFromFirebase(userId);
     
   } catch (e) {
     print('Error loading medications from Firebase: $e');
+    print(e);
     
     // Fallback to local data if Firebase fails
     _loadLocalDataOnly();
@@ -622,6 +646,19 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
     );
   }
 
+  /// Navigates to medication detail page
+void _viewMedicationDetails(Medication medication) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => MedicationDetailPage(
+        medication: medication,
+        medicationManager: widget.medicationManager,
+      ),
+    ),
+  ).then((_) => _loadMedications());
+}
+
   /// Builds an intake card widget
   Widget _buildIntakeCard(MedicationIntake intake) {
     final isOverdue = intake.status == IntakeStatus.pending &&
@@ -629,6 +666,7 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
     final medication = intake.schedule.medication;
     
     return Card(
+      
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       elevation: 1,
       shape: RoundedRectangleBorder(
@@ -768,13 +806,15 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
     );
   }
 
-  /// Builds the medication card widget (kept from original)
-  Widget _buildMedicationCard(Medication medication) {
-    final schedules = _schedules
-        .where((schedule) => schedule.medication.medicationId == medication.medicationId)
-        .toList();
+Widget _buildMedicationCard(Medication medication) {
+  final schedules = _schedules
+      .where((schedule) => schedule.medication.medicationId == medication.medicationId)
+      .toList();
 
-    return Card(
+  return InkWell(
+    onTap: () => _viewMedicationDetails(medication),
+    borderRadius: BorderRadius.circular(12),
+    child: Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -832,10 +872,22 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
                       _editMedication(medication, schedules.isNotEmpty ? schedules.first : null);
                     } else if (value == 'delete') {
                       _deleteMedication(medication);
+                    } else if (value == 'view') {
+                      _viewMedicationDetails(medication);
                     }
                   },
                   icon: const Icon(Icons.more_vert),
                   itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility, size: 20),
+                          SizedBox(width: 8),
+                          Text('View Details'),
+                        ],
+                      ),
+                    ),
                     const PopupMenuItem(
                       value: 'edit',
                       child: Row(
@@ -905,8 +957,9 @@ List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Builds today's intakes for a specific medication
   Widget _buildMedicationTodaysIntakes(Medication medication) {

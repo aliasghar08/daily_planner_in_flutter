@@ -1,7 +1,5 @@
-// lib/models/medication_schedule.dart
-
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:flutter/foundation.dart';
 import 'package:daily_planner/utils/Medicaltion Model/frequency_and_dosage.dart';
 import 'package:flutter/material.dart';
 
@@ -122,6 +120,60 @@ class MedicationSchedule {
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is MedicationSchedule && other.scheduleId == scheduleId;
+  }
+
+   List<MedicationIntake> generateIntakesForDate(DateTime date) {
+    final List<MedicationIntake> intakes = [];
+    
+    // Check if date is within schedule range
+    if (date.isBefore(startDate) || 
+        (endDate != null && date.isAfter(endDate!))) {
+      return intakes;
+    }
+    
+    // Check if date matches the schedule frequency
+    if (!_isDateApplicable(date)) {
+      return intakes;
+    }
+    
+    // Generate intakes for each time of day
+    for (final time in timesPerDay) {
+      final scheduledTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+      
+      final intake = MedicationIntake(
+        schedule: this,
+        scheduledTime: scheduledTime,
+        status: IntakeStatus.pending,
+      );
+      
+      intakes.add(intake);
+    }
+    
+    return intakes;
+  }
+
+  bool _isDateApplicable(DateTime date) {
+    switch (frequency) {
+      case MedicationFrequency.daily:
+        return true;
+      case MedicationFrequency.weekly:
+        return daysOfWeek.contains(date.weekday - 1); // Convert 1-7 to 0-6
+      case MedicationFrequency.monthly:
+        return date.day == startDate.day;
+      case MedicationFrequency.asNeeded:
+        return false; // Handled separately
+      case MedicationFrequency.custom:
+        return specificDates.any((specificDate) => 
+          specificDate.year == date.year &&
+          specificDate.month == date.month &&
+          specificDate.day == date.day);
+    }
   }
 
   @override
