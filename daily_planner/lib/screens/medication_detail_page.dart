@@ -1,9 +1,10 @@
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:flutter/material.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,15 +28,29 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
   late TabController _tabController;
   List<MedicationSchedule> _schedules = [];
   List<MedicationIntake> _intakeHistory = [];
+  List<MedicationIntake> _filteredIntakeHistory = [];
   Map<String, dynamic> _stats = {};
   bool _isLoading = true;
   DateTime _selectedHistoryDate = DateTime.now();
+  IntakeStatus? _selectedStatusFilter;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  String? _userId;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _userId = _auth.currentUser?.uid;
     _loadMedicationData();
+  }
+
+  @override
+  void didUpdateWidget(MedicationDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.medication != widget.medication) {
+      _loadMedicationData();
+    }
   }
 
   @override
@@ -50,6 +65,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     });
 
     try {
+      // Load from local manager
+      final allIntakes = widget.medicationManager.allIntakes;
+      
       // Load schedules for this medication
       _schedules = widget.medicationManager.schedules
           .where((schedule) =>
@@ -58,7 +76,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           .toList();
 
       // Load intake history for this medication
-      _intakeHistory = widget.medicationManager.getAllIntakes()
+      _intakeHistory = allIntakes
           .where((intake) =>
               intake.schedule.medication.medicationId ==
               widget.medication.medicationId)
@@ -66,15 +84,18 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
 
       // Sort intake history by date (newest first)
       _intakeHistory.sort((a, b) => b.scheduledTime.compareTo(a.scheduledTime));
+      
+      // Apply initial filter
+      _applyFilters();
+
+      // If user is authenticated, sync with Firebase
+      if (_userId != null) {
+        await _syncWithFirebase();
+        await _loadIntakesFromFirebase();
+      }
 
       // Calculate statistics
       _calculateStats();
-
-      // If user is authenticated, sync with Firebase
-      final userId = _getCurrentUserId();
-      if (userId != null) {
-        await _loadFirebaseData(userId);
-      }
 
     } catch (e) {
       print('Error loading medication details: $e');
@@ -85,14 +106,112 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     }
   }
 
-  Future<void> _loadFirebaseData(String userId) async {
+  Future<void> _syncWithFirebase() async {
     try {
-      final firestore = FirebaseFirestore.instance;
-      
-      // Load additional data from Firebase if needed
-      // For example, load adherence rate from Firebase analytics
+      // Upload medication to Firebase
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('medications')
+          .doc(widget.medication.medicationId)
+          .set(widget.medication.toMap(), SetOptions(merge: true));
+
+      // Upload intakes to Firebase
+      for (final intake in _intakeHistory) {
+        await _updateIntakeInFirebase(intake);
+      }
+
+      print('Synced medication data with Firebase');
     } catch (e) {
-      print('Error loading Firebase data: $e');
+      print('Error syncing with Firebase: $e');
+    }
+  }
+
+  Future<void> _loadIntakesFromFirebase() async {
+    if (_userId == null) return;
+
+    try {
+      final intakesSnapshot = await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('intakes')
+          .where('medicationId', isEqualTo: widget.medication.medicationId)
+          .orderBy('scheduledTime', descending: true)
+          .get();
+
+      // Merge Firebase intakes with local ones
+      for (final doc in intakesSnapshot.docs) {
+        final firebaseIntake = MedicationIntake.fromMap(doc.data());
+        
+        // Check if intake exists locally
+        final existingIndex = _intakeHistory.indexWhere(
+          (intake) => intake.intakeId == firebaseIntake.intakeId
+        );
+        
+        if (existingIndex >= 0) {
+          // Update local intake with Firebase data if it's newer
+          _intakeHistory[existingIndex] = firebaseIntake;
+        } else {
+          // Add Firebase intake to local list
+          _intakeHistory.add(firebaseIntake);
+        }
+      }
+      
+      // Re-sort and re-filter
+      _intakeHistory.sort((a, b) => b.scheduledTime.compareTo(a.scheduledTime));
+      _applyFilters();
+      
+      setState(() {});
+
+    } catch (e) {
+      print('Error loading intakes from Firebase: $e');
+    }
+  }
+
+  Future<void> _updateIntakeInFirebase(MedicationIntake intake) async {
+    if (_userId == null) return;
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('intakes')
+          .doc(intake.intakeId)
+          .set({
+        ...intake.toMap(),
+        'medicationId': widget.medication.medicationId,
+        'scheduleId': intake.schedule.scheduleId,
+        'updatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+      
+      // Update adherence record
+      await _updateAdherenceRecord(intake);
+      
+    } catch (e) {
+      print('Error updating intake in Firebase: $e');
+    }
+  }
+
+  Future<void> _updateAdherenceRecord(MedicationIntake intake) async {
+    if (_userId == null) return;
+
+    try {
+      final dateKey = DateFormat('yyyy-MM-dd').format(intake.scheduledTime);
+      await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('adherence')
+          .doc('${widget.medication.medicationId}_$dateKey')
+          .set({
+        'medicationId': widget.medication.medicationId,
+        'date': dateKey,
+        'status': intake.status.name,
+        'scheduledTime': intake.scheduledTime.toIso8601String(),
+        'actualTime': intake.actualTime?.toIso8601String(),
+        'updatedAt': DateTime.now().toIso8601String(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      print('Error updating adherence record: $e');
     }
   }
 
@@ -145,7 +264,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
 
     // Get most common intake time
     Map<int, int> hourFrequency = {};
-    for (final intake in takenIntakes as List<MedicationIntake>) {
+    for (final intake in recentIntakes.where((i) => i.status == IntakeStatus.taken)) {
       if (intake.actualTime != null) {
         final hour = intake.actualTime!.hour;
         hourFrequency[hour] = (hourFrequency[hour] ?? 0) + 1;
@@ -161,6 +280,15 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
       }
     });
 
+    // Get today's intakes for stats
+    final todaysIntakes = widget.medicationManager.getIntakesForDate(DateTime.now())
+        .where((intake) => intake.schedule.medication.medicationId == widget.medication.medicationId)
+        .toList();
+    
+    final pendingToday = todaysIntakes.where((intake) => intake.status == IntakeStatus.pending).length;
+    final takenToday = todaysIntakes.where((intake) => intake.status == IntakeStatus.taken).length;
+    final missedToday = todaysIntakes.where((intake) => intake.status == IntakeStatus.missed).length;
+
     _stats = {
       'adherenceRate': adherenceRate,
       'currentStreak': currentStreak,
@@ -175,7 +303,30 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
       'lastIntakeDate': _intakeHistory.isNotEmpty 
           ? _intakeHistory.first.scheduledTime 
           : null,
+      'pendingToday': pendingToday,
+      'takenToday': takenToday,
+      'missedToday': missedToday,
     };
+  }
+
+  void _applyFilters() {
+    List<MedicationIntake> filtered = _intakeHistory;
+    
+    // Filter by date
+    filtered = filtered.where((intake) =>
+        intake.scheduledTime.year == _selectedHistoryDate.year &&
+        intake.scheduledTime.month == _selectedHistoryDate.month &&
+        intake.scheduledTime.day == _selectedHistoryDate.day).toList();
+    
+    // Filter by status if selected
+    if (_selectedStatusFilter != null) {
+      filtered = filtered.where((intake) => 
+          intake.status == _selectedStatusFilter).toList();
+    }
+    
+    setState(() {
+      _filteredIntakeHistory = filtered;
+    });
   }
 
   String? _getCurrentUserId() {
@@ -307,9 +458,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 color: Colors.orange,
               ),
               _buildStatItem(
-                icon: Icons.check_circle,
-                value: '${_stats['taken'] ?? 0}/${_stats['totalScheduled'] ?? 0}',
-                label: 'This Month',
+                icon: Icons.today,
+                value: '${_stats['takenToday'] ?? 0}/${(_stats['takenToday'] ?? 0) + (_stats['pendingToday'] ?? 0) + (_stats['missedToday'] ?? 0)}',
+                label: 'Today',
                 color: Colors.blue,
               ),
             ],
@@ -358,7 +509,6 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     );
   }
 
-
   Widget _buildScheduleCard(MedicationSchedule schedule) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -382,6 +532,23 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   ),
                 ),
                 const Spacer(),
+                if (schedule.timesPerDay.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _getNextIntakeTime(schedule),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.edit, size: 20),
                   onPressed: () => _editSchedule(schedule),
@@ -429,9 +596,73 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            _buildTodayIntakesForSchedule(schedule),
           ],
         ),
       ),
+    );
+  }
+
+  String _getNextIntakeTime(MedicationSchedule schedule) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    final todaysIntakes = schedule.generateIntakesForDate(today);
+    if (todaysIntakes.isEmpty) return 'No intakes today';
+    
+    for (final intake in todaysIntakes) {
+      if (intake.scheduledTime.isAfter(now)) {
+        return 'Next: ${_formatDateTime(intake.scheduledTime)}';
+      }
+    }
+    
+    return 'None today';
+  }
+
+  Widget _buildTodayIntakesForSchedule(MedicationSchedule schedule) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final todaysIntakes = schedule.generateIntakesForDate(today);
+    
+    if (todaysIntakes.isEmpty) return const SizedBox();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Today's Intakes:",
+          style: TextStyle(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: todaysIntakes.map((intake) {
+            return Chip(
+              label: Text(
+                _formatDateTime(intake.scheduledTime),
+                style: TextStyle(
+                  color: _getStatusColor(intake.status),
+                  fontSize: 12,
+                ),
+              ),
+              backgroundColor: _getStatusColor(intake.status).withOpacity(0.1),
+              avatar: Icon(
+                _getStatusIcon(intake.status),
+                size: 14,
+                color: _getStatusColor(intake.status),
+              ),
+              onDeleted: intake.status == IntakeStatus.pending ? () {
+                _handleIntakeAction(intake);
+              } : null,
+              deleteIcon: intake.status == IntakeStatus.pending 
+                  ? const Icon(Icons.check, size: 14)
+                  : null,
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -442,50 +673,81 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
   }
 
   Widget _buildIntakeHistoryItem(MedicationIntake intake) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _getStatusColor(intake.status).withOpacity(0.1),
-        ),
-        child: Center(
-          child: Icon(
-            _getStatusIcon(intake.status),
-            color: _getStatusColor(intake.status),
-            size: 20,
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _getStatusColor(intake.status).withOpacity(0.1),
           ),
-        ),
-      ),
-      title: Text(
-        _formatDateTime(intake.scheduledTime),
-        style: const TextStyle(fontWeight: FontWeight.w500),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _getStatusText(intake),
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          if (intake.actualTime != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              'Taken at ${_formatDateTime(intake.actualTime!)}',
-              style: TextStyle(
-                color: Colors.green,
-                fontSize: 12,
-              ),
+          child: Center(
+            child: Icon(
+              _getStatusIcon(intake.status),
+              color: _getStatusColor(intake.status),
+              size: 20,
             ),
+          ),
+        ),
+        title: Text(
+          _formatDateTime(intake.scheduledTime),
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _getStatusText(intake),
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            if (intake.actualTime != null) ...[
+              const SizedBox(height: 2),
+              Text(
+                'Taken at ${_formatDateTime(intake.actualTime!)}',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+            if (intake.notes != null && intake.notes!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Note: ${intake.notes!}',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _formatDate(intake.scheduledTime),
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            if (intake.status == IntakeStatus.pending && 
+                intake.scheduledTime.isAfter(DateTime.now()))
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: IconButton(
+                  icon: const Icon(Icons.check, size: 12),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _handleIntakeAction(intake),
+                ),
+              ),
+          ],
+        ),
+        onTap: () => _showIntakeDetails(intake),
       ),
-      trailing: Text(
-        _formatDate(intake.scheduledTime),
-        style: TextStyle(color: Colors.grey[500]),
-      ),
-      onTap: () => _showIntakeDetails(intake),
     );
   }
 
@@ -498,9 +760,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
       case IntakeStatus.skipped:
         return Colors.orange;
       case IntakeStatus.pending:
-        return Colors.grey;
-      case IntakeStatus.upcoming:
         return Colors.blue;
+      case IntakeStatus.upcoming:
+        return Colors.purple;
     }
   }
 
@@ -541,46 +803,122 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     }
   }
 
+  Future<void> _handleIntakeAction(MedicationIntake intake) async {
+    final action = await showModalBottomSheet<IntakeStatus>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.check, color: Colors.green),
+                title: const Text('Mark as Taken'),
+                onTap: () => Navigator.pop(context, IntakeStatus.taken),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cancel, color: Colors.red),
+                title: const Text('Mark as Missed'),
+                onTap: () => Navigator.pop(context, IntakeStatus.missed),
+              ),
+              ListTile(
+                leading: const Icon(Icons.do_not_disturb, color: Colors.orange),
+                title: const Text('Mark as Skipped'),
+                onTap: () => Navigator.pop(context, IntakeStatus.skipped),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action != null) {
+      MedicationIntake updatedIntake;
+      
+      switch (action) {
+        case IntakeStatus.taken:
+          updatedIntake = intake.markTaken();
+          break;
+        case IntakeStatus.missed:
+          updatedIntake = intake.markMissed();
+          break;
+        case IntakeStatus.skipped:
+          updatedIntake = intake.markSkipped();
+          break;
+        default:
+          return;
+      }
+      
+      // Update in medication manager
+      widget.medicationManager.updateIntake(updatedIntake);
+      
+      // Update in Firebase
+      await _updateIntakeInFirebase(updatedIntake);
+      
+      // Refresh data
+      _loadMedicationData();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Intake marked as ${action.name}'),
+          backgroundColor: _getStatusColor(action),
+        ),
+      );
+    }
+  }
+
   void _showIntakeDetails(MedicationIntake intake) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Intake Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Medication: ${intake.schedule.medication.name}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text('Scheduled: ${_formatDateTime(intake.scheduledTime)}'),
-            Text('Date: ${_formatDate(intake.scheduledTime)}'),
-            const SizedBox(height: 8),
-            Text('Status: ${_getStatusText(intake)}'),
-            if (intake.actualTime != null)
-              Text('Actual Time: ${_formatDateTime(intake.actualTime!)}'),
-            if (intake.notes != null && intake.notes!.isNotEmpty) ...[
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Medication: ${intake.schedule.medication.name}',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
-              Text(intake.notes!),
+              Text('Scheduled: ${_formatDateTime(intake.scheduledTime)}'),
+              Text('Date: ${_formatDate(intake.scheduledTime)}'),
+              const SizedBox(height: 8),
+              Text('Status: ${_getStatusText(intake)}'),
+              if (intake.actualTime != null)
+                Text('Actual Time: ${_formatDateTime(intake.actualTime!)}'),
+              if (intake.notes != null && intake.notes!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                const Text('Notes:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(intake.notes!),
+              ],
+              if (intake.dosageTaken != null) ...[
+                const SizedBox(height: 8),
+                Text('Dosage Taken: ${intake.dosageTaken} ${intake.schedule.medication.unit.name}'),
+              ],
             ],
-          ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          if (intake.status == IntakeStatus.pending)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _handleIntakeAction(intake);
+              },
+              child: const Text('Mark'),
+            ),
         ],
       ),
     );
   }
 
   void _editSchedule(MedicationSchedule schedule) {
-    // Navigate to edit schedule page
-    // You'll need to create an EditSchedulePage
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Edit schedule feature coming soon')),
     );
@@ -611,7 +949,34 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
 
     if (confirmed == true) {
       // Delete from medication manager
-      widget.medicationManager.deleteMedication(widget.medication.medicationId!);
+      widget.medicationManager.deleteMedication(widget.medication.medicationId);
+      
+      // Delete from Firebase if user is authenticated
+      if (_userId != null) {
+        try {
+          // Delete medication from Firebase
+          await _firestore
+              .collection('users')
+              .doc(_userId)
+              .collection('medications')
+              .doc(widget.medication.medicationId)
+              .delete();
+          
+          // Delete associated intakes from Firebase
+          final intakesSnapshot = await _firestore
+              .collection('users')
+              .doc(_userId)
+              .collection('intakes')
+              .where('medicationId', isEqualTo: widget.medication.medicationId)
+              .get();
+          
+          for (final doc in intakesSnapshot.docs) {
+            await doc.reference.delete();
+          }
+        } catch (e) {
+          print('Error deleting from Firebase: $e');
+        }
+      }
       
       // Navigate back
       Navigator.pop(context);
@@ -626,7 +991,6 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
   }
 
   Future<void> _exportHistory() async {
-    // Implement export functionality (CSV, PDF, etc.)
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Export feature coming soon')),
     );
@@ -679,7 +1043,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   _buildDetailItem(
                     icon: Icons.date_range,
                     label: 'First Taken',
-                    value: _formatDate(_stats['firstIntakeDate']),
+                    value: _formatDate(_stats['firstIntakeDate'] as DateTime),
                   ),
                 if (_stats['mostCommonHour'] != null)
                   _buildDetailItem(
@@ -687,11 +1051,77 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                     label: 'Most Common Time',
                     value: '${_stats['mostCommonHour']}:00',
                   ),
+                const SizedBox(height: 24),
+                const Text(
+                  "Today's Summary",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildMiniStat(
+                      value: '${_stats['takenToday'] ?? 0}',
+                      label: 'Taken',
+                      color: Colors.green,
+                    ),
+                    _buildMiniStat(
+                      value: '${_stats['pendingToday'] ?? 0}',
+                      label: 'Pending',
+                      color: Colors.blue,
+                    ),
+                    _buildMiniStat(
+                      value: '${_stats['missedToday'] ?? 0}',
+                      label: 'Missed',
+                      color: Colors.red,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMiniStat({
+    required String value,
+    required String label,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.grey,
+          ),
+        ),
+      ],
     );
   }
 
@@ -715,6 +1145,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           if (colorWidget != null) colorWidget,
           if (value != null) Expanded(child: Text(value)),
         ],
+        
       ),
     );
   }
@@ -764,39 +1195,116 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
   }
 
   Widget _buildHistoryTab() {
-    return _intakeHistory.isEmpty
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.history,
-                  size: 80,
-                  color: Colors.grey[300],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showDatePicker(),
+                  icon: const Icon(Icons.calendar_today),
+                  label: Text(_formatDate(_selectedHistoryDate)),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'No Intake History',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<IntakeStatus>(
+                value: _selectedStatusFilter,
+                hint: const Text('All Status'),
+                items: [
+                  DropdownMenuItem<IntakeStatus>(
+                    value: null,
+                    child: Row(
+                      children: [
+                        Icon(Icons.all_inclusive, color: Colors.grey[600]),
+                        const SizedBox(width: 8),
+                        const Text('All'),
+                      ],
+                    ),
                   ),
+                  ...IntakeStatus.values.map((status) {
+                    return DropdownMenuItem<IntakeStatus>(
+                      value: status,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getStatusIcon(status),
+                            color: _getStatusColor(status),
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(status.name.toUpperCase()),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ],
+                onChanged: (status) {
+                  setState(() {
+                    _selectedStatusFilter = status;
+                  });
+                  _applyFilters();
+                },
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _filteredIntakeHistory.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.history,
+                        size: 80,
+                        color: Colors.grey[300],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No Intake History',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedStatusFilter != null
+                            ? 'No ${_selectedStatusFilter!.name} intakes on ${_formatDate(_selectedHistoryDate)}'
+                            : 'No intakes on ${_formatDate(_selectedHistoryDate)}',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemCount: _filteredIntakeHistory.length,
+                  itemBuilder: (context, index) {
+                    return _buildIntakeHistoryItem(_filteredIntakeHistory[index]);
+                  },
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Your intake history will appear here',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          )
-        : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _intakeHistory.length,
-            itemBuilder: (context, index) {
-              return _buildIntakeHistoryItem(_intakeHistory[index]);
-            },
-          );
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showDatePicker() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedHistoryDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    
+    if (pickedDate != null) {
+      setState(() {
+        _selectedHistoryDate = pickedDate;
+      });
+      _applyFilters();
+    }
   }
 
   @override
@@ -814,6 +1322,16 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
             icon: const Icon(Icons.delete_outline),
             onPressed: _deleteMedication,
             tooltip: 'Delete Medication',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                _isLoading = true;
+              });
+              _loadMedicationData();
+            },
+            tooltip: 'Refresh Data',
           ),
         ],
         bottom: TabBar(
@@ -853,12 +1371,4 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           : null,
     );
   }
-}
-
-class _ChartData {
-  final String category;
-  final int value;
-  final Color color;
-
-  _ChartData(this.category, this.value, this.color);
 }

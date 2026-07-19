@@ -120,7 +120,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     super.dispose();
   }
 
-  Future<void> _saveMedication() async {
+ Future<void> _saveMedication() async {
   if (_formKey.currentState!.validate()) {
     _formKey.currentState!.save();
 
@@ -194,9 +194,32 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         medicationRef = userMedicationsRef.doc(widget.existingMedication!.medicationId);
         await medicationRef.update(medicationData);
         firebaseMedicationId = widget.existingMedication!.medicationId!;
+        
+        // Check if intakes collection exists for existing medication
+        final intakesSnapshot = await medicationRef.collection('intakes').limit(1).get();
+        if (!intakesSnapshot.docs.any((doc) => doc.exists)) {
+          // Create a dummy document to initialize the collection (optional)
+          await medicationRef.collection('intakes').doc('initial').set({
+            'createdAt': FieldValue.serverTimestamp(),
+            'note': 'Initial collection setup',
+            'status': 'setup'
+          });
+          // Optionally delete the dummy document after creation
+          await medicationRef.collection('intakes').doc('initial').delete();
+        }
       } else {
         medicationRef = await userMedicationsRef.add(medicationData);
         firebaseMedicationId = medicationRef.id;
+        
+        // Create empty intakes collection for new medication
+        // We'll create a dummy document and delete it to initialize the collection
+        await medicationRef.collection('intakes').doc('initial').set({
+          'createdAt': FieldValue.serverTimestamp(),
+          'note': 'Initial collection setup',
+          'status': 'setup'
+        });
+        // Delete the dummy document to keep the collection truly empty
+        await medicationRef.collection('intakes').doc('initial').delete();
       }
 
       // =============================================
@@ -242,7 +265,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
       }
 
       // =============================================
-      // PART 3: Create local objects (SKIP allMedications for now!)
+      // PART 3: Create local objects
       // =============================================
       final medication = Medication(
         medicationId: firebaseMedicationId,
@@ -293,7 +316,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     }
   }
 }
-
   // Helper function to get current user ID
   String? _getCurrentUserId() {
 

@@ -1,8 +1,8 @@
 // lib/models/medication_intake.dart
-
+// import 'package:daily_planner/models/medication_enums.dart';
+// import 'package:daily_planner/models/medication_schedule_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
-
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -15,7 +15,6 @@ class MedicationIntake {
   final String? notes;
   final double? dosageTaken;
 
-  // Remove 'const' from constructor since we have runtime values
   MedicationIntake({
     String? intakeId,
     required this.schedule,
@@ -24,11 +23,11 @@ class MedicationIntake {
     this.status = IntakeStatus.pending,
     this.notes,
     this.dosageTaken,
-  }) : intakeId = intakeId ?? 'intake_${DateTime.now().millisecondsSinceEpoch}';
+  }) : intakeId = intakeId ?? 'intake_${DateTime.now().millisecondsSinceEpoch}_${scheduledTime.millisecondsSinceEpoch}'; // ← CHANGED: Include scheduledTime in ID
 
   MedicationIntake markTaken({DateTime? actualTime, String? notes}) {
     return MedicationIntake(
-      intakeId: intakeId, // Preserve the original ID
+      intakeId: intakeId,
       schedule: schedule,
       scheduledTime: scheduledTime,
       actualTime: actualTime ?? DateTime.now(),
@@ -40,7 +39,7 @@ class MedicationIntake {
 
   MedicationIntake markMissed({String? notes}) {
     return MedicationIntake(
-      intakeId: intakeId, // Preserve the original ID
+      intakeId: intakeId,
       schedule: schedule,
       scheduledTime: scheduledTime,
       actualTime: actualTime,
@@ -52,7 +51,7 @@ class MedicationIntake {
 
   MedicationIntake markSkipped({String? notes}) {
     return MedicationIntake(
-      intakeId: intakeId, // Preserve the original ID
+      intakeId: intakeId,
       schedule: schedule,
       scheduledTime: scheduledTime,
       actualTime: actualTime,
@@ -60,6 +59,21 @@ class MedicationIntake {
       notes: notes,
       dosageTaken: dosageTaken,
     );
+  }
+
+  // ADDED: Method to check if intake is for today
+  bool get isForToday {
+    final now = DateTime.now();
+    return scheduledTime.year == now.year &&
+        scheduledTime.month == now.month &&
+        scheduledTime.day == now.day;
+  }
+
+  // ADDED: Method to check if intake is upcoming (within next hour)
+  bool get isUpcoming {
+    final now = DateTime.now();
+    final oneHourFromNow = now.add(const Duration(hours: 1));
+    return scheduledTime.isAfter(now) && scheduledTime.isBefore(oneHourFromNow);
   }
 
   Map<String, dynamic> toMap() {

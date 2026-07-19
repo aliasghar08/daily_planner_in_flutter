@@ -5,6 +5,7 @@ import 'package:daily_planner/screens/signup.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,12 +19,54 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+  bool _rememberMe = false;
 
-  // Use the singleton instance instead of constructor
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberMePreference();
+  }
+
+  // ✅ Load saved "Remember Me" preference
+  Future<void> _loadRememberMePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('rememberMe') ?? false;
+      final savedEmail = prefs.getString('savedEmail') ?? '';
+
+      if (mounted) {
+        setState(() {
+          _rememberMe = rememberMe;
+          if (_rememberMe && savedEmail.isNotEmpty) {
+            _emailController.text = savedEmail;
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading Remember Me preference: $e');
+    }
+  }
+
+  // ✅ Save "Remember Me" preference
+  Future<void> _saveRememberMePreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('rememberMe', _rememberMe);
+      if (_rememberMe) {
+        await prefs.setString('savedEmail', _emailController.text.trim());
+      } else {
+        await prefs.remove('savedEmail');
+      }
+    } catch (e) {
+      debugPrint('Error saving Remember Me preference: $e');
+    }
+  }
 
   Future<void> loginUser() async {
     if (!_formKey.currentState!.validate()) return;
+    
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Logging in...'),
@@ -38,13 +81,15 @@ class _LoginPageState extends State<LoginPage> {
             password: _passwordController.text.trim(),
           );
 
-      final userDoc =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(userCredential.user!.uid)
-              .get();
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
 
       String fullName = userDoc.data()?['fullName'] ?? 'User';
+
+      // ✅ Save Remember Me preference after successful login
+      await _saveRememberMePreference();
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(
@@ -66,8 +111,7 @@ class _LoginPageState extends State<LoginPage> {
       } else if (e.code == 'invalid-email') {
         message = 'The email address is not valid.';
       } else if (e.code == 'invalid-credential') {
-        message =
-            'Invalid login credentials. Please check your email and password.';
+        message = 'Invalid login credentials. Please check your email and password.';
       }
 
       ScaffoldMessenger.of(
@@ -86,22 +130,16 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> signInWithGoogle() async {
     try {
-      // Initialize with the singleton instance [citation:10]
       await _googleSignIn.initialize();
 
-      // Authenticate the user using the new API [citation:10]
-      final GoogleSignInAccount? googleUser =
-          await _googleSignIn.authenticate();
+      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
       if (googleUser == null) return;
 
-      // Get authentication info
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
-        accessToken:
-            googleAuth.idToken, // Fixed: use accessToken, not idToken twice
+        accessToken: googleAuth.idToken,
       );
 
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
@@ -110,9 +148,7 @@ class _LoginPageState extends State<LoginPage> {
 
       final uid = userCredential.user!.uid;
 
-      // Check if user exists in Firestore, if not create a new document
-      final userDoc =
-          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -120,6 +156,13 @@ class _LoginPageState extends State<LoginPage> {
           'email': googleUser.email,
           'createdAt': Timestamp.now(),
         });
+      }
+
+      // ✅ Save Remember Me preference for Google sign-in
+      if (_rememberMe) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('rememberMe', true);
+        await prefs.setString('savedEmail', googleUser.email);
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,13 +215,10 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   keyboardType: TextInputType.emailAddress,
-                  validator:
-                      (value) =>
-                          value != null &&
-                                  value.contains('@') &&
-                                  value.endsWith('.com')
-                              ? null
-                              : 'Enter a valid email (e.g., example@domain.com)',
+                  validator: (value) =>
+                      value != null && value.contains('@') && value.endsWith('.com')
+                          ? null
+                          : 'Enter a valid email (e.g., example@domain.com)',
                 ),
                 const SizedBox(height: 16),
 
@@ -190,9 +230,7 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible
-                            ? Icons.visibility
-                            : Icons.visibility_off,
+                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() {
@@ -204,15 +242,29 @@ class _LoginPageState extends State<LoginPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator:
-                      (value) =>
-                          value != null && value.length >= 6
-                              ? null
-                              : 'Password must be at least 6 characters long',
+                  validator: (value) =>
+                      value != null && value.length >= 6
+                          ? null
+                          : 'Password must be at least 6 characters long',
                 ),
+                
+                // ✅ Remember Me Checkbox
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    Checkbox(
+                      value: _rememberMe,
+                      onChanged: (value) {
+                        setState(() {
+                          _rememberMe = value ?? false;
+                        });
+                      },
+                      activeColor: Colors.blueAccent,
+                    ),
+                    const Text(
+                      'Remember Me',
+                      style: TextStyle(fontSize: 14),
+                    ),
+                    const Spacer(),
                     TextButton(
                       onPressed: () {
                         Navigator.push(
@@ -222,10 +274,12 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         );
                       },
-                      child: Text("Forgot Password?"),
+                      child: const Text("Forgot Password?"),
                     ),
                   ],
                 ),
+
+                const SizedBox(height: 8),
 
                 SizedBox(
                   width: double.infinity,
@@ -250,7 +304,6 @@ class _LoginPageState extends State<LoginPage> {
 
                 Center(
                   child: SizedBox(
-                    ////// width: double.infinity,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),

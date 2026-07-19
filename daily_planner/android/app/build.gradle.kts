@@ -19,12 +19,14 @@ val flutterVersionName = localProps.getProperty("flutter.versionName") ?: "1.0.0
 android {
     namespace = "com.example.daily_planner"
     compileSdk = 36
-    ndkVersion = "27.0.12077973"
+    
+    // ✅ FIXED: Updated NDK version to match requirements
+    ndkVersion = "28.2.13676358"  // Changed from 27.0.12077973
 
     defaultConfig {
         applicationId = "com.example.daily_planner"
         minSdk = 24         
-        targetSdk = 36
+        targetSdk = 36  
         versionCode = flutterVersionCode
         versionName = flutterVersionName
 
@@ -33,13 +35,13 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17  // ✅ Changed from 21 to 17 (more compatible)
+        targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_21.toString()
+        jvmTarget = "17"  // ✅ Changed from 21 to 17
     }
 
     buildTypes {
@@ -71,7 +73,6 @@ dependencies {
 
     // WorkManager for background tasks
     implementation("androidx.work:work-runtime-ktx:2.8.1")
-
 }
 
 // ✅ Important: DO NOT add any `flutter { source = ... }` block here

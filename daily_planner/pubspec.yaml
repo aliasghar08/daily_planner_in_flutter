@@ -60,6 +60,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  flutter_launcher_icons: ^0.14.4
+  
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -107,3 +109,25 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# ✅ CORRECT: flutter_launcher_icons configuration goes here (OUTSIDE the flutter section)
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/daily-planner-icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#2196F3"
+  adaptive_icon_foreground: "assets/icon/daily-planner-icon.png"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/icon/daily-planner-icon.png"
+    background_color: "#2196F3"
+    theme_color: "#2196F3"
+  windows:
+    generate: true
+    image_path: "assets/icon/daily-planner-icon.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/icon/daily-planner-icon.png"

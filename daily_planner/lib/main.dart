@@ -96,7 +96,6 @@ Future<void> _showNotification({
 
 Future<void> _initializeNotificationService() async {
   try {
-    //await NotificationService().initialize();
     await NativeAlarmHelper.initialize();
     debugPrint('✅ NotificationService initialized successfully');
   } catch (e) {
@@ -108,7 +107,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase with offline persistence
-
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -120,30 +118,29 @@ Future<void> main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
 
-    // Set persistence to LOCAL (this is the default but good to be explicit)
-  await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    // ✅ CRITICAL: Set persistence to LOCAL to remember login
+    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
 
-    debugPrint("Firebase initialized with offline persistence");
+    debugPrint("✅ Firebase initialized with offline persistence");
   } catch (e) {
-    debugPrint("Firebase initialization error: $e");
+    debugPrint("❌ Firebase initialization error: $e");
     // Continue anyway - we'll use offline capabilities
   }
 
-  // ✅ FIXED: Initialize timezone FIRST
+  // Initialize timezone FIRST
   tz.initializeTimeZones();
 
-  // ✅ FIXED: Initialize NotificationService BEFORE running app
+  // Initialize NotificationService BEFORE running app
   await _initializeNotificationService();
 
-  // ✅ FIXED: Call runApp AFTER all critical initializations
+  // Call runApp AFTER all critical initializations
   runApp(const MyApp());
 
-  // ✅ FIXED: Initialize FCM and other services
+  // Initialize FCM and other services
   await _initializeFCM();
   await _initializeAndroidServices();
 
   // Perform async initializations in background
-
   resetAllTasksIfNeeded();
 }
 
@@ -344,7 +341,6 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _asyncInit() async {
-    // Firestore reset & theme loading
     try {
       // Make resetAllTasksIfNeeded non-blocking
       resetAllTasksIfNeeded().catchError((e) {
@@ -377,7 +373,7 @@ class _MyAppState extends State<MyApp> {
           theme: ThemeData.light(),
           darkTheme: ThemeData.dark(),
           themeMode: mode,
-          navigatorKey: navigatorKey, // Add navigator key for notifications
+          navigatorKey: navigatorKey,
           home: const AuthWrapper(),
           routes: {
             "/home": (_) => const MyHome(),
@@ -391,6 +387,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
+// ✅ FIXED: AuthWrapper with proper session persistence
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
@@ -399,8 +396,9 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  User? user;
-  bool _isCheckingAuth = true;
+  User? _user;
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -410,36 +408,142 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _checkAuthState() async {
     try {
-      // First try to get current user from cache (works offline)
-      user = FirebaseAuth.instance.currentUser;
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
 
-      // Listen for auth changes (will update when online)
+      // ✅ Step 1: Get cached user immediately (works offline)
+      _user = FirebaseAuth.instance.currentUser;
+      debugPrint('🔐 Cached user: ${_user?.email ?? 'null'}');
+
+      // ✅ Step 2: Listen for auth state changes (handles token refresh, logout, etc.)
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
         if (mounted) {
+          debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'null'}');
           setState(() {
-            user = newUser;
-            _isCheckingAuth = false;
+            _user = newUser;
+            _isLoading = false;
           });
         }
       });
 
-      // Set a timeout to prevent hanging
-      await Future.delayed(const Duration(seconds: 3));
+      // ✅ Step 3: If user exists, verify their data in Firestore
+      if (_user != null) {
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_user!.uid)
+              .get();
+
+          if (!doc.exists) {
+            // User data doesn't exist - force logout
+            debugPrint('⚠️ User data not found in Firestore, logging out');
+            await FirebaseAuth.instance.signOut();
+            if (mounted) {
+              setState(() {
+                _user = null;
+                _error = 'User data not found';
+              });
+            }
+          } else {
+            debugPrint('✅ User data verified in Firestore');
+          }
+        } catch (e) {
+          // Network error - keep user logged in if cached data exists
+          debugPrint('⚠️ Could not verify user data (network error): $e');
+        }
+      }
+
+      // ✅ Step 4: Small delay to ensure everything is loaded
+      await Future.delayed(const Duration(milliseconds: 500));
+      
     } catch (e) {
-      debugPrint("Auth check error: $e");
+      debugPrint('❌ Auth check error: $e');
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _user = null;
+        });
+      }
     } finally {
-      if (mounted && _isCheckingAuth) {
-        setState(() => _isCheckingAuth = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isCheckingAuth) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    // Show loading spinner while checking auth
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Checking session...',
+                style: TextStyle(fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    return user != null ? const MyHome() : const LoginPage();
+    // Show error if any
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: Colors.red.shade400,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Authentication Error',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _error = null;
+                      _isLoading = true;
+                    });
+                    _checkAuthState();
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Navigate based on auth state
+    return _user != null ? const MyHome() : const LoginPage();
   }
 }
