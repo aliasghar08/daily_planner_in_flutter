@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
+import 'package:daily_planner/providers/medication_provider.dart';
+import 'package:daily_planner/providers/task_provider.dart';
 import 'package:daily_planner/screens/add_medication_page.dart';
 import 'package:daily_planner/screens/additemPage.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:daily_planner/utils/drawer.dart';
 import 'package:daily_planner/utils/item.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 enum TaskFilter { all, completed, incomplete, overdue }
 
@@ -21,28 +22,16 @@ const taskTypeLabels = {
   'MonthlyTask': 'Monthly Tasks',
 };
 
-final MedicationManager medicationManager = MedicationManager();
-
 class MyHome extends StatefulWidget {
-  const MyHome({super.key, });
+  const MyHome({super.key});
 
   @override
   State<MyHome> createState() => _MyHomeState();
 }
 
 class _MyHomeState extends State<MyHome> {
-  List<Task> tasks = [];
-  List<Task> displayTasks = []; // Tasks after applying completion status checks
-  bool isLoading = true;
-  User? user;
   final TextEditingController _searchController = TextEditingController();
-  String searchQuery = "";
   bool _nativeAlarmInitialized = false;
-  bool _authChecking = true;
-  StreamSubscription<User?>? _authSubscription;
-
-  // Add Medication Manager
-  final MedicationManager _medicationManager = MedicationManager();
 
 @override
 void initState() {
@@ -51,184 +40,29 @@ void initState() {
   // Initialize NativeAlarmHelper first
   _initializeNativeAlarmHelper();
   
-  // Check and refresh token first
+  // Check and refresh token, then fetch tasks
   WidgetsBinding.instance.addPostFrameCallback((_) async {
-    await _checkAndRefreshToken();
+    if (!mounted) return;
+    final authProvider = context.read<app_auth.AuthProvider>();
+    await authProvider.refreshToken();
+    
+    if (!mounted) return;
+    if (authProvider.user != null) {
+      context.read<TaskProvider>().fetchTasks(authProvider.user!);
+      context.read<MedicationProvider>().loadMedications(authProvider.user!.uid);
+      _maybeRequestAlarmPermission();
+    }
   });
   
-  // Then check for existing user
-  _checkExistingUser();
-  
   _searchController.addListener(() {
-    setState(() {
-      searchQuery = _searchController.text.trim().toLowerCase();
-    });
+    context.read<TaskProvider>().setSearchQuery(_searchController.text);
   });
 }
 
   @override
   void dispose() {
-    _authSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
-  }
-
-  // Helper to get start of week (Monday)
-  DateTime _getWeekStart(DateTime date) {
-    final weekday = date.weekday;
-    final daysFromMonday = (weekday + 6) % 7;
-    return DateTime(date.year, date.month, date.day - daysFromMonday);
-  }
-
-  // ✅ FIXED: Check and update ALL tasks' completion status when fetched
-  Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks) async {
-    if (user == null) return fetchedTasks;
-
-    final List<Task> updatedTasks = [];
-    final List<Task> tasksToReset = [];
-
-    for (var task in fetchedTasks) {
-      // Create a copy of the task
-      Task updatedTask = Task(
-        docId: task.docId,
-        title: task.title,
-        detail: task.detail,
-        date: task.date,
-        createdAt: task.createdAt,
-        isCompleted: task.isCompleted,
-        completedAt: task.completedAt,
-        taskType: task.taskType,
-        // Copy any other properties your Task class has
-      );
-
-      // For one-time tasks, just use the stored status
-      if (task.taskType == 'oneTime') {
-        updatedTasks.add(updatedTask);
-        continue;
-      }
-
-      // For recurring tasks that are marked as completed
-      if (task.isCompleted && task.completedAt != null) {
-        final now = DateTime.now();
-        final completedDate = task.completedAt!;
-        bool needsReset = false;
-
-        switch (task.taskType) {
-          case 'DailyTask':
-            final today = DateTime(now.year, now.month, now.day);
-            final completedDay = DateTime(
-              completedDate.year,
-              completedDate.month,
-              completedDate.day,
-            );
-            needsReset = completedDay.isBefore(today);
-            break;
-
-          case 'WeeklyTask':
-            final currentWeekStart = _getWeekStart(now);
-            final completedWeekStart = _getWeekStart(completedDate);
-            needsReset = completedWeekStart.isBefore(currentWeekStart);
-            break;
-
-          case 'MonthlyTask':
-            final currentMonth = DateTime(now.year, now.month);
-            final completedMonth = DateTime(completedDate.year, completedDate.month);
-            needsReset = completedMonth.isBefore(currentMonth);
-            break;
-        }
-
-        if (needsReset) {
-          // Mark task as incomplete for display
-          updatedTask = updatedTask.copyWith(
-            isCompleted: false,
-            completedAt: null,
-          );
-          
-          // Add to list to update in Firestore
-          tasksToReset.add(task);
-        }
-      }
-
-      updatedTasks.add(updatedTask);
-    }
-
-    // Update Firestore for tasks that need reset
-    if (tasksToReset.isNotEmpty) {
-      await _resetTasksInFirestore(tasksToReset);
-    }
-
-    return updatedTasks;
-  }
-
-  // ✅ FIXED: Reset tasks in Firestore
-  Future<void> _resetTasksInFirestore(List<Task> tasksToReset) async {
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      
-      for (var task in tasksToReset) {
-        final taskRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(user!.uid)
-            .collection('tasks')
-            .doc(task.docId);
-        
-        batch.update(taskRef, {
-          'isCompleted': false,
-          'completedAt': null,
-          'lastResetAt': FieldValue.serverTimestamp(),
-        });
-      }
-      
-      await batch.commit();
-      debugPrint("✅ Auto-reset ${tasksToReset.length} recurring tasks");
-    } catch (e) {
-      debugPrint("❌ Error auto-resetting tasks: $e");
-    }
-  }
-
-  // ✅ FIXED: Get effective completion status for display (synchronous)
-  bool _getEffectiveCompletionStatus(Task task) {
-    // For one-time tasks, just return the stored status
-    if (task.taskType == 'oneTime') {
-      return task.isCompleted;
-    }
-    
-    // For recurring tasks that aren't completed, return false
-    if (!task.isCompleted) {
-      return false;
-    }
-    
-    // If completedAt is null, treat as not completed
-    if (task.completedAt == null) {
-      return false;
-    }
-    
-    final now = DateTime.now();
-    final completedDate = task.completedAt!;
-    
-    switch (task.taskType) {
-      case 'DailyTask':
-        final today = DateTime(now.year, now.month, now.day);
-        final completedDay = DateTime(
-          completedDate.year,
-          completedDate.month,
-          completedDate.day,
-        );
-        return completedDay.isAtSameMomentAs(today);
-        
-      case 'WeeklyTask':
-        final currentWeekStart = _getWeekStart(now);
-        final completedWeekStart = _getWeekStart(completedDate);
-        return completedWeekStart.isAtSameMomentAs(currentWeekStart);
-        
-      case 'MonthlyTask':
-        final currentMonth = DateTime(now.year, now.month);
-        final completedMonth = DateTime(completedDate.year, completedDate.month);
-        return completedMonth.isAtSameMomentAs(currentMonth);
-        
-      default:
-        return task.isCompleted;
-    }
   }
 
   Future<void> _initializeNativeAlarmHelper() async {
@@ -246,139 +80,6 @@ void initState() {
     }
   }
 
-  // Future<void> _checkExistingUser() async {
-  //   try {
-  //     final currentUser = FirebaseAuth.instance.currentUser;
-      
-  //     if (currentUser != null) {
-  //       debugPrint('✅ User found in cache: ${currentUser.email}');
-        
-  //       setState(() {
-  //         user = currentUser;
-  //         _authChecking = false;
-  //       });
-        
-  //       await fetchTasksFromFirestore(currentUser);
-  //       _maybeRequestAlarmPermission();
-  //     } else {
-  //       debugPrint('⚠️ No cached user found, listening for auth changes');
-  //       setState(() {
-  //         _authChecking = false;
-  //       });
-  //     }
-      
-  //     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
-  //       if (mounted) {
-  //         setState(() {
-  //           user = newUser;
-  //         });
-          
-  //         if (newUser != null) {
-  //           debugPrint('🔄 User logged in/updated: ${newUser.email}');
-  //           await fetchTasksFromFirestore(newUser);
-  //           _maybeRequestAlarmPermission();
-  //         } else {
-  //           debugPrint('🔴 User logged out');
-  //           setState(() {
-  //             tasks.clear();
-  //             displayTasks.clear();
-  //           });
-  //         }
-  //       }
-  //     });
-      
-  //   } catch (e) {
-  //     debugPrint('❌ Error checking existing user: $e');
-  //     setState(() {
-  //       _authChecking = false;
-  //     });
-  //   }
-  // }
-
-  Future<void> _checkExistingUser() async {
-  try {
-    debugPrint('🔍 Checking for cached user...');
-    
-    // Wait for Firebase Auth to initialize completely
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    final currentUser = FirebaseAuth.instance.currentUser;
-    
-    if (currentUser != null) {
-      debugPrint('✅ User found in cache: ${currentUser.uid}');
-      debugPrint('📧 Email: ${currentUser.email}');
-      debugPrint('🕒 Last sign-in: ${currentUser.metadata.lastSignInTime}');
-      
-      if (mounted) {
-        setState(() {
-          user = currentUser;
-          _authChecking = false;
-        });
-        
-        // Fetch tasks immediately
-        await fetchTasksFromFirestore(currentUser);
-        _maybeRequestAlarmPermission();
-      }
-    } else {
-      debugPrint('⚠️ No cached user found');
-      if (mounted) {
-        setState(() {
-          _authChecking = false;
-        });
-      }
-    }
-    
-    // Set up auth state listener
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((newUser) async {
-      debugPrint('🔄 Auth state changed: ${newUser != null ? "User logged in" : "User logged out"}');
-      
-      if (mounted) {
-        setState(() {
-          user = newUser;
-        });
-        
-        if (newUser != null) {
-          debugPrint('👤 New user detected: ${newUser.email}');
-          await fetchTasksFromFirestore(newUser);
-          _maybeRequestAlarmPermission();
-        } else {
-          debugPrint('🔴 User logged out');
-          setState(() {
-            tasks.clear();
-            displayTasks.clear();
-          });
-          
-          // Optionally navigate to login page
-          // WidgetsBinding.instance.addPostFrameCallback((_) {
-          //   Navigator.pushReplacementNamed(context, '/login');
-          // });
-        }
-      }
-    });
-    
-  } catch (e) {
-    debugPrint('❌ Error checking existing user: $e');
-    if (mounted) {
-      setState(() {
-        _authChecking = false;
-      });
-    }
-  }
-}
-
-Future<void> _checkAndRefreshToken() async {
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      // Get the ID token, this will refresh it if expired
-      await user.getIdToken(true);
-      debugPrint('✅ Token refreshed for user: ${user.email}');
-    }
-  } catch (e) {
-    debugPrint('❌ Token refresh error: $e');
-  }
-}
-
   Future<void> _maybeRequestAlarmPermission() async {
     if (!_nativeAlarmInitialized) {
       debugPrint('NativeAlarmHelper not initialized, skipping permission request');
@@ -386,6 +87,7 @@ Future<void> _checkAndRefreshToken() async {
     }
 
     if (!await NativeAlarmHelper.checkExactAlarmPermission()) {
+      if (!mounted) return;
       final shouldRequest = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -412,127 +114,6 @@ Future<void> _checkAndRefreshToken() async {
     }
   }
 
-  Future<void> fetchTasksFromFirestore(User user) async {
-    if (!mounted) return;
-
-    setState(() {
-      isLoading = true;
-    });
-
-    List<Task> allTasks = [];
-
-    try {
-      // Try cache first
-      final cachedSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .orderBy('createdAt', descending: true)
-          .get(const GetOptions(source: Source.cache));
-
-      allTasks =
-          cachedSnapshot.docs
-              .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-              .toList();
-              
-      debugPrint("✅ Loaded ${allTasks.length} tasks from cache");
-      
-      // Update completion status and get display tasks
-      final updatedTasks = await _updateTasksCompletionStatus(allTasks);
-      
-      if (mounted) {
-        setState(() {
-          tasks = allTasks;
-          displayTasks = updatedTasks;
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint("Error loading cached tasks: $e");
-    }
-
-    try {
-      // Then try server
-      final serverSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .orderBy('createdAt', descending: true)
-          .get(const GetOptions(source: Source.server));
-
-      final serverTasks =
-          serverSnapshot.docs
-              .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-              .toList();
-
-      debugPrint("✅ Loaded ${serverTasks.length} tasks from server");
-
-      // Update completion status and get display tasks
-      final updatedTasks = await _updateTasksCompletionStatus(serverTasks);
-      
-      if (mounted) {
-        setState(() {
-          tasks = serverTasks;
-          displayTasks = updatedTasks;
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint("Server fetch failed (offline?): $e");
-      
-      if (mounted && isLoading) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
-  }
-
-  bool _isTaskOverdue(Task task) {
-    // Use displayTasks for accurate completion status
-    final taskToCheck = displayTasks.firstWhere(
-      (t) => t.docId == task.docId,
-      orElse: () => task,
-    );
-    
-    if (_getEffectiveCompletionStatus(taskToCheck)) return false;
-    
-    if (task.date == null) return false;
-    
-    final now = DateTime.now();
-    return task.date!.isBefore(now);
-  }
-
-  List<Task> getFilteredTasks(TaskFilter filter) {
-    return displayTasks.where((task) {
-      final effectiveCompleted = _getEffectiveCompletionStatus(task);
-      
-      final matchesFilter = switch (filter) {
-        TaskFilter.completed => effectiveCompleted,
-        TaskFilter.incomplete => !effectiveCompleted && !_isTaskOverdue(task),
-        TaskFilter.overdue => !effectiveCompleted && _isTaskOverdue(task),
-        TaskFilter.all => true,
-      };
-
-      final matchesSearch = task.title.toLowerCase().contains(searchQuery);
-
-      return matchesFilter && matchesSearch;
-    }).toList();
-  }
-
-  int getTaskCount(TaskFilter filter) {
-    return getFilteredTasks(filter).length;
-  }
-
-  Color getFilterColor(TaskFilter filter) {
-    return switch (filter) {
-      TaskFilter.all => Colors.blue,
-      TaskFilter.completed => Colors.green,
-      TaskFilter.incomplete => Colors.orange,
-      TaskFilter.overdue => Colors.red,
-    };
-  }
-
   Widget buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -545,7 +126,7 @@ Future<void> _checkAndRefreshToken() async {
             icon: const Icon(Icons.clear),
             onPressed: () {
               _searchController.clear();
-              setState(() => searchQuery = "");
+              context.read<TaskProvider>().clearSearch();
             },
           ),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -555,9 +136,11 @@ Future<void> _checkAndRefreshToken() async {
   }
 
   Widget buildTaskList(TaskFilter filter) {
-    final filtered = getFilteredTasks(filter);
+    final taskProvider = context.watch<TaskProvider>();
+    final authProvider = context.watch<app_auth.AuthProvider>();
+    final filtered = taskProvider.getFilteredTasks(filter);
     
-    if (isLoading) {
+    if (taskProvider.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -647,7 +230,11 @@ Future<void> _checkAndRefreshToken() async {
           ),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () async => await fetchTasksFromFirestore(user!),
+            onRefresh: () async {
+              if (authProvider.user != null) {
+                await taskProvider.fetchTasks(authProvider.user!);
+              }
+            },
             child: ListView(
               padding: const EdgeInsets.only(bottom: 100),
               children:
@@ -679,9 +266,9 @@ Future<void> _checkAndRefreshToken() async {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: getFilterColor(
-                                        filter,
-                                      ).withOpacity(0.1),
+                                      color: taskProvider
+                                          .getFilterColor(filter)
+                                          .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
@@ -689,7 +276,7 @@ Future<void> _checkAndRefreshToken() async {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: getFilterColor(filter),
+                                        color: taskProvider.getFilterColor(filter),
                                       ),
                                     ),
                                   ),
@@ -699,8 +286,11 @@ Future<void> _checkAndRefreshToken() async {
                             ...entry.value.map(
                               (task) => ItemWidget(
                                 item: task,
-                                onEditDone:
-                                    () async => await fetchTasksFromFirestore(user!),
+                                onEditDone: () async {
+                                  if (authProvider.user != null) {
+                                    await taskProvider.fetchTasks(authProvider.user!);
+                                  }
+                                },
                               ),
                             ),
                           ],
@@ -715,12 +305,15 @@ Future<void> _checkAndRefreshToken() async {
   }
 
   Future<void> _navigateToAddTask() async {
+    final authProvider = context.read<app_auth.AuthProvider>();
+    final taskProvider = context.read<TaskProvider>();
+    
     final added = await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => AddTaskPage()),
     );
-    if (added == true && user != null) {
-      await fetchTasksFromFirestore(user!);
+    if (added == true && authProvider.user != null) {
+      await taskProvider.fetchTasks(authProvider.user!);
     }
   }
 
@@ -728,8 +321,7 @@ Future<void> _checkAndRefreshToken() async {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder:
-            (_) => AddMedicationPage(medicationManager: _medicationManager),
+        builder: (_) => const AddMedicationPage(),
       ),
     );
   }
@@ -798,6 +390,7 @@ Future<void> _checkAndRefreshToken() async {
         dateTime: testTime,
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('✅ Test alarm scheduled for 5 seconds!'),
@@ -805,6 +398,7 @@ Future<void> _checkAndRefreshToken() async {
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('❌ Failed to schedule test alarm: $e'),
@@ -816,6 +410,9 @@ Future<void> _checkAndRefreshToken() async {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<app_auth.AuthProvider>();
+    final user = authProvider.user;
+    
     return DefaultTabController(
       length: 4,
       initialIndex: 2, 
@@ -896,8 +493,8 @@ Future<void> _checkAndRefreshToken() async {
             ],
           ),
         ),
-        drawer: MyDrawer(user: user, medicationManager: medicationManager),
-        body: _authChecking
+        drawer: const MyDrawer(),
+        body: authProvider.isLoading
             ? const Scaffold(
                 body: Center(
                   child: Column(

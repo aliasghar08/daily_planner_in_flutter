@@ -1,8 +1,3 @@
-// lib/services/medication_manager.dart
-// import 'package:daily_planner/models/medication_enums.dart';
-// import 'package:daily_planner/models/medication_intake.dart';
-// import 'package:daily_planner/models/medication_model.dart';
-// import 'package:daily_planner/models/medication_schedule_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
@@ -20,169 +15,23 @@ class MedicationManager {
 
   String createSchedule(MedicationSchedule schedule) {
     _schedules[schedule.scheduleId] = schedule;
-    _generateUpcomingIntakes(schedule);
     return schedule.scheduleId;
   }
 
-  void _generateUpcomingIntakes(
-    MedicationSchedule schedule, {
-    int daysAhead = 30,
-  }) {
-    final now = DateTime.now();
-    final startDate = _isTodayOrAfter(schedule.startDate)
-        ? schedule.startDate
-        : DateTime.now();
-    final endDate = schedule.endDate ?? now.add(Duration(days: daysAhead));
-
-    // Generate intakes for date range
-    final newIntakes = schedule.generateIntakesForDateRange(startDate, endDate);
-    
-    for (final intake in newIntakes) {
-      // Only add if it doesn't already exist
-      if (!_intakes.containsKey(intake.intakeId) &&
-          intake.scheduledTime.isAfter(now.subtract(const Duration(minutes: 30)))) {
-        _intakes[intake.intakeId] = intake;
-      }
-    }
-  }
-
-  // ADDED: Regenerate intakes for all schedules
-  void regenerateIntakes({int daysAhead = 30}) {
-    final now = DateTime.now();
-    final tomorrow = DateTime(now.year, now.month, now.day + 1);
-    
-    // Remove old pending intakes that are in the future (they'll be regenerated)
-    _intakes.removeWhere((key, intake) => 
-        intake.status == IntakeStatus.pending && 
-        intake.scheduledTime.isAfter(now));
-    
-    // Regenerate intakes for all schedules
-    for (final schedule in _schedules.values) {
-      final endDate = schedule.endDate ?? now.add(Duration(days: daysAhead));
-      final newIntakes = schedule.generateIntakesForDateRange(tomorrow, endDate);
-      
-      for (final intake in newIntakes) {
-        if (!_intakes.containsKey(intake.intakeId)) {
-          _intakes[intake.intakeId] = intake;
-        }
-      }
-    }
-  }
-
-  // ADDED: Check and mark missed intakes
-  void checkAndMarkMissedIntakes() {
-    final now = DateTime.now();
-    final thirtyMinutesAgo = now.subtract(const Duration(minutes: 30));
-    
-    for (final intake in _intakes.values) {
-      if (intake.status == IntakeStatus.pending &&
-          intake.scheduledTime.isBefore(thirtyMinutesAgo)) {
-        final missedIntake = intake.markMissed();
-        _intakes[intake.intakeId] = missedIntake;
-      }
-    }
-  }
-
-  // ADDED: Ensure today's intakes exist
-  void ensureTodaysIntakes() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    
-    for (final schedule in _schedules.values) {
-      final todayIntakes = schedule.generateIntakesForDate(today);
-      
-      for (final intake in todayIntakes) {
-        if (!_intakes.containsKey(intake.intakeId)) {
-          _intakes[intake.intakeId] = intake;
-        }
-      }
-    }
-    
-    checkAndMarkMissedIntakes();
-  }
-
-  bool _shouldTakeMedication(MedicationSchedule schedule, DateTime checkDate) {
-    if (checkDate.isBefore(schedule.startDate)) return false;
-    if (schedule.endDate != null && checkDate.isAfter(schedule.endDate!))
-      return false;
-
-    switch (schedule.frequency) {
-      case MedicationFrequency.daily:
-        return true;
-      case MedicationFrequency.weekly:
-        return schedule.daysOfWeek.contains(
-          checkDate.weekday - 1,
-        ); // Convert to 0-6 (Mon-Sun)
-      case MedicationFrequency.custom:
-        return schedule.specificDates.any(
-          (date) =>
-              date.year == checkDate.year &&
-              date.month == checkDate.month &&
-              date.day == checkDate.day,
-        );
-      case MedicationFrequency.monthly:
-        return checkDate.day == schedule.startDate.day;
-      case MedicationFrequency.asNeeded:
-        return false;
-    }
-  }
-
-  bool _isTodayOrAfter(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-            date.month == now.month &&
-            date.day == now.day ||
-        date.isAfter(now);
-  }
-
-  List<MedicationIntake> getTodaysIntakes() {
-    ensureTodaysIntakes(); // ← CHANGED: Ensure today's intakes exist
-    
-    final today = DateTime.now();
-    final todaysIntakes = <MedicationIntake>[];
-
-    for (final intake in _intakes.values) {
-      if (intake.scheduledTime.year == today.year &&
-          intake.scheduledTime.month == today.month &&
-          intake.scheduledTime.day == today.day) {
-        todaysIntakes.add(intake);
-      }
-    }
-
-    todaysIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    return todaysIntakes;
-  }
-
-  List<MedicationIntake> getUpcomingIntakes({int hoursAhead = 24}) {
-    final now = DateTime.now();
-    final endTime = now.add(Duration(hours: hoursAhead));
-
-    final upcoming = <MedicationIntake>[];
-    for (final intake in _intakes.values) {
-      if (intake.scheduledTime.isAfter(now) &&
-          intake.scheduledTime.isBefore(endTime) &&
-          intake.status == IntakeStatus.pending) {
-        upcoming.add(intake);
-      }
-    }
-
-    upcoming.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-    return upcoming;
+  void addIntake(MedicationIntake intake) {
+    _intakes[intake.intakeId] = intake;
   }
 
   void updateIntake(MedicationIntake updatedIntake) {
     _intakes[updatedIntake.intakeId] = updatedIntake;
   }
 
-  // Getters for accessing data
   List<Medication> get medications => _medications.values.toList();
   List<MedicationSchedule> get schedules => _schedules.values.toList();
   List<MedicationIntake> get allIntakes => _intakes.values.toList();
 
-  // Get medications for a specific date
   List<MedicationIntake> getIntakesForDate(DateTime date) {
-    ensureTodaysIntakes(); // ← CHANGED: Ensure intakes exist
-    
+    ensureIntakesForDate(date);
     return _intakes.values.where((intake) {
       return intake.scheduledTime.year == date.year &&
           intake.scheduledTime.month == date.month &&
@@ -190,93 +39,112 @@ class MedicationManager {
     }).toList();
   }
 
-  void deleteMedication(String medicationId) {
-    _medications.remove(medicationId);
+  void ensureTodaysIntakes() {
+    ensureIntakesForDate(DateTime.now());
+  }
 
-    final schedulesToRemove =
-        _schedules.values
-            .where(
-              (schedule) => schedule.medication.medicationId == medicationId,
-            )
-            .map((schedule) => schedule.scheduleId)
-            .toList();
+  void ensureIntakesForDate(DateTime date) {
+    final startOfDay = DateTime(date.year, date.month, date.day);
 
-    for (final scheduleId in schedulesToRemove) {
-      if (scheduleId != null) {
-        _schedules.remove(scheduleId);
+    for (final schedule in _schedules.values) {
+      final schedStart = DateTime(
+        schedule.startDate.year,
+        schedule.startDate.month,
+        schedule.startDate.day,
+      );
+
+      if (startOfDay.isBefore(schedStart)) continue;
+      if (schedule.endDate != null) {
+        final schedEnd = DateTime(
+          schedule.endDate!.year,
+          schedule.endDate!.month,
+          schedule.endDate!.day,
+          23,
+          59,
+          59,
+        );
+        if (startOfDay.isAfter(schedEnd)) continue;
+      }
+
+      bool applies = false;
+      switch (schedule.frequency) {
+        case MedicationFrequency.daily:
+          applies = true;
+          break;
+        case MedicationFrequency.weekly:
+          final dayIdx = (date.weekday - 1) % 7; // 0=Mon, 6=Sun
+          applies = schedule.daysOfWeek.contains(dayIdx);
+          break;
+        case MedicationFrequency.monthly:
+          applies = (date.day == schedule.startDate.day);
+          break;
+        case MedicationFrequency.custom:
+          applies = schedule.specificDates.any(
+            (d) => d.year == date.year && d.month == date.month && d.day == date.day,
+          );
+          break;
+        case MedicationFrequency.asNeeded:
+          applies = false;
+          break;
+      }
+
+      if (!applies) continue;
+
+      for (final time in schedule.timesPerDay) {
+        final scheduledTime = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          time.hour,
+          time.minute,
+        );
+
+        final intakeId = MedicationIntake.generateIntakeId(
+          schedule.scheduleId,
+          scheduledTime,
+        );
+
+        if (!_intakes.containsKey(intakeId)) {
+          _intakes[intakeId] = MedicationIntake(
+            intakeId: intakeId,
+            schedule: schedule,
+            scheduledTime: scheduledTime,
+          );
+        }
       }
     }
+  }
 
-    final intakesToRemove =
-        _intakes.values
-            .where(
-              (intake) =>
-                  intake.schedule.medication.medicationId == medicationId,
-            )
-            .map((intake) => intake.intakeId)
-            .toList();
+  void regenerateIntakes() {
+    final now = DateTime.now();
+    ensureIntakesForDate(now);
+    ensureIntakesForDate(now.add(const Duration(days: 1)));
+  }
 
-    for (final intakeId in intakesToRemove) {
-      _intakes.remove(intakeId);
+  void checkAndMarkMissedIntakes() {
+    final now = DateTime.now();
+    for (final key in _intakes.keys.toList()) {
+      final intake = _intakes[key]!;
+      if (intake.status == IntakeStatus.pending &&
+          intake.scheduledTime.add(const Duration(hours: 2)).isBefore(now)) {
+        _intakes[key] = intake.markMissed();
+      }
     }
   }
 
-  void deleteSchedule(String scheduleId) {
-    _schedules.remove(scheduleId);
-
-    final intakesToRemove =
-        _intakes.values
-            .where((intake) => intake.schedule.scheduleId == scheduleId)
-            .map((intake) => intake.intakeId)
-            .toList();
-
-    for (final intakeId in intakesToRemove) {
-      _intakes.remove(intakeId);
-    }
-  }
-
-  void clearSchedules() {
+  void clear() {
+    _medications.clear();
     _schedules.clear();
     _intakes.clear();
   }
 
-  void clearIntakes() {
-    _intakes.clear();
-  }
-
-  void addIntake(MedicationIntake intake) {
-    _intakes.putIfAbsent(intake.intakeId, () => intake);
-  }
-
-  // ADDED: Get upcoming days count
-  int getDaysUntilNextIntake() {
-    final upcoming = getUpcomingIntakes(hoursAhead: 168); // 7 days
-    if (upcoming.isEmpty) return -1;
-    
-    final nextIntake = upcoming.first;
-    final now = DateTime.now();
-    return nextIntake.scheduledTime.difference(now).inDays;
-  }
-
-  // ADDED: Get statistics
-  Map<String, int> getIntakeStatistics() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    
-    final todaysIntakes = getIntakesForDate(today);
-    final takenToday = todaysIntakes.where((i) => i.status == IntakeStatus.taken).length;
-    final missedToday = todaysIntakes.where((i) => i.status == IntakeStatus.missed).length;
-    final pendingToday = todaysIntakes.where((i) => i.status == IntakeStatus.pending).length;
-    
-    final tomorrowsIntakes = getIntakesForDate(tomorrow);
-    
-    return {
-      'total': _intakes.length,
-      'takenToday': takenToday,
-      'missedToday': missedToday,
-      'pendingToday': pendingToday,
-      'upcomingTomorrow': tomorrowsIntakes.length,
-    };
+  void deleteMedication(String medicationId) {
+    _medications.remove(medicationId);
+    _schedules.removeWhere(
+      (key, schedule) => schedule.medication.medicationId == medicationId,
+    );
+    _intakes.removeWhere(
+      (key, intake) => intake.schedule.medication.medicationId == medicationId,
+    );
   }
 }

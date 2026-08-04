@@ -1,17 +1,14 @@
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
 import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/medication_list_page.dart';
 import 'package:daily_planner/screens/settings.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
 import 'package:daily_planner/utils/performance_page/total_tasks.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 class MyDrawer extends StatefulWidget {
-  final User? user;
-  final MedicationManager medicationManager;
-
-  const MyDrawer({super.key, required this.user, required this.medicationManager});
+  const MyDrawer({super.key});
 
   @override
   State<MyDrawer> createState() => _MyDrawerState();
@@ -22,6 +19,9 @@ class _MyDrawerState extends State<MyDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<app_auth.AuthProvider>();
+    final user = authProvider.user;
+
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.8,
       child: SafeArea(
@@ -55,7 +55,7 @@ class _MyDrawerState extends State<MyDrawer> {
                   ),
                   const SizedBox(height: 15),
                   Text(
-                    widget.user?.displayName ?? 'Guest User',
+                    user?.displayName ?? 'Guest User',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -64,7 +64,7 @@ class _MyDrawerState extends State<MyDrawer> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    widget.user?.email ?? 'Not signed in',
+                    user?.email ?? 'Not signed in',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 14,
@@ -106,10 +106,7 @@ class _MyDrawerState extends State<MyDrawer> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder:
-                              (context) => MedicationListPage(
-                                medicationManager: widget.medicationManager, // Just pass the manager, not create new page
-                              ),
+                          builder: (context) => const MedicationListPage(),
                         ),
                       );
                     },
@@ -306,7 +303,7 @@ class _MyDrawerState extends State<MyDrawer> {
     );
 
     if (shouldLogout == true) {
-      await FirebaseAuth.instance.signOut();
+      await context.read<app_auth.AuthProvider>().signOut();
       Navigator.pop(context); // Close the drawer
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

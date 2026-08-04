@@ -1,66 +1,15 @@
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
+import 'package:daily_planner/providers/theme_provider.dart';
+import 'package:daily_planner/providers/settings_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:daily_planner/utils/thememode.dart';
+import 'package:provider/provider.dart';
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
+  void _showLanguageDialog(BuildContext context) {
+    final settingsProvider = context.read<SettingsProvider>();
 
-class _SettingsPageState extends State<SettingsPage> {
-  bool _isDarkMode = false;
-  bool _notificationsEnabled = true;
-  String _selectedLanguage = 'English';
-
-  final List<String> _languages = ['English', 'Urdu', 'Turkish'];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPreferences();
-  }
-
-  Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _isDarkMode =
-          prefs.getBool('dark_mode') ?? themeNotifier.value == ThemeMode.dark;
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _selectedLanguage = prefs.getString('language') ?? 'English';
-    });
-    themeNotifier.value = _isDarkMode ? ThemeMode.dark : ThemeMode.light;
-  }
-
-  Future<void> _toggleDarkMode(bool val) async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() => _isDarkMode = val);
-    themeNotifier.value = val ? ThemeMode.dark : ThemeMode.light;
-    await prefs.setBool('dark_mode', val);
-    ThemePreferences.toggleTheme(val);
-  }
-
-  Future<void> _toggleNotifications(bool val) async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() => _notificationsEnabled = val);
-    await prefs.setBool('notifications_enabled', val);
-
-    if (val) {
-     // await NativeAlarmHelper.requestExactAlarmPermission();
-    }
-  }
-
-  Future<void> _changeLanguage(String lang) async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() => _selectedLanguage = lang);
-    await prefs.setString('language', lang);
-    Navigator.pop(context);
-  }
-
-  void _showLanguageDialog() {
     showDialog(
       context: context,
       builder:
@@ -69,14 +18,15 @@ class _SettingsPageState extends State<SettingsPage> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children:
-                  _languages.map((lang) {
+                  settingsProvider.languages.map((lang) {
                     return RadioListTile<String>(
                       value: lang,
-                      groupValue: _selectedLanguage,
+                      groupValue: settingsProvider.selectedLanguage,
                       title: Text(lang),
                       onChanged: (value) {
                         if (value != null) {
-                          _changeLanguage(value);
+                          settingsProvider.changeLanguage(value);
+                          Navigator.pop(context);
                         }
                       },
                     );
@@ -86,23 +36,28 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _logout() async {
+  Future<void> _logout(BuildContext context) async {
     try {
-      await FirebaseAuth.instance.signOut();
-      if (mounted) {
+      await context.read<app_auth.AuthProvider>().signOut();
+      if (context.mounted) {
         Navigator.of(
           context,
         ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Logout failed: ${e.toString()}')));
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: ${e.toString()}')));
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final settingsProvider = context.watch<SettingsProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
@@ -117,19 +72,19 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           SwitchListTile(
             title: const Text('Dark Mode'),
-            value: _isDarkMode,
-            onChanged: _toggleDarkMode,
+            value: themeProvider.isDarkMode,
+            onChanged: (val) => themeProvider.toggleTheme(val),
           ),
           SwitchListTile(
             title: const Text('Enable Notifications'),
-            value: _notificationsEnabled,
-            onChanged: _toggleNotifications,
+            value: settingsProvider.notificationsEnabled,
+            onChanged: (val) => settingsProvider.toggleNotifications(val),
           ),
           ListTile(
             title: const Text('Language'),
-            subtitle: Text(_selectedLanguage),
+            subtitle: Text(settingsProvider.selectedLanguage),
             leading: const Icon(Icons.language),
-            onTap: _showLanguageDialog,
+            onTap: () => _showLanguageDialog(context),
           ),
           const Divider(),
           const Text(
@@ -144,7 +99,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('Log Out'),
-            onTap: _logout,
+            onTap: () => _logout(context),
           ),
         ],
       ),

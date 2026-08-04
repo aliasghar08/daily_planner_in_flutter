@@ -1,13 +1,9 @@
-// lib/models/medication_schedule_model.dart
-// import 'package:daily_planner/models/medication_enums.dart';
-// import 'package:daily_planner/models/medication_intake.dart';
-// import 'package:daily_planner/models/medication_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:flutter/material.dart';
 
-@immutable
 class MedicationSchedule {
   final String scheduleId;
   final Medication medication;
@@ -33,35 +29,37 @@ class MedicationSchedule {
     this.instructions,
     this.reminderMinutesBefore = 15,
     DateTime? createdAt,
-  }) : scheduleId =
-           scheduleId ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
-       createdAt = createdAt ?? DateTime.now();
+  })  : scheduleId =
+            scheduleId ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
+        createdAt = createdAt ?? DateTime.now();
 
-  void addDailySchedule(List<TimeOfDay> times) {
-    timesPerDay
-      ..clear()
-      ..addAll(times..sort((a, b) => a.hour.compareTo(b.hour)));
-    daysOfWeek
-      ..clear()
-      ..addAll([0, 1, 2, 3, 4, 5, 6]); // All days
-  }
-
-  void addWeeklySchedule(List<int> days, List<TimeOfDay> times) {
-    timesPerDay
-      ..clear()
-      ..addAll(times..sort((a, b) => a.hour.compareTo(b.hour)));
-    daysOfWeek
-      ..clear()
-      ..addAll(days);
-  }
-
-  void addCustomSchedule(List<DateTime> dates, List<TimeOfDay> times) {
-    timesPerDay
-      ..clear()
-      ..addAll(times..sort((a, b) => a.hour.compareTo(b.hour)));
-    specificDates
-      ..clear()
-      ..addAll(dates..sort((a, b) => a.compareTo(b)));
+  MedicationSchedule copyWith({
+    String? scheduleId,
+    Medication? medication,
+    DateTime? startDate,
+    DateTime? endDate,
+    MedicationFrequency? frequency,
+    List<TimeOfDay>? timesPerDay,
+    List<int>? daysOfWeek,
+    List<DateTime>? specificDates,
+    String? instructions,
+    int? reminderMinutesBefore,
+    DateTime? createdAt,
+  }) {
+    return MedicationSchedule(
+      scheduleId: scheduleId ?? this.scheduleId,
+      medication: medication ?? this.medication,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      frequency: frequency ?? this.frequency,
+      timesPerDay: timesPerDay ?? this.timesPerDay,
+      daysOfWeek: daysOfWeek ?? this.daysOfWeek,
+      specificDates: specificDates ?? this.specificDates,
+      instructions: instructions ?? this.instructions,
+      reminderMinutesBefore:
+          reminderMinutesBefore ?? this.reminderMinutesBefore,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 
   List<MedicationIntake> generateIntakesForDate(DateTime date) {
@@ -101,21 +99,15 @@ class MedicationSchedule {
         time.minute,
       );
 
-      // Create a unique ID based on schedule and time
-      final intakeId = '${scheduleId}_${scheduledTime.millisecondsSinceEpoch}';
-
-      // Determine initial status
-      final now = DateTime.now();
-      final IntakeStatus initialStatus =
-          scheduledTime.isBefore(now)
-              ? IntakeStatus.missed
-              : IntakeStatus.pending;
+      // Create a stable, deterministic ID based on scheduleId, date, and time
+      final intakeId =
+          'intake_${scheduleId}_${scheduledTime.year}_${scheduledTime.month}_${scheduledTime.day}_${scheduledTime.hour}_${scheduledTime.minute}';
 
       final intake = MedicationIntake(
         intakeId: intakeId,
         schedule: this,
         scheduledTime: scheduledTime,
-        status: initialStatus,
+        status: IntakeStatus.pending,
       );
 
       intakes.add(intake);
@@ -129,13 +121,14 @@ class MedicationSchedule {
       case MedicationFrequency.daily:
         return true;
       case MedicationFrequency.weekly:
-        return daysOfWeek.contains(date.weekday - 1); // Convert 1-7 to 0-6
+        // DateTime.weekday: Monday is 1, Sunday is 7.
+        // We use 0 for Monday to 6 for Sunday.
+        return daysOfWeek.contains(date.weekday - 1);
       case MedicationFrequency.monthly:
-        return date.day == startDate.day; // Same day of month
+        return date.day == startDate.day;
       case MedicationFrequency.asNeeded:
-        return false; // Handled separately
+        return false;
       case MedicationFrequency.custom:
-        // Check if date matches any specific date (ignoring time)
         return specificDates.any(
           (specificDate) =>
               specificDate.year == date.year &&
@@ -145,18 +138,17 @@ class MedicationSchedule {
     }
   }
 
-  // ADDED: Generate intakes for a date range
   List<MedicationIntake> generateIntakesForDateRange(
-    DateTime startDate,
-    DateTime endDate,
+    DateTime rangeStart,
+    DateTime rangeEnd,
   ) {
     final List<MedicationIntake> intakes = [];
     DateTime currentDate = DateTime(
-      startDate.year,
-      startDate.month,
-      startDate.day,
+      rangeStart.year,
+      rangeStart.month,
+      rangeStart.day,
     );
-    final lastDate = DateTime(endDate.year, endDate.month, endDate.day);
+    final lastDate = DateTime(rangeEnd.year, rangeEnd.month, rangeEnd.day);
 
     while (!currentDate.isAfter(lastDate)) {
       intakes.addAll(generateIntakesForDate(currentDate));
@@ -169,12 +161,13 @@ class MedicationSchedule {
   Map<String, dynamic> toMap() {
     return {
       'scheduleId': scheduleId,
+      'medicationId': medication.medicationId,
       'medication': medication.toMap(),
       'startDate': startDate.millisecondsSinceEpoch,
       'endDate': endDate?.millisecondsSinceEpoch,
       'frequency': frequency.name,
       'timesPerDay':
-          timesPerDay.map((time) => '${time.hour}:${time.minute}').toList(),
+          timesPerDay.map((time) => {'hour': time.hour, 'minute': time.minute}).toList(),
       'daysOfWeek': daysOfWeek,
       'specificDates':
           specificDates.map((date) => date.millisecondsSinceEpoch).toList(),
@@ -184,41 +177,85 @@ class MedicationSchedule {
     };
   }
 
-  factory MedicationSchedule.fromMap(Map<String, dynamic> map) {
+  factory MedicationSchedule.fromMap(Map<String, dynamic> map, [String? docId, Medication? fallbackMedication]) {
+    DateTime parseDate(dynamic value, [DateTime? defaultVal]) {
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now());
+      return defaultVal ?? DateTime.now();
+    }
+
+    List<TimeOfDay> parseTimes(dynamic rawList) {
+      if (rawList is! List) return [];
+      final List<TimeOfDay> results = [];
+      for (final item in rawList) {
+        if (item is Map) {
+          final h = (item['hour'] as num?)?.toInt() ?? 0;
+          final m = (item['minute'] as num?)?.toInt() ?? 0;
+          results.add(TimeOfDay(hour: h, minute: m));
+        } else if (item is String) {
+          final parts = item.split(':');
+          if (parts.length == 2) {
+            results.add(
+              TimeOfDay(
+                hour: int.tryParse(parts[0]) ?? 0,
+                minute: int.tryParse(parts[1]) ?? 0,
+              ),
+            );
+          }
+        }
+      }
+      return results;
+    }
+
+    List<int> parseDays(dynamic rawList) {
+      if (rawList is! List) return [];
+      return rawList.map((e) => (e as num).toInt()).toList();
+    }
+
+    List<DateTime> parseSpecificDates(dynamic rawList) {
+      if (rawList is! List) return [];
+      final List<DateTime> results = [];
+      for (final item in rawList) {
+        if (item is int) results.add(DateTime.fromMillisecondsSinceEpoch(item));
+        if (item is Timestamp) results.add(item.toDate());
+        if (item is String) {
+          final dt = DateTime.tryParse(item);
+          if (dt != null) results.add(dt);
+        }
+      }
+      return results;
+    }
+
+    Medication med;
+    if (map['medication'] is Map<String, dynamic>) {
+      med = Medication.fromMap(map['medication'] as Map<String, dynamic>);
+    } else if (fallbackMedication != null) {
+      med = fallbackMedication;
+    } else {
+      med = Medication(
+        medicationId: map['medicationId'] ?? 'unknown',
+        name: map['medicationName'] ?? 'Medication',
+        dosage: (map['dosage'] as num?)?.toDouble() ?? 0.0,
+        unit: DosageUnit.tablet,
+      );
+    }
+
     return MedicationSchedule(
-      scheduleId: map['scheduleId'],
-      medication: Medication.fromMap(map['medication']),
-      startDate: DateTime.fromMillisecondsSinceEpoch(map['startDate']),
-      endDate:
-          map['endDate'] != null
-              ? DateTime.fromMillisecondsSinceEpoch(map['endDate'])
-              : null,
+      scheduleId: docId ?? map['scheduleId'] ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
+      medication: med,
+      startDate: parseDate(map['startDate']),
+      endDate: map['endDate'] != null ? parseDate(map['endDate']) : null,
       frequency: MedicationFrequency.values.firstWhere(
         (e) => e.name == map['frequency'],
         orElse: () => MedicationFrequency.daily,
       ),
-      timesPerDay:
-          (map['timesPerDay'] as List)
-              .map((timeStr) {
-                final parts = timeStr.split(':');
-                return TimeOfDay(
-                  hour: int.parse(parts[0]),
-                  minute: int.parse(parts[1]),
-                );
-              })
-              .toList()
-              .cast<TimeOfDay>(),
-      daysOfWeek: (map['daysOfWeek'] as List).cast<int>(),
-      specificDates:
-          (map['specificDates'] as List)
-              .map(
-                (timestamp) => DateTime.fromMillisecondsSinceEpoch(timestamp),
-              )
-              .toList()
-              .cast<DateTime>(),
+      timesPerDay: parseTimes(map['timesPerDay']),
+      daysOfWeek: parseDays(map['daysOfWeek']),
+      specificDates: parseSpecificDates(map['specificDates']),
       instructions: map['instructions'],
-      reminderMinutesBefore: map['reminderMinutesBefore'] ?? 15,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
+      reminderMinutesBefore: (map['reminderMinutesBefore'] as num?)?.toInt() ?? 15,
+      createdAt: parseDate(map['createdAt']),
     );
   }
 

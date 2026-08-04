@@ -1,8 +1,10 @@
-import 'dart:io' show Platform;
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
+import 'package:daily_planner/providers/medication_provider.dart';
+import 'package:daily_planner/providers/task_provider.dart';
+import 'package:daily_planner/providers/theme_provider.dart';
+import 'package:daily_planner/providers/settings_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/battery_optimization_helper.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -11,13 +13,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:daily_planner/utils/reset_task.dart';
-import 'package:daily_planner/utils/thememode.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/changePass.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -325,158 +327,52 @@ Future<void> _initializeAndroidServices() async {
   }
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _asyncInit();
-  }
-
-  Future<void> _asyncInit() async {
-    try {
-      // Make resetAllTasksIfNeeded non-blocking
-      resetAllTasksIfNeeded().catchError((e) {
-        debugPrint("resetAllTasksIfNeeded failed: $e");
-      });
-
-      await ThemePreferences.loadTheme();
-    } catch (e) {
-      debugPrint("Initialization failed inside MyApp: $e");
-    } finally {
-      if (mounted) setState(() => _initialized = true);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (!_initialized) {
-      // Show spinner while async init is happening
-      return const MaterialApp(
-        home: Scaffold(body: Center(child: CircularProgressIndicator())),
-      );
-    }
-
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: themeNotifier,
-      builder: (_, mode, __) {
-        return MaterialApp(
-          title: "Daily Planner",
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData.light(),
-          darkTheme: ThemeData.dark(),
-          themeMode: mode,
-          navigatorKey: navigatorKey,
-          home: const AuthWrapper(),
-          routes: {
-            "/home": (_) => const MyHome(),
-            "/login": (_) => const LoginPage(),
-            "/changepassword": (_) => const ChangePasswordPage(),
-            "/forgotpass": (_) => const ForgotPasswordScreen(),
-          },
-        );
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => app_auth.AuthProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => MedicationProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: "Daily Planner",
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData.light(),
+            darkTheme: ThemeData.dark(),
+            themeMode: themeProvider.themeMode,
+            navigatorKey: navigatorKey,
+            home: const AuthWrapper(),
+            routes: {
+              "/home": (_) => const MyHome(),
+              "/login": (_) => const LoginPage(),
+              "/changepassword": (_) => const ChangePasswordPage(),
+              "/forgotpass": (_) => const ForgotPasswordScreen(),
+            },
+          );
+        },
+      ),
     );
   }
 }
 
-// ✅ FIXED: AuthWrapper with proper session persistence
-class AuthWrapper extends StatefulWidget {
+// ✅ AuthWrapper now consumes AuthProvider — no local state needed
+class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
   @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
-}
-
-class _AuthWrapperState extends State<AuthWrapper> {
-  User? _user;
-  bool _isLoading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkAuthState();
-  }
-
-  Future<void> _checkAuthState() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      // ✅ Step 1: Get cached user immediately (works offline)
-      _user = FirebaseAuth.instance.currentUser;
-      debugPrint('🔐 Cached user: ${_user?.email ?? 'null'}');
-
-      // ✅ Step 2: Listen for auth state changes (handles token refresh, logout, etc.)
-      FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
-        if (mounted) {
-          debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'null'}');
-          setState(() {
-            _user = newUser;
-            _isLoading = false;
-          });
-        }
-      });
-
-      // ✅ Step 3: If user exists, verify their data in Firestore
-      if (_user != null) {
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_user!.uid)
-              .get();
-
-          if (!doc.exists) {
-            // User data doesn't exist - force logout
-            debugPrint('⚠️ User data not found in Firestore, logging out');
-            await FirebaseAuth.instance.signOut();
-            if (mounted) {
-              setState(() {
-                _user = null;
-                _error = 'User data not found';
-              });
-            }
-          } else {
-            debugPrint('✅ User data verified in Firestore');
-          }
-        } catch (e) {
-          // Network error - keep user logged in if cached data exists
-          debugPrint('⚠️ Could not verify user data (network error): $e');
-        }
-      }
-
-      // ✅ Step 4: Small delay to ensure everything is loaded
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-    } catch (e) {
-      debugPrint('❌ Auth check error: $e');
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _user = null;
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<app_auth.AuthProvider>();
+
     // Show loading spinner while checking auth
-    if (_isLoading) {
+    if (authProvider.isLoading) {
       return const Scaffold(
         body: Center(
           child: Column(
@@ -495,7 +391,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     // Show error if any
-    if (_error != null) {
+    if (authProvider.error != null) {
       return Scaffold(
         body: Center(
           child: Padding(
@@ -518,7 +414,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _error!,
+                  authProvider.error!,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -527,13 +423,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      _error = null;
-                      _isLoading = true;
-                    });
-                    _checkAuthState();
-                  },
+                  onPressed: () => authProvider.retry(),
                   child: const Text('Retry'),
                 ),
               ],
@@ -544,6 +434,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     // Navigate based on auth state
-    return _user != null ? const MyHome() : const LoginPage();
+    return authProvider.isLoggedIn ? const MyHome() : const LoginPage();
   }
 }

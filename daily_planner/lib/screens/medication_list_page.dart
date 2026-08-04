@@ -1,1726 +1,915 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
+import 'package:daily_planner/providers/medication_provider.dart';
 import 'package:daily_planner/screens/add_medication_page.dart';
 import 'package:daily_planner/screens/medication_detail_page.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 class MedicationListPage extends StatefulWidget {
-  final MedicationManager medicationManager;
-
-  const MedicationListPage({Key? key, required this.medicationManager})
-    : super(key: key);
+  const MedicationListPage({super.key});
 
   @override
   State<MedicationListPage> createState() => _MedicationListPageState();
 }
 
-class _MedicationListPageState extends State<MedicationListPage> {
-  List<Medication> _medications = [];
-  List<MedicationSchedule> _schedules = [];
-  List<MedicationIntake> _todaysIntakes = [];
-  bool _isLoading = true;
-  DateTime _selectedDate = DateTime.now();
+class _MedicationListPageState extends State<MedicationListPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  late ScrollController _dateStripScrollController;
 
   @override
   void initState() {
     super.initState();
-    _loadMedications();
-  }
+    _tabController = TabController(length: 2, vsync: this);
+    _dateStripScrollController = ScrollController();
 
-  Future<void> _loadMedications() async {
-    setState(() {
-      _isLoading = true;
+    // Initial load from Provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<app_auth.AuthProvider>();
+      if (authProvider.user != null) {
+        context
+            .read<MedicationProvider>()
+            .loadMedications(authProvider.user!.uid);
+      }
     });
-
-    try {
-      final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
-      // Get current user ID
-      final String? userId = _getCurrentUserId();
-
-      if (userId == null) {
-        // Handle not logged in state
-        print('User not authenticated, loading local data only');
-        _loadLocalDataOnly();
-        return;
-      }
-
-      // Clear existing data
-      _medications.clear();
-
-      // =============================================
-      // PART 1: Fetch medications from user's collection
-      // =============================================
-      final medicationsSnapshot =
-          await firestore
-              .collection('users')
-              .doc(userId)
-              .collection('medications')
-              .orderBy('createdAt', descending: true)
-              .get();
-
-      print(
-        'Loaded ${medicationsSnapshot.docs.length} medications for user $userId',
-      );
-
-      // Convert Firebase documents to Medication objects
-      for (final doc in medicationsSnapshot.docs) {
-        try {
-          final data = doc.data();
-          final medication = Medication(
-            medicationId: doc.id,
-            name: data['name'] ?? 'Unknown',
-            dosage: (data['dosage'] as num?)?.toDouble() ?? 0.0,
-            unit: _parseDosageUnit(data['unit']),
-            description: data['description'],
-            color: data['color'] ?? '#3498db',
-            icon: data['icon'] ?? '💊',
-          );
-          _medications.add(medication);
-
-          // Add to local manager for immediate access
-          widget.medicationManager.addMedication(medication);
-        } catch (e) {
-          print('Error parsing medication ${doc.id}: $e');
-        }
-      }
-
-      // =============================================
-      // PART 2: Fetch schedules from user's collection
-      // =============================================
-      final schedulesSnapshot =
-          await firestore
-              .collection('users')
-              .doc(userId)
-              .collection('schedules')
-              .get();
-
-      print(
-        'Loaded ${schedulesSnapshot.docs.length} schedules for user $userId',
-      );
-
-      // Clear existing schedules in local manager
-      widget.medicationManager.schedules.clear();
-
-      for (final doc in schedulesSnapshot.docs) {
-        try {
-          final data = doc.data();
-          final medicationId = data['medicationId'];
-
-          // Find the corresponding medication
-          Medication? medication;
-          try {
-            medication = _medications.firstWhere(
-              (med) => med.medicationId == medicationId,
-            );
-          } catch (e) {
-            // Create a placeholder medication if not found
-            medication = Medication(
-              medicationId: medicationId,
-              name: data['medicationName'] ?? 'Unknown Medication',
-              dosage: (data['dosage'] as num?)?.toDouble() ?? 0.0,
-              unit: _parseDosageUnit(data['unit']),
-              color: data['color'] ?? '#3498db',
-              icon: data['icon'] ?? '💊',
-            );
-            _medications.add(medication);
-            widget.medicationManager.addMedication(medication);
-          }
-
-          // Parse schedule data
-          final schedule = MedicationSchedule(
-            scheduleId: doc.id,
-            medication: medication,
-            startDate: (data['startDate'] as Timestamp).toDate(),
-            endDate:
-                data['endDate'] != null
-                    ? (data['endDate'] as Timestamp).toDate()
-                    : null,
-            frequency: _parseFrequency(data['frequency']),
-            timesPerDay: _parseTimesPerDay(data['timesPerDay']),
-            daysOfWeek: List<int>.from(data['daysOfWeek'] ?? []),
-            specificDates: _parseSpecificDates(data['specificDates']),
-            instructions: data['instructions'],
-            reminderMinutesBefore: data['reminderMinutesBefore'] ?? 15,
-          );
-
-          // Add to local manager
-          widget.medicationManager.createSchedule(schedule);
-        } catch (e) {
-          print('Error parsing schedule ${doc.id}: $e');
-          print('Schedule data: ${doc.data()}');
-        }
-      }
-
-      // =============================================
-      // UPDATE THE _schedules LIST - THIS IS THE FIX!
-      // =============================================
-      _schedules = widget.medicationManager.schedules; // <-- ADD THIS LINE
-      print('Updated _schedules list with ${_schedules.length} schedules');
-
-      // =============================================
-      // PART 3: Check if we need to generate intakes for today
-      // =============================================
-      // Get existing intakes for the selected date
-      _todaysIntakes = widget.medicationManager.getIntakesForDate(
-        _selectedDate,
-      );
-
-      // If no intakes exist for today, generate them
-      if (_todaysIntakes.isEmpty) {
-        print(
-          'No intakes found for ${_formatDate(_selectedDate)}, generating new ones',
-        );
-
-        // Generate intakes for the selected date
-        for (final schedule in widget.medicationManager.schedules) {
-          try {
-            print('Generating intakes for schedule: ${schedule.scheduleId}');
-            final intakes = schedule.generateIntakesForDate(_selectedDate);
-            print('Generated ${intakes.length} intakes for this schedule');
-
-            for (final intake in intakes) {
-              widget.medicationManager.addIntake(intake);
-            }
-          } catch (e) {
-            print(
-              'Error generating intakes for schedule ${schedule.scheduleId}: $e',
-            );
-          }
-        }
-
-        // Get today's intakes from the manager
-        _todaysIntakes = widget.medicationManager.getIntakesForDate(
-          _selectedDate,
-        );
-      }
-
-      // Sort intakes by scheduled time
-      _todaysIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-
-      print(
-        'Found ${_todaysIntakes.length} intakes for ${_formatDate(_selectedDate)}',
-      );
-
-      // =============================================
-      // PART 4: Load existing intake statuses from Firebase
-      // =============================================
-      await _loadIntakesFromFirebase(userId);
-    } catch (e) {
-      print('Error loading medications from Firebase: $e');
-      print(e);
-
-      // Fallback to local data if Firebase fails
-      _loadLocalDataOnly();
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
- Future<void> _loadIntakesFromFirebase(String userId) async {
-  try {
-    final startOfDay = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-    );
-    final endOfDay = startOfDay.add(const Duration(days: 1));
-
-    final firestore = FirebaseFirestore.instance;
-    
-    // For each medication, check its intakes subcollection
-    for (final medication in _medications) {
-      if (medication.medicationId == null) continue;
-      
-      final intakesSnapshot = await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('medications')
-          .doc(medication.medicationId)
-          .collection('intakes')
-          .where(
-            'scheduledTime',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-          )
-          .where('scheduledTime', isLessThan: Timestamp.fromDate(endOfDay))
-          .get();
-
-      print(
-        'Loaded ${intakesSnapshot.docs.length} intakes from medication ${medication.medicationId} for ${_formatDate(_selectedDate)}',
-      );
-
-      // Process each intake document
-      for (final doc in intakesSnapshot.docs) {
-        try {
-          final data = doc.data();
-          final String medicationId = data['medicationId'] ?? medication.medicationId!;
-          final String scheduleId = data['scheduleId'] ?? '';
-          final Timestamp scheduledTime = data['scheduledTime'];
-          final String statusString = data['status'] ?? 'pending';
-          final Timestamp? actualTime = data['actualTime'];
-
-          print(
-            'Processing intake: medId=$medicationId, scheduleId=$scheduleId, status=$statusString',
-          );
-
-          // Find the corresponding local intake
-          final matchingIntakes = _todaysIntakes
-              .where(
-                (intake) =>
-                    intake.schedule.medication.medicationId ==
-                        medicationId &&
-                    intake.schedule.scheduleId == scheduleId &&
-                    intake.scheduledTime.isAtSameMomentAs(
-                      scheduledTime.toDate(),
-                    ),
-              )
-              .toList();
-
-          if (matchingIntakes.isNotEmpty) {
-            final localIntake = matchingIntakes.first;
-
-            // Update the intake status based on Firebase data
-            MedicationIntake updatedIntake;
-
-            switch (statusString.toLowerCase()) {
-              case 'taken':
-                updatedIntake = localIntake.markTaken(
-                  actualTime: actualTime?.toDate() ?? DateTime.now(),
-                );
-                break;
-              case 'missed':
-                updatedIntake = localIntake.markMissed();
-                break;
-              case 'skipped':
-                updatedIntake = localIntake.markSkipped();
-                break;
-              default:
-                continue; // Skip if status is pending or unknown
-            }
-
-            // Update in local manager
-            widget.medicationManager.updateIntake(updatedIntake);
-
-            // Update in local list
-            final index = _todaysIntakes.indexWhere(
-              (i) =>
-                  i.schedule.medication.medicationId == medicationId &&
-                  i.schedule.scheduleId == scheduleId &&
-                  i.scheduledTime.isAtSameMomentAs(scheduledTime.toDate()),
-            );
-
-            if (index != -1) {
-              _todaysIntakes[index] = updatedIntake;
-            }
-
-            print('Updated intake status to $statusString');
-          }
-        } catch (e) {
-          print('Error processing intake from Firebase: $e');
-          print('Intake data: ${doc.data()}');
-        }
-      }
-    }
-
-    // Sort again after updates
-    _todaysIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-  } catch (e) {
-    print('Error loading intakes from Firebase: $e');
-  }
-}
-
-  void _loadLocalDataOnly() {
-    try {
-      _medications = widget.medicationManager.medications;
-      _schedules = widget.medicationManager.schedules; // <-- ADD THIS
-      _todaysIntakes = widget.medicationManager.getIntakesForDate(
-        _selectedDate,
-      );
-      _todaysIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
-
-      print(
-        'Loaded local data: ${_medications.length} medications, ${_schedules.length} schedules, ${_todaysIntakes.length} intakes',
-      );
-    } catch (fallbackError) {
-      print('Fallback also failed: $fallbackError');
-    }
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _dateStripScrollController.dispose();
+    super.dispose();
   }
 
-  // Helper to get current user ID
-  String? _getCurrentUserId() {
-    final user = FirebaseAuth.instance.currentUser;
-    return user?.uid;
-  }
-
-  // =============================================
-  // HELPER FUNCTIONS for data parsing
-  // =============================================
-
-  DosageUnit _parseDosageUnit(String? unitString) {
-    if (unitString == null) return DosageUnit.mg;
-
-    switch (unitString.toLowerCase()) {
-      case 'mg':
-        return DosageUnit.mg;
-      case 'mcg':
-        return DosageUnit.mcg;
-      case 'ml':
-        return DosageUnit.ml;
-      case 'tablet':
-        return DosageUnit.tablet;
-      case 'capsule':
-        return DosageUnit.capsule;
-      case 'drop':
-        return DosageUnit.drop;
-      case 'spray':
-        return DosageUnit.spray;
-      case 'puff':
-        return DosageUnit.puff;
-      default:
-        return DosageUnit.mg;
-    }
-  }
-
-  MedicationFrequency _parseFrequency(String? frequencyString) {
-    if (frequencyString == null) return MedicationFrequency.daily;
-
-    switch (frequencyString.toLowerCase()) {
-      case 'daily':
-        return MedicationFrequency.daily;
-      case 'weekly':
-        return MedicationFrequency.weekly;
-      case 'monthly':
-        return MedicationFrequency.monthly;
-      case 'asneeded':
-      case 'as needed':
-        return MedicationFrequency.asNeeded;
-      case 'custom':
-        return MedicationFrequency.custom;
-      default:
-        return MedicationFrequency.daily;
-    }
-  }
-
-  List<TimeOfDay> _parseTimesPerDay(List<dynamic>? timesData) {
-    final times = <TimeOfDay>[];
-
-    if (timesData == null) return times;
-
-    for (final timeData in timesData) {
-      try {
-        if (timeData is Map<String, dynamic>) {
-          final hour = timeData['hour'] as int? ?? 0;
-          final minute = timeData['minute'] as int? ?? 0;
-          times.add(TimeOfDay(hour: hour, minute: minute));
-        }
-      } catch (e) {
-        print('Error parsing time: $e');
-      }
-    }
-
-    return times;
-  }
-
-  List<DateTime> _parseSpecificDates(List<dynamic>? datesData) {
-    final dates = <DateTime>[];
-
-    if (datesData == null) return dates;
-
-    for (final dateData in datesData) {
-      try {
-        if (dateData is Timestamp) {
-          dates.add(dateData.toDate());
-        }
-      } catch (e) {
-        print('Error parsing date: $e');
-      }
-    }
-
-    return dates;
-  }
-
-  /// Parses a hex color string to a Color object
   Color _parseColor(String colorHex) {
     try {
-      return Color(int.parse(colorHex.substring(1, 7), radix: 16) + 0xFF000000);
-    } catch (e) {
-      return Colors.blue;
+      final hex = colorHex.replaceAll('#', '');
+      return Color(int.parse('FF$hex', radix: 16));
+    } catch (_) {
+      return Colors.blueAccent;
     }
   }
 
-  /// Formats a TimeOfDay object to a readable string (e.g., "9:30 AM")
-  String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = time.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$hour:$minute $period';
-  }
+  @override
+  Widget build(BuildContext context) {
+    final medProvider = context.watch<MedicationProvider>();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-  /// Formats a DateTime object to a time string (e.g., "9:30 AM")
-  String _formatDateTime(DateTime dateTime) {
-    return DateFormat('h:mm a').format(dateTime);
-  }
-
-  /// Formats a DateTime object to a date string (e.g., "15/12/2023")
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
-  }
-
-  /// Formats a DateTime object to a relative date string
-  String _formatRelativeDate(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final inputDate = DateTime(date.year, date.month, date.day);
-
-    final difference = inputDate.difference(today).inDays;
-
-    if (difference == 0) return 'Today';
-    if (difference == 1) return 'Tomorrow';
-    if (difference == -1) return 'Yesterday';
-    if (difference > 1 && difference < 7)
-      return DateFormat('EEEE').format(date);
-
-    return _formatDate(date);
-  }
-
-  /// Converts MedicationFrequency enum to a display string
-  String _getFrequencyDisplayName(MedicationFrequency frequency) {
-    switch (frequency) {
-      case MedicationFrequency.daily:
-        return 'Daily';
-      case MedicationFrequency.weekly:
-        return 'Weekly';
-      case MedicationFrequency.monthly:
-        return 'Monthly';
-      case MedicationFrequency.asNeeded:
-        return 'As Needed';
-      case MedicationFrequency.custom:
-        return 'Custom Dates';
-    }
-  }
-
-  /// Formats dosage with unit for display (e.g., "500 mg")
-  String _getDosageDisplay(Medication medication) {
-    final unit = medication.unit.toString().split('.').last;
-    return '${medication.dosage} ${unit.replaceAll('_', ' ').toLowerCase()}';
-  }
-
-  /// Formats selected days indices to day names (e.g., "Mon, Wed, Fri")
-  String _formatDays(List<int> days) {
-    final dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final selectedDays = days.map((day) => dayNames[day]).toList();
-    return selectedDays.join(', ');
-  }
-
-  /// Gets the status color for a medication intake
-  Color _getStatusColor(IntakeStatus status) {
-    switch (status) {
-      case IntakeStatus.taken:
-        return Colors.green;
-      case IntakeStatus.missed:
-        return Colors.red;
-      case IntakeStatus.skipped:
-        return Colors.orange;
-      case IntakeStatus.pending:
-        return Colors.grey;
-      case IntakeStatus.upcoming:
-        return Colors.blue;
-    }
-  }
-
-  /// Gets the status icon for a medication intake
-  IconData _getStatusIcon(IntakeStatus status) {
-    switch (status) {
-      case IntakeStatus.taken:
-        return Icons.check_circle;
-      case IntakeStatus.missed:
-        return Icons.cancel;
-      case IntakeStatus.skipped:
-        return Icons.do_not_disturb;
-      case IntakeStatus.pending:
-        return Icons.access_time;
-      case IntakeStatus.upcoming:
-        return Icons.schedule;
-    }
-  }
-
-  /// Gets the status text for a medication intake
-  String _getStatusText(MedicationIntake intake) {
-    switch (intake.status) {
-      case IntakeStatus.taken:
-        final timeDiff = intake.actualTime?.difference(intake.scheduledTime);
-        if (timeDiff != null && timeDiff.inMinutes > 0) {
-          return 'Taken ${timeDiff.inMinutes} min late';
-        } else if (timeDiff != null && timeDiff.inMinutes < 0) {
-          return 'Taken ${timeDiff.inMinutes.abs()} min early';
-        } else {
-          return 'Taken on time';
-        }
-      case IntakeStatus.missed:
-        return 'Missed';
-      case IntakeStatus.skipped:
-        return 'Skipped';
-      case IntakeStatus.pending:
-        return 'Pending';
-      case IntakeStatus.upcoming:
-        return 'Upcoming';
-    }
-  }
-
-  Future<void> _markIntakeAsTaken(MedicationIntake intake) async {
-    final String? userId = _getCurrentUserId();
-    final updatedIntake = intake.markTaken();
-
-    // Update locally
-    widget.medicationManager.updateIntake(updatedIntake);
-
-    // Sync to Firebase if logged in
-    if (userId != null) {
-      await _saveIntakeToFirebase(userId, updatedIntake);
-    }
-
-    // Update UI - update only this specific intake
-    setState(() {
-      final index = _todaysIntakes.indexWhere(
-        (i) =>
-            i.schedule.medication.medicationId ==
-                intake.schedule.medication.medicationId &&
-            i.schedule.scheduleId == intake.schedule.scheduleId &&
-            i.scheduledTime.isAtSameMomentAs(intake.scheduledTime),
-      );
-
-      if (index != -1) {
-        _todaysIntakes[index] = updatedIntake;
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Marked ${intake.schedule.medication.name} as taken'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  Future<void> _markIntakeAsMissed(MedicationIntake intake) async {
-    final String? userId = _getCurrentUserId();
-    final updatedIntake = intake.markMissed();
-
-    // Update locally
-    widget.medicationManager.updateIntake(updatedIntake);
-
-    // Sync to Firebase if logged in
-    if (userId != null) {
-      await _saveIntakeToFirebase(userId, updatedIntake);
-    }
-
-    // Update UI - update only this specific intake
-    setState(() {
-      final index = _todaysIntakes.indexWhere(
-        (i) =>
-            i.schedule.medication.medicationId ==
-                intake.schedule.medication.medicationId &&
-            i.schedule.scheduleId == intake.schedule.scheduleId &&
-            i.scheduledTime.isAtSameMomentAs(intake.scheduledTime),
-      );
-
-      if (index != -1) {
-        _todaysIntakes[index] = updatedIntake;
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Marked ${intake.schedule.medication.name} as missed'),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  Future<void> _markIntakeAsSkipped(MedicationIntake intake) async {
-    final String? userId = _getCurrentUserId();
-    final updatedIntake = intake.markSkipped();
-
-    // Update locally
-    widget.medicationManager.updateIntake(updatedIntake);
-
-    // Sync to Firebase if logged in
-    if (userId != null) {
-      await _saveIntakeToFirebase(userId, updatedIntake);
-    }
-
-    // Update UI - update only this specific intake
-    setState(() {
-      final index = _todaysIntakes.indexWhere(
-        (i) =>
-            i.schedule.medication.medicationId ==
-                intake.schedule.medication.medicationId &&
-            i.schedule.scheduleId == intake.schedule.scheduleId &&
-            i.scheduledTime.isAtSameMomentAs(intake.scheduledTime),
-      );
-
-      if (index != -1) {
-        _todaysIntakes[index] = updatedIntake;
-      }
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Marked ${intake.schedule.medication.name} as skipped'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
-
-  void _updateScheduleWithIntakeStatus(MedicationIntake intake) {
-    // Find and update the corresponding schedule in _schedules list
-    for (int i = 0; i < _schedules.length; i++) {
-      if (_schedules[i].scheduleId == intake.schedule.scheduleId) {
-        print(
-          'Updated intake status in schedule: ${intake.schedule.scheduleId}',
-        );
-        break;
-      }
-    }
-  }
-
-  Future<void> _saveIntakeToFirebase(
-  String userId,
-  MedicationIntake intake,
-) async {
-  try {
-    final firestore = FirebaseFirestore.instance;
-    final medication = intake.schedule.medication;
-    final medicationId = medication.medicationId;
-
-    if (medicationId == null) {
-      print('Medication ID is null, cannot save intake to Firebase');
-      return;
-    }
-
-    // Create a unique ID for this intake
-    final intakeId =
-        '${intake.schedule.scheduleId}_${intake.scheduledTime.millisecondsSinceEpoch}';
-
-    // Convert status enum to string
-    String statusString = intake.status.toString();
-    statusString = statusString.substring(statusString.indexOf('.') + 1);
-
-    // Prepare data for Firebase
-    Map<String, dynamic> intakeData = {
-      'medicationId': medicationId,
-      'medicationName': medication.name,
-      'scheduleId': intake.schedule.scheduleId,
-      'scheduledTime': Timestamp.fromDate(intake.scheduledTime),
-      'status': statusString,
-      'dosage': medication.dosage,
-      'unit': medication.unit.toString().split('.').last,
-      'updatedAt': Timestamp.now(),
-    };
-
-    // Add actualTime only if it exists
-    if (intake.actualTime != null) {
-      intakeData['actualTime'] = Timestamp.fromDate(intake.actualTime!);
-    }
-
-    // Add intake date for easier querying
-    intakeData['intakeDate'] = Timestamp.fromDate(
-      DateTime(
-        intake.scheduledTime.year,
-        intake.scheduledTime.month,
-        intake.scheduledTime.day,
-      ),
-    );
-
-
-    print('Saving intake to Firebase: $intakeId');
-    print('Medication path: users/$userId/medications/$medicationId/intakes/$intakeId');
-    print('Intake data: $intakeData');
-
-    // Save to medication's intakes subcollection
-    await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('medications')
-        .doc(medicationId)
-        .collection('intakes')
-        .doc(intakeId)
-        .set(intakeData, SetOptions(merge: true));
-
-    // Also update medication document with last intake info (optional)
-    await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('medications')
-        .doc(medicationId)
-        .update({
-      'lastIntakeTime': Timestamp.now(),
-      'lastIntakeStatus': statusString,
-    });
-
-    print('Successfully saved intake $intakeId to medication $medicationId intakes');
-  } catch (e) {
-    print('Error saving intake to Firebase: $e');
-    print('Stack trace: ${e.toString()}');
-
-    // Show error to user
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to sync to cloud: ${e.toString()}'),
-          backgroundColor: Colors.red,
+    return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FA),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        title: const Text(
+          'Medications',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22),
         ),
-      );
-    }
-  }
-}
-
-  /// Shows a dialog to update intake status
-  void _showUpdateIntakeDialog(MedicationIntake intake) {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Update ${intake.schedule.medication.name}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Scheduled for ${_formatDateTime(intake.scheduledTime)}',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Dosage: ${_getDosageDisplay(intake.schedule.medication)}',
-                  style: TextStyle(color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 16),
-                const Text('Update status:'),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              if (intake.status != IntakeStatus.taken)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _markIntakeAsTaken(intake);
-                  },
-                  icon: const Icon(Icons.check, size: 18),
-                  label: const Text('Mark as Taken'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              if (intake.status != IntakeStatus.missed)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _markIntakeAsMissed(intake);
-                  },
-                  icon: const Icon(Icons.close, size: 18),
-                  label: const Text('Mark as Missed'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              if (intake.status != IntakeStatus.skipped)
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await _markIntakeAsSkipped(intake);
-                  },
-                  icon: const Icon(Icons.do_not_disturb, size: 18),
-                  label: const Text('Mark as Skipped'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-            ],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.today_rounded),
+            tooltip: 'Go to Today',
+            onPressed: () {
+              medProvider.selectDate(DateTime.now());
+            },
           ),
-    );
-  }
-
-  /// Shows date picker to view intakes for a specific date
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-      });
-      _loadMedications();
-    }
-  }
-
-  /// Builds today's schedule section
-  Widget _buildTodaysSchedule() {
-    if (_todaysIntakes.isEmpty) {
-      return Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Column(
-          children: [
-            Icon(Icons.calendar_today, size: 48, color: Colors.grey[300]),
-            const SizedBox(height: 12),
-            const Text(
-              'No medications scheduled for today',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add Medication',
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AddMedicationPage(),
+                ),
+              );
+            },
+          ),
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.blueAccent,
+          indicatorWeight: 3,
+          labelColor: Colors.blueAccent,
+          unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          tabs: const [
+            Tab(text: 'Daily Schedule', icon: Icon(Icons.calendar_today_rounded, size: 20)),
+            Tab(text: 'My Medications', icon: Icon(Icons.medication_rounded, size: 20)),
           ],
         ),
-      );
-    }
-
-    return Column(
-      children: [
-        // Date selector
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _formatRelativeDate(_selectedDate),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.calendar_today),
-                onPressed: _selectDate,
-                tooltip: 'Select date',
-              ),
-            ],
-          ),
-        ),
-
-        // Today's intakes list
-        ..._todaysIntakes.map((intake) => _buildIntakeCard(intake)).toList(),
-      ],
-    );
-  }
-
-  /// Navigates to medication detail page
-  void _viewMedicationDetails(Medication medication) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => MedicationDetailPage(
-              medication: medication,
-              medicationManager: widget.medicationManager,
-            ),
       ),
-    ).then((_) => _loadMedications());
-  }
-
-  /// Builds an intake card widget
-  Widget _buildIntakeCard(MedicationIntake intake) {
-    final medication = intake.schedule.medication;
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: _getStatusColor(intake.status).withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: () => _showUpdateIntakeDialog(intake),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              // Status indicator
-              Container(
-                width: 8,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _getStatusColor(intake.status),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Medication icon
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _parseColor(medication.color).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    medication.icon,
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: _parseColor(medication.color),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-
-              // Medication info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      medication.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _getDosageDisplay(medication),
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Icon(Icons.schedule, size: 14, color: Colors.grey[500]),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDateTime(intake.scheduledTime),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        if (intake.actualTime != null) ...[
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.check_circle,
-                            size: 14,
-                            color: Colors.green,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _formatDateTime(intake.actualTime!),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Status badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(intake.status).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _getStatusIcon(intake.status),
-                      size: 16,
-                      color: _getStatusColor(intake.status),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      _getStatusText(intake),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: _getStatusColor(intake.status),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMedicationCard(Medication medication) {
-    final schedules =
-        _schedules
-            .where(
-              (schedule) =>
-                  schedule.medication.medicationId == medication.medicationId,
-            )
-            .toList();
-
-    return InkWell(
-      onTap: () => _viewMedicationDetails(medication),
-      borderRadius: BorderRadius.circular(12),
-      child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with icon and name (same as before)
-              Row(
+      body: medProvider.isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 50,
-                    height: 50,
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Loading medications...', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            )
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildDailyScheduleTab(medProvider, isDark),
+                _buildMedicationsListTab(medProvider, isDark),
+              ],
+            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AddMedicationPage()),
+          );
+        },
+        backgroundColor: Colors.blueAccent,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add Medication', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  // ==========================================
+  // TAB 1: DAILY SCHEDULE (APPLE HEALTH STYLE)
+  // ==========================================
+  Widget _buildDailyScheduleTab(MedicationProvider medProvider, bool isDark) {
+    final timeGroups = medProvider.intakesByTimeOfDay;
+    final totalDoses = medProvider.totalIntakesCount;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        final authProvider = context.read<app_auth.AuthProvider>();
+        if (authProvider.user != null) {
+          await medProvider.loadMedications(authProvider.user!.uid);
+        }
+      },
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 90),
+        children: [
+          // 1. Horizontal 7-Day Date Picker (Apple Health Strip)
+          _buildAppleHealthDateStrip(medProvider, isDark),
+
+          const SizedBox(height: 12),
+
+          // 2. Today's Adherence Summary Card
+          _buildAdherenceCard(medProvider, isDark),
+
+          const SizedBox(height: 16),
+
+          // 3. Time-of-Day Sections
+          if (totalDoses == 0)
+            _buildEmptyScheduleCard(medProvider, isDark)
+          else ...[
+            if (timeGroups['Morning']!.isNotEmpty)
+              _buildTimeSection(
+                title: 'Morning',
+                timeRange: '5:00 AM - 12:00 PM',
+                icon: Icons.wb_sunny_outlined,
+                iconColor: Colors.amber.shade700,
+                intakes: timeGroups['Morning']!,
+                medProvider: medProvider,
+                isDark: isDark,
+              ),
+            if (timeGroups['Afternoon']!.isNotEmpty)
+              _buildTimeSection(
+                title: 'Afternoon',
+                timeRange: '12:00 PM - 5:00 PM',
+                icon: Icons.wb_cloudy_outlined,
+                iconColor: Colors.orange.shade700,
+                intakes: timeGroups['Afternoon']!,
+                medProvider: medProvider,
+                isDark: isDark,
+              ),
+            if (timeGroups['Evening']!.isNotEmpty)
+              _buildTimeSection(
+                title: 'Evening',
+                timeRange: '5:00 PM - 9:00 PM',
+                icon: Icons.nights_stay_outlined,
+                iconColor: Colors.indigo.shade400,
+                intakes: timeGroups['Evening']!,
+                medProvider: medProvider,
+                isDark: isDark,
+              ),
+            if (timeGroups['Night']!.isNotEmpty)
+              _buildTimeSection(
+                title: 'Night',
+                timeRange: '9:00 PM - 5:00 AM',
+                icon: Icons.bedtime_outlined,
+                iconColor: Colors.purple.shade400,
+                intakes: timeGroups['Night']!,
+                medProvider: medProvider,
+                isDark: isDark,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // Apple Health Style Horizontal Date Strip (14 days)
+  // ----------------------------------------------------
+  Widget _buildAppleHealthDateStrip(MedicationProvider medProvider, bool isDark) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Generate dates: 6 days before today to 7 days after
+    final dates = List.generate(
+      14,
+      (i) => today.subtract(const Duration(days: 6)).add(Duration(days: i)),
+    );
+
+    return Container(
+      color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  DateFormat('MMMM yyyy').format(medProvider.selectedDate),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                Text(
+                  DateFormat('EEEE, MMM d').format(medProvider.selectedDate),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.blueAccent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 76,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: dates.length,
+              itemBuilder: (context, index) {
+                final date = dates[index];
+                final isSelected = date.year == medProvider.selectedDate.year &&
+                    date.month == medProvider.selectedDate.month &&
+                    date.day == medProvider.selectedDate.day;
+                final isCurrentToday = date.year == today.year &&
+                    date.month == today.month &&
+                    date.day == today.day;
+
+                return GestureDetector(
+                  onTap: () {
+                    medProvider.selectDate(date);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 52,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: _parseColor(medication.color),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(
-                        medication.icon,
-                        style: const TextStyle(fontSize: 24),
+                      color: isSelected
+                          ? Colors.blueAccent
+                          : (isCurrentToday
+                              ? (isDark
+                                  ? Colors.blueAccent.withOpacity(0.2)
+                                  : Colors.blue.shade50)
+                              : (isDark
+                                  ? const Color(0xFF2A2A2A)
+                                  : Colors.grey.shade100)),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? Colors.blueAccent
+                            : (isCurrentToday
+                                ? Colors.blueAccent.withOpacity(0.5)
+                                : Colors.transparent),
+                        width: 1.5,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          medication.name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                          DateFormat('E').format(date).toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade600),
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _getDosageDisplay(medication),
+                          '${date.day}',
                           style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected
+                                ? Colors.white
+                                : (isDark ? Colors.white : Colors.black87),
                           ),
                         ),
+                        if (isCurrentToday)
+                          Container(
+                            margin: const EdgeInsets.only(top: 3),
+                            width: 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.white : Colors.blueAccent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      // Handle medication actions
-                      if (value == 'edit') {
-                        _editMedication(
-                          medication,
-                          schedules.isNotEmpty ? schedules.first : null,
-                        );
-                      } else if (value == 'delete') {
-                        _deleteMedication(medication);
-                      } else if (value == 'view') {
-                        _viewMedicationDetails(medication);
-                      }
-                    },
-                    icon: const Icon(Icons.more_vert),
-                    itemBuilder:
-                        (context) => [
-                          const PopupMenuItem(
-                            value: 'view',
-                            child: Row(
-                              children: [
-                                Icon(Icons.visibility, size: 20),
-                                SizedBox(width: 8),
-                                Text('View Details'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, size: 20),
-                                SizedBox(width: 8),
-                                Text('Edit'),
-                              ],
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete, size: 20, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                  ),
-                ],
-              ),
-
-              // Today's intakes for this medication
-              _buildMedicationTodaysIntakes(medication),
-
-              // Schedules section (same as before)
-              if (schedules.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Schedules:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                ...schedules.map((schedule) => _buildScheduleTile(schedule)),
-              ],
-
-              // No schedules message
-              if (schedules.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16.0),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 16,
-                        color: Colors.grey[500],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'No schedules set. Tap edit to add a schedule.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+                );
+              },
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  /// Builds today's intakes for a specific medication
-  Widget _buildMedicationTodaysIntakes(Medication medication) {
-    final todaysIntakes =
-        _todaysIntakes
-            .where(
-              (intake) =>
-                  intake.schedule.medication.medicationId ==
-                  medication.medicationId,
-            )
-            .toList();
+  // ----------------------------------------------------
+  // Adherence Card (Circular Progress & Counters)
+  // ----------------------------------------------------
+  Widget _buildAdherenceCard(MedicationProvider medProvider, bool isDark) {
+    final pct = medProvider.adherencePercentage;
+    final total = medProvider.totalIntakesCount;
+    final taken = medProvider.takenIntakesCount;
+    final skipped = medProvider.skippedIntakesCount;
+    final pending = medProvider.pendingIntakesCount;
 
-    if (todaysIntakes.isEmpty) {
-      return Container();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const Divider(),
-        const SizedBox(height: 8),
-        const Text(
-          "Today's Doses:",
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        ...todaysIntakes.map((intake) => _buildIntakeMiniCard(intake)).toList(),
-      ],
-    );
-  }
-
-  /// Builds a mini intake card for medication detail view
-  Widget _buildIntakeMiniCard(MedicationIntake intake) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: _getStatusColor(intake.status).withOpacity(0.05),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _getStatusColor(intake.status).withOpacity(0.2),
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+              : [Colors.blue.shade700, Colors.indigo.shade800],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blueAccent.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(
-            _getStatusIcon(intake.status),
-            size: 16,
-            color: _getStatusColor(intake.status),
+          // Circular Progress
+          SizedBox(
+            width: 70,
+            height: 70,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CircularProgressIndicator(
+                  value: total == 0 ? 0.0 : pct,
+                  strokeWidth: 7,
+                  backgroundColor: Colors.white.withOpacity(0.2),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                ),
+                Center(
+                  child: Text(
+                    total == 0 ? '0%' : '${(pct * 100).toInt()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 18),
+          // Info & Badges
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _formatDateTime(intake.scheduledTime),
+                  total == 0
+                      ? 'No Medications Scheduled'
+                      : (pct >= 1.0
+                          ? '🎉 All Medications Taken!'
+                          : '$taken of $total doses completed'),
                   style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
-                Text(
-                  _getStatusText(intake),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _buildStatPill('Taken: $taken', Colors.greenAccent.shade400, Colors.green.shade900),
+                    _buildStatPill('Pending: $pending', Colors.blue.shade100, Colors.blue.shade900),
+                    if (skipped > 0)
+                      _buildStatPill('Skipped: $skipped', Colors.amber.shade200, Colors.brown.shade800),
+                  ],
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.more_horiz, size: 20),
-            onPressed: () => _showUpdateIntakeDialog(intake),
-          ),
         ],
       ),
     );
   }
 
-  /// Builds a schedule tile widget (same as before, just shortened for brevity)
-  Widget _buildScheduleTile(MedicationSchedule schedule) {
+  Widget _buildStatPill(String label, Color textColor, Color bgColor) {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[200]!),
+        color: bgColor.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Schedule info (same as before)
-          Row(
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // Time-of-Day Group Section
+  // ----------------------------------------------------
+  Widget _buildTimeSection({
+    required String title,
+    required String timeRange,
+    required IconData icon,
+    required Color iconColor,
+    required List<MedicationIntake> intakes,
+    required MedicationProvider medProvider,
+    required bool isDark,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
             children: [
-              Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+              Icon(icon, color: iconColor, size: 20),
               const SizedBox(width: 8),
               Text(
-                _getFrequencyDisplayName(schedule.frequency),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                title,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
                 ),
               ),
-            ],
-          ),
-
-          // Times (same as before)
-          if (schedule.timesPerDay.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children:
-                  schedule.timesPerDay.map((time) {
-                    return Chip(
-                      label: Text(
-                        _formatTime(time),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      backgroundColor: Colors.blue[50],
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    );
-                  }).toList(),
-            ),
-          ],
-
-          // Date range (same as before)
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.date_range, size: 14, color: Colors.grey[600]),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               Text(
-                'From ${_formatDate(schedule.startDate)}${schedule.endDate != null ? ' to ${_formatDate(schedule.endDate!)}' : ' (no end date)'}',
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Handles medication actions (same as before)
-  void _editMedication(Medication medication, MedicationSchedule? schedule) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => AddMedicationPage(
-              medicationManager: widget.medicationManager,
-              existingMedication: medication,
-              existingSchedule: schedule,
-            ),
-      ),
-    ).then((_) => _loadMedications());
-  }
-
-  /// Shows confirmation dialog and deletes medication from both local and Firebase
-  Future<void> _deleteMedication(Medication medication) async {
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Delete Medication'),
-            content: Text(
-              'Are you sure you want to delete "${medication.name}"? This will also delete all associated schedules and intake records.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _deleteMedicationFromFirebase(medication);
-                },
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
+                '• $timeRange',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                 ),
               ),
             ],
           ),
+        ),
+        ...intakes.map(
+          (intake) => _buildAppleHealthIntakeCard(intake, medProvider, isDark),
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 
-  /// Deletes medication from Firebase and local storage
-  Future<void> _deleteMedicationFromFirebase(Medication medication) async {
-    final String? userId = _getCurrentUserId();
+  // ----------------------------------------------------
+  // Apple Health Style Intake Card with Quick Actions
+  // ----------------------------------------------------
+  Widget _buildAppleHealthIntakeCard(
+    MedicationIntake intake,
+    MedicationProvider medProvider,
+    bool isDark,
+  ) {
+    final med = intake.schedule.medication;
+    final medColor = _parseColor(med.color);
+    final timeStr = DateFormat('h:mm a').format(intake.scheduledTime);
+    final isTaken = intake.status == IntakeStatus.taken;
+    final isSkipped = intake.status == IntakeStatus.skipped;
 
-    if (userId == null) {
-      // If not authenticated, only delete locally
-      widget.medicationManager.deleteMedication(medication.medicationId!);
-      _loadMedications();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"${medication.name}" deleted locally'),
-          backgroundColor: Colors.red,
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isTaken
+              ? Colors.green.withOpacity(0.3)
+              : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
         ),
-      );
-      return;
-    }
-
-    try {
-      final FirebaseFirestore firestore = FirebaseFirestore.instance;
-      final String medicationId = medication.medicationId!;
-
-      // First, delete the medication document
-      await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('medications')
-          .doc(medicationId)
-          .delete();
-
-      print('Deleted medication $medicationId from Firebase');
-
-      // Delete associated schedules
-      final schedulesQuery =
-          await firestore
-              .collection('users')
-              .doc(userId)
-              .collection('schedules')
-              .where('medicationId', isEqualTo: medicationId)
-              .get();
-
-      // Delete all schedule documents
-      final batch = firestore.batch();
-      for (final doc in schedulesQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-
-      print(
-        'Deleted ${schedulesQuery.docs.length} schedules for medication $medicationId',
-      );
-
-      // Delete associated intakes (if you store them in Firebase)
-      await _deleteIntakesForMedication(userId, medicationId);
-
-      // Finally, delete from local manager
-      widget.medicationManager.deleteMedication(medicationId);
-
-      // Refresh the UI
-      _loadMedications();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"${medication.name}" deleted successfully'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } catch (e) {
-      print('Error deleting medication from Firebase: $e');
-
-      // Fallback: delete locally if Firebase fails
-      widget.medicationManager.deleteMedication(medication.medicationId!);
-      _loadMedications();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error deleting from cloud, removed locally only'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
-  /// Deletes intakes associated with a medication
-  /// Deletes intakes associated with a medication from the medication's intakes subcollection
-Future<void> _deleteIntakesForMedication(
-  String userId,
-  String medicationId,
-) async {
-  try {
-    final firestore = FirebaseFirestore.instance;
-
-    // Get all intakes from the medication's intakes subcollection
-    final intakesQuery = await firestore
-        .collection('users')
-        .doc(userId)
-        .collection('medications')
-        .doc(medicationId)
-        .collection('intakes')
-        .get();
-
-    if (intakesQuery.docs.isNotEmpty) {
-      final batch = firestore.batch();
-      for (final doc in intakesQuery.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-      print(
-        'Deleted ${intakesQuery.docs.length} intakes from medication $medicationId intakes subcollection',
-      );
-    }
-    
-    // Also delete the intakes subcollection reference by removing the metadata document if exists
-    try {
-      await firestore
-          .collection('users')
-          .doc(userId)
-          .collection('medications')
-          .doc(medicationId)
-          .collection('intakes')
-          .doc('_metadata')
-          .delete();
-      print('Deleted metadata document from intakes subcollection');
-    } catch (e) {
-      print('No metadata document to delete: $e');
-    }
-  } catch (e) {
-    print('Error deleting intakes from medication subcollection: $e');
-    // Continue even if intakes deletion fails
-  }
-}
-
-  /// Navigates to add new medication page (same as before)
-  void _addNewMedication() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) =>
-                AddMedicationPage(medicationManager: widget.medicationManager),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-    ).then((_) => _loadMedications());
-  }
-
-  /// Builds the empty state widget when no medications are added
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.medication_outlined, size: 100, color: Colors.grey[300]),
-            const SizedBox(height: 24),
-            const Text(
-              'No Medications Added',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey,
-              ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MedicationDetailPage(medication: med),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'You haven\'t added any medications yet.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Tap the + button below to add your first medication.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _addNewMedication,
-              icon: const Icon(Icons.add),
-              label: const Text('Add First Medication'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14.0),
+          child: Row(
+            children: [
+              // Medication Icon Avatar
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: medColor.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    med.icon,
+                    style: const TextStyle(fontSize: 22),
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              const SizedBox(width: 14),
 
-  /// Builds the loading state widget
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            'Loading medications...',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Medications'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _selectDate,
-            tooltip: 'Select date',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadMedications,
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
-      body:
-          _isLoading
-              ? _buildLoadingState()
-              : _medications.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                onRefresh: _loadMedications,
-                color: Theme.of(context).primaryColor,
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 80),
+              // Title, Dosage, Instructions
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Today's schedule section
-                    const SizedBox(height: 16),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Today\'s Schedule',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            med.name,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              decoration: isSkipped
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
                         ),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueAccent,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${med.dosage} ${med.unit.name}${intake.schedule.instructions != null && intake.schedule.instructions!.isNotEmpty ? ' • ${intake.schedule.instructions}' : ''}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    _buildTodaysSchedule(),
-
-                    // All medications section
-                    const SizedBox(height: 24),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'All Medications',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    if (isTaken && intake.actualTime != null) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Taken at ${DateFormat('h:mm a').format(intake.actualTime!)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._medications
-                        .map((medication) => _buildMedicationCard(medication))
-                        .toList(),
+                    ],
                   ],
                 ),
               ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addNewMedication,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Medication'),
-        backgroundColor: Theme.of(context).primaryColor,
+
+              const SizedBox(width: 10),
+
+              // Action Buttons: Taken / Skipped / Toggle
+              if (isTaken)
+                IconButton(
+                  icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                  tooltip: 'Mark as Pending',
+                  onPressed: () {
+                    medProvider.markIntake(
+                      intake: intake,
+                      status: IntakeStatus.pending,
+                    );
+                  },
+                )
+              else if (isSkipped)
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.orange, size: 28),
+                  tooltip: 'Mark as Pending',
+                  onPressed: () {
+                    medProvider.markIntake(
+                      intake: intake,
+                      status: IntakeStatus.pending,
+                    );
+                  },
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Skip Button
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 22),
+                      tooltip: 'Skip dose',
+                      onPressed: () {
+                        medProvider.markIntake(
+                          intake: intake,
+                          status: IntakeStatus.skipped,
+                        );
+                      },
+                    ),
+                    // Take Button (Apple Health Pill)
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        medProvider.markIntake(
+                          intake: intake,
+                          status: IntakeStatus.taken,
+                          actualTime: DateTime.now(),
+                        );
+                      },
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check, size: 16),
+                          SizedBox(width: 4),
+                          Text('Take', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  Widget _buildEmptyScheduleCard(MedicationProvider medProvider, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.event_available_rounded, size: 64, color: Colors.blueAccent.withOpacity(0.5)),
+          const SizedBox(height: 16),
+          const Text(
+            'No Intakes Scheduled',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You have no medications scheduled for ${DateFormat('MMMM d, yyyy').format(medProvider.selectedDate)}.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddMedicationPage()),
+              );
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add Medication Schedule'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // TAB 2: MY MEDICATIONS LIST
+  // ==========================================
+  Widget _buildMedicationsListTab(MedicationProvider medProvider, bool isDark) {
+    final medications = medProvider.medications;
+
+    if (medications.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.medication_outlined, size: 70, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              const Text(
+                'No Medications Added Yet',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Add your prescriptions, vitamins, and supplements to manage intake schedules and adherence.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddMedicationPage()),
+                  );
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add Your First Medication'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+      itemCount: medications.length,
+      itemBuilder: (context, index) {
+        final med = medications[index];
+        final medColor = _parseColor(med.color);
+
+        // Find schedules for this med
+        final schedules = medProvider.schedules
+            .where((s) => s.medication.medicationId == med.medicationId)
+            .toList();
+
+        return Card(
+          elevation: 1,
+          margin: const EdgeInsets.only(bottom: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            leading: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: medColor.withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(med.icon, style: const TextStyle(fontSize: 22)),
+              ),
+            ),
+            title: Text(
+              med.name,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text('${med.dosage} ${med.unit.name}'),
+                if (schedules.isNotEmpty)
+                  Text(
+                    '${schedules.first.frequency.name.toUpperCase()} • ${schedules.first.timesPerDay.length}x daily',
+                    style: const TextStyle(fontSize: 12, color: Colors.blueAccent),
+                  ),
+              ],
+            ),
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'edit') {
+                  final schedule = schedules.isNotEmpty ? schedules.first : null;
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddMedicationPage(
+                        existingMedication: med,
+                        existingSchedule: schedule,
+                      ),
+                    ),
+                  );
+                } else if (value == 'delete') {
+                  _showDeleteConfirmDialog(med, medProvider);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MedicationDetailPage(medication: med),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showDeleteConfirmDialog(Medication med, MedicationProvider medProvider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete ${med.name}?'),
+        content: const Text(
+          'This will permanently delete this medication, its schedules, and all recorded intake logs.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await medProvider.deleteMedication(med.medicationId);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${med.name} deleted')),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 }

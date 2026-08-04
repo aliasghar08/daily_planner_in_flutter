@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:flutter/foundation.dart';
 
@@ -23,28 +24,30 @@ class Medication {
     this.icon = '💊',
     DateTime? createdAt,
     this.isActive = true,
-  }) : medicationId =
-           medicationId ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
-       createdAt = createdAt ?? DateTime.now();
+  })  : medicationId =
+            medicationId ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
+        createdAt = createdAt ?? DateTime.now();
 
   Medication copyWith({
+    String? medicationId,
     String? name,
     double? dosage,
     DosageUnit? unit,
     String? description,
     String? color,
     String? icon,
+    DateTime? createdAt,
     bool? isActive,
   }) {
     return Medication(
-      medicationId: medicationId,
+      medicationId: medicationId ?? this.medicationId,
       name: name ?? this.name,
       dosage: dosage ?? this.dosage,
       unit: unit ?? this.unit,
       description: description ?? this.description,
       color: color ?? this.color,
       icon: icon ?? this.icon,
-      createdAt: createdAt,
+      createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
     );
   }
@@ -63,11 +66,18 @@ class Medication {
     };
   }
 
-  factory Medication.fromMap(Map<String, dynamic> map) {
+  factory Medication.fromMap(Map<String, dynamic> map, [String? docId]) {
+    DateTime parseCreatedAt(dynamic value) {
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+      if (value is Timestamp) return value.toDate();
+      if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+      return DateTime.now();
+    }
+
     return Medication(
-      medicationId: map['medicationId'],
-      name: map['name'],
-      dosage: map['dosage']?.toDouble(),
+      medicationId: docId ?? map['medicationId'] ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
+      name: map['name'] ?? '',
+      dosage: (map['dosage'] as num?)?.toDouble() ?? 0.0,
       unit: DosageUnit.values.firstWhere(
         (e) => e.name == map['unit'],
         orElse: () => DosageUnit.tablet,
@@ -75,7 +85,7 @@ class Medication {
       description: map['description'],
       color: map['color'] ?? '#3498db',
       icon: map['icon'] ?? '💊',
-      createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']),
+      createdAt: parseCreatedAt(map['createdAt']),
       isActive: map['isActive'] ?? true,
     );
   }

@@ -1,25 +1,20 @@
-// lib/pages/medication/add_medication_page.dart
-
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
+import 'package:daily_planner/providers/medication_provider.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:provider/provider.dart';
 
 class AddMedicationPage extends StatefulWidget {
-  final MedicationManager medicationManager;
   final Medication? existingMedication;
   final MedicationSchedule? existingSchedule;
 
   const AddMedicationPage({
-    Key? key,
-    required this.medicationManager,
+    super.key,
     this.existingMedication,
     this.existingSchedule,
-  }) : super(key: key);
+  });
 
   @override
   State<AddMedicationPage> createState() => _AddMedicationPageState();
@@ -45,6 +40,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   final List<int> _selectedDays = []; // 0-6 for Monday-Sunday
   final List<DateTime> _selectedCustomDates = [];
   int _reminderMinutesBefore = 15;
+  bool _isSaving = false;
 
   // Color options for medication
   final List<Map<String, dynamic>> _colorOptions = [
@@ -69,6 +65,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     '🫀',
     '🫁',
     '🧴',
+    '💧',
   ];
 
   // Day options
@@ -89,8 +86,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     if (widget.existingMedication != null) {
       _nameController.text = widget.existingMedication!.name;
       _dosageController.text = widget.existingMedication!.dosage.toString();
-      _descriptionController.text =
-          widget.existingMedication!.description ?? '';
+      _descriptionController.text = widget.existingMedication!.description ?? '';
       _selectedColor = widget.existingMedication!.color;
       _selectedIcon = widget.existingMedication!.icon;
       _selectedUnit = widget.existingMedication!.unit;
@@ -105,9 +101,11 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
       _selectedTimes.addAll(widget.existingSchedule!.timesPerDay);
       _selectedDays.addAll(widget.existingSchedule!.daysOfWeek);
       _selectedCustomDates.addAll(widget.existingSchedule!.specificDates);
-      _instructionsController.text =
-          widget.existingSchedule!.instructions ?? '';
+      _instructionsController.text = widget.existingSchedule!.instructions ?? '';
       _reminderMinutesBefore = widget.existingSchedule!.reminderMinutesBefore;
+    } else {
+      // Default initial time
+      _selectedTimes.add(const TimeOfDay(hour: 8, minute: 0));
     }
   }
 
@@ -120,8 +118,8 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     super.dispose();
   }
 
- Future<void> _saveMedication() async {
-  if (_formKey.currentState!.validate()) {
+  Future<void> _saveMedication() async {
+    if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
     // Validate scheduling
@@ -132,143 +130,42 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
       return;
     }
 
-    if (_selectedFrequency == MedicationFrequency.weekly &&
-        _selectedDays.isEmpty) {
+    if (_selectedFrequency == MedicationFrequency.weekly && _selectedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least one day for weekly schedule'),
-        ),
+        const SnackBar(content: Text('Please select at least one day for weekly schedule')),
       );
       return;
     }
 
-    if (_selectedFrequency == MedicationFrequency.custom &&
-        _selectedCustomDates.isEmpty) {
+    if (_selectedFrequency == MedicationFrequency.custom && _selectedCustomDates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select at least one date for custom schedule',
-          ),
-        ),
+        const SnackBar(content: Text('Please select at least one date for custom schedule')),
       );
       return;
     }
+
+    final authProvider = context.read<app_auth.AuthProvider>();
+    if (authProvider.user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User not authenticated')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
 
     try {
-      final FirebaseFirestore firestore = FirebaseFirestore.instance;
-      final String? userId = _getCurrentUserId();
+      final medProvider = context.read<MedicationProvider>();
 
-      if (userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User not authenticated')),
-        );
-        return;
-      }
+      final medicationId = widget.existingMedication?.medicationId ??
+          'med_${DateTime.now().millisecondsSinceEpoch}';
+      final scheduleId = widget.existingSchedule?.scheduleId ??
+          'sched_${DateTime.now().millisecondsSinceEpoch}';
 
-      // =============================================
-      // PART 1: Save Medication
-      // =============================================
-      Map<String, dynamic> medicationData = {
-        'name': _nameController.text.trim(),
-        'dosage': _dosage,
-        'unit': _selectedUnit.toString().split('.').last,
-        'description': _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
-        'color': _selectedColor,
-        'icon': _selectedIcon,
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': userId,
-      };
-
-      final userMedicationsRef = firestore
-          .collection('users')
-          .doc(userId)
-          .collection('medications');
-
-      DocumentReference medicationRef;
-      String firebaseMedicationId;
-
-      if (widget.existingMedication != null &&
-          widget.existingMedication!.medicationId != null) {
-        medicationRef = userMedicationsRef.doc(widget.existingMedication!.medicationId);
-        await medicationRef.update(medicationData);
-        firebaseMedicationId = widget.existingMedication!.medicationId!;
-        
-        // Check if intakes collection exists for existing medication
-        final intakesSnapshot = await medicationRef.collection('intakes').limit(1).get();
-        if (!intakesSnapshot.docs.any((doc) => doc.exists)) {
-          // Create a dummy document to initialize the collection (optional)
-          await medicationRef.collection('intakes').doc('initial').set({
-            'createdAt': FieldValue.serverTimestamp(),
-            'note': 'Initial collection setup',
-            'status': 'setup'
-          });
-          // Optionally delete the dummy document after creation
-          await medicationRef.collection('intakes').doc('initial').delete();
-        }
-      } else {
-        medicationRef = await userMedicationsRef.add(medicationData);
-        firebaseMedicationId = medicationRef.id;
-        
-        // Create empty intakes collection for new medication
-        // We'll create a dummy document and delete it to initialize the collection
-        await medicationRef.collection('intakes').doc('initial').set({
-          'createdAt': FieldValue.serverTimestamp(),
-          'note': 'Initial collection setup',
-          'status': 'setup'
-        });
-        // Delete the dummy document to keep the collection truly empty
-        await medicationRef.collection('intakes').doc('initial').delete();
-      }
-
-      // =============================================
-      // PART 2: Save Schedule
-      // =============================================
-      Map<String, dynamic> scheduleData = {
-        'medicationId': firebaseMedicationId,
-        'medicationName': _nameController.text.trim(),
-        'startDate': Timestamp.fromDate(_startDate),
-        'endDate': _endDate != null ? Timestamp.fromDate(_endDate!) : null,
-        'frequency': _selectedFrequency.toString().split('.').last,
-        'timesPerDay': _selectedTimes
-            .map((time) => {'hour': time.hour, 'minute': time.minute})
-            .toList(),
-        'daysOfWeek': _selectedDays,
-        'specificDates': _selectedCustomDates
-            .map((date) => Timestamp.fromDate(date))
-            .toList(),
-        'instructions': _instructionsController.text.trim().isEmpty
-            ? null
-            : _instructionsController.text.trim(),
-        'reminderMinutesBefore': _reminderMinutesBefore,
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': userId,
-      };
-
-      final userSchedulesRef = firestore
-          .collection('users')
-          .doc(userId)
-          .collection('schedules');
-
-      String? firebaseScheduleId;
-
-      if (widget.existingSchedule != null &&
-          widget.existingSchedule!.scheduleId != null) {
-        await userSchedulesRef
-            .doc(widget.existingSchedule!.scheduleId)
-            .update(scheduleData);
-        firebaseScheduleId = widget.existingSchedule!.scheduleId;
-      } else {
-        DocumentReference scheduleRef = await userSchedulesRef.add(scheduleData);
-        firebaseScheduleId = scheduleRef.id;
-      }
-
-      // =============================================
-      // PART 3: Create local objects
-      // =============================================
       final medication = Medication(
-        medicationId: firebaseMedicationId,
+        medicationId: medicationId,
         name: _nameController.text.trim(),
         dosage: _dosage,
         unit: _selectedUnit,
@@ -277,10 +174,12 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             : _descriptionController.text.trim(),
         color: _selectedColor,
         icon: _selectedIcon,
+        createdAt: widget.existingMedication?.createdAt ?? DateTime.now(),
+        isActive: widget.existingMedication?.isActive ?? true,
       );
 
       final schedule = MedicationSchedule(
-        scheduleId: firebaseScheduleId,
+        scheduleId: scheduleId,
         medication: medication,
         startDate: _startDate,
         endDate: _endDate,
@@ -292,136 +191,136 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             ? null
             : _instructionsController.text.trim(),
         reminderMinutesBefore: _reminderMinutesBefore,
+        createdAt: widget.existingSchedule?.createdAt ?? DateTime.now(),
       );
 
-      widget.medicationManager.addMedication(medication);
-      widget.medicationManager.createSchedule(schedule);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${medication.name} saved successfully!'),
-          backgroundColor: Colors.green,
-        ),
+      await medProvider.saveMedication(
+        medication: medication,
+        schedule: schedule,
       );
 
-      Navigator.pop(context, medication);
-    } catch (error) {
-      print('Firebase save error: $error');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to save: ${error.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${medication.name} saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, medication);
+      }
+    } catch (e) {
+      debugPrint('Error saving medication: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save medication: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
-}
-  // Helper function to get current user ID
-  String? _getCurrentUserId() {
 
-      return FirebaseAuth.instance.currentUser?.uid;
-
-  }
   void _showColorPicker() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Choose Color'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: GridView.builder(
-                shrinkWrap: true,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: _colorOptions.length,
-                itemBuilder: (context, index) {
-                  final colorOption = _colorOptions[index];
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedColor = colorOption['color'];
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: _parseColor(colorOption['color']),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              _selectedColor == colorOption['color']
-                                  ? Colors.black
-                                  : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          colorOption['name'],
-                          style: TextStyle(
-                            color: _getTextColor(
-                              _parseColor(colorOption['color']),
-                            ),
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Color'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+            ),
+            itemCount: _colorOptions.length,
+            itemBuilder: (context, index) {
+              final colorOption = _colorOptions[index];
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedColor = colorOption['color'];
+                  });
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _parseColor(colorOption['color']),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: _selectedColor == colorOption['color']
+                          ? Colors.black
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      colorOption['name'],
+                      style: TextStyle(
+                        color: _getTextColor(_parseColor(colorOption['color'])),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
+                ),
+              );
+            },
           ),
+        ),
+      ),
     );
   }
 
   void _showIconPicker() {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Choose Icon'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: GridView.builder(
-                shrinkWrap: true,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: _iconOptions.length,
-                itemBuilder: (context, index) {
-                  final icon = _iconOptions[index];
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedIcon = icon;
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color:
-                            _selectedIcon == icon
-                                ? Colors.blue.withOpacity(0.2)
-                                : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(icon, style: const TextStyle(fontSize: 24)),
-                      ),
-                    ),
-                  );
-                },
-              ),
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Icon'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 4,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
             ),
+            itemCount: _iconOptions.length,
+            itemBuilder: (context, index) {
+              final icon = _iconOptions[index];
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedIcon = icon;
+                  });
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _selectedIcon == icon
+                        ? Colors.blue.withOpacity(0.2)
+                        : Colors.grey.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Text(icon, style: const TextStyle(fontSize: 24)),
+                  ),
+                ),
+              );
+            },
           ),
+        ),
+      ),
     );
   }
 
@@ -460,7 +359,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _startDate,
-      firstDate: DateTime.now(),
+      firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
     if (picked != null) {
@@ -507,8 +406,9 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
 
   Color _parseColor(String colorHex) {
     try {
-      return Color(int.parse(colorHex.substring(1, 7), radix: 16) + 0xFF000000);
-    } catch (e) {
+      final hex = colorHex.replaceAll('#', '');
+      return Color(int.parse('FF$hex', radix: 16));
+    } catch (_) {
       return Colors.blue;
     }
   }
@@ -537,17 +437,18 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             labelText: 'Frequency',
             border: OutlineInputBorder(),
           ),
-          items:
-              MedicationFrequency.values.map((frequency) {
-                return DropdownMenuItem<MedicationFrequency>(
-                  value: frequency,
-                  child: Text(_getFrequencyDisplayName(frequency)),
-                );
-              }).toList(),
+          items: MedicationFrequency.values.map((frequency) {
+            return DropdownMenuItem<MedicationFrequency>(
+              value: frequency,
+              child: Text(_getFrequencyDisplayName(frequency)),
+            );
+          }).toList(),
           onChanged: (value) {
-            setState(() {
-              _selectedFrequency = value!;
-            });
+            if (value != null) {
+              setState(() {
+                _selectedFrequency = value;
+              });
+            }
           },
         ),
       ],
@@ -555,8 +456,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   }
 
   Widget _buildDaysSection() {
-    if (_selectedFrequency != MedicationFrequency.weekly)
-      return const SizedBox();
+    if (_selectedFrequency != MedicationFrequency.weekly) return const SizedBox();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -570,17 +470,16 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children:
-              _dayOptions.map((day) {
-                final isSelected = _selectedDays.contains(day['index']);
-                return FilterChip(
-                  label: Text(day['short']),
-                  selected: isSelected,
-                  onSelected: (selected) => _toggleDay(day['index']),
-                  selectedColor: Colors.blue.withOpacity(0.2),
-                  checkmarkColor: Colors.blue,
-                );
-              }).toList(),
+          children: _dayOptions.map((day) {
+            final isSelected = _selectedDays.contains(day['index']);
+            return FilterChip(
+              label: Text(day['short']),
+              selected: isSelected,
+              onSelected: (selected) => _toggleDay(day['index']),
+              selectedColor: Colors.blue.withOpacity(0.2),
+              checkmarkColor: Colors.blue,
+            );
+          }).toList(),
         ),
       ],
     );
@@ -615,22 +514,20 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                _selectedTimes.map((time) {
-                  return Chip(
-                    label: Text(_formatTime(time)),
-                    onDeleted: () => _removeTime(time),
-                    deleteIconColor: Colors.red,
-                  );
-                }).toList(),
+            children: _selectedTimes.map((time) {
+              return Chip(
+                label: Text(_formatTime(time)),
+                onDeleted: () => _removeTime(time),
+                deleteIconColor: Colors.red,
+              );
+            }).toList(),
           ),
       ],
     );
   }
 
   Widget _buildCustomDatesSection() {
-    if (_selectedFrequency != MedicationFrequency.custom)
-      return const SizedBox();
+    if (_selectedFrequency != MedicationFrequency.custom) return const SizedBox();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,14 +557,13 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                _selectedCustomDates.map((date) {
-                  return Chip(
-                    label: Text(_formatDate(date)),
-                    onDeleted: () => _removeCustomDate(date),
-                    deleteIconColor: Colors.red,
-                  );
-                }).toList(),
+            children: _selectedCustomDates.map((date) {
+              return Chip(
+                label: Text(_formatDate(date)),
+                onDeleted: () => _removeCustomDate(date),
+                deleteIconColor: Colors.red,
+              );
+            }).toList(),
           ),
       ],
     );
@@ -727,17 +623,18 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             labelText: 'Remind Before',
             border: OutlineInputBorder(),
           ),
-          items:
-              [5, 10, 15, 30, 60].map((minutes) {
-                return DropdownMenuItem<int>(
-                  value: minutes,
-                  child: Text('$minutes minutes before'),
-                );
-              }).toList(),
+          items: [0, 5, 10, 15, 30, 60].map((minutes) {
+            return DropdownMenuItem<int>(
+              value: minutes,
+              child: Text(minutes == 0 ? 'At exact time' : '$minutes minutes before'),
+            );
+          }).toList(),
           onChanged: (value) {
-            setState(() {
-              _reminderMinutesBefore = value!;
-            });
+            if (value != null) {
+              setState(() {
+                _reminderMinutesBefore = value;
+              });
+            }
           },
         ),
       ],
@@ -745,7 +642,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   }
 
   String _formatTime(TimeOfDay time) {
-    final hour = time.hourOfPeriod;
+    final hour = time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod;
     final minute = time.minute.toString().padLeft(2, '0');
     final period = time.period == DayPeriod.am ? 'AM' : 'PM';
     return '$hour:$minute $period';
@@ -796,12 +693,19 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.existingMedication != null
-              ? 'Edit Medication'
-              : 'Add New Medication',
+          widget.existingMedication != null ? 'Edit Medication' : 'Add New Medication',
         ),
         actions: [
-          IconButton(onPressed: _saveMedication, icon: const Icon(Icons.save)),
+          IconButton(
+            onPressed: _isSaving ? null : _saveMedication,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save),
+          ),
         ],
       ),
       body: Padding(
@@ -810,7 +714,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           key: _formKey,
           child: ListView(
             children: [
-              // Medication Icon & Color Selection
+              // Appearance Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -827,7 +731,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                       const SizedBox(height: 16),
                       Row(
                         children: [
-                          // Icon Selection
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -853,7 +756,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                             ],
                           ),
                           const SizedBox(width: 20),
-                          // Color Selection
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -893,7 +795,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
               ),
               const SizedBox(height: 16),
 
-              // Medication Details
+              // Medication Details Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -908,8 +810,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // Medication Name
                       TextFormField(
                         controller: _nameController,
                         decoration: const InputDecoration(
@@ -925,8 +825,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                         },
                       ),
                       const SizedBox(height: 16),
-
-                      // Dosage and Unit
                       Row(
                         children: [
                           Expanded(
@@ -962,25 +860,24 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                                 labelText: 'Unit',
                                 border: OutlineInputBorder(),
                               ),
-                              items:
-                                  DosageUnit.values.map((unit) {
-                                    return DropdownMenuItem<DosageUnit>(
-                                      value: unit,
-                                      child: Text(_getUnitDisplayName(unit)),
-                                    );
-                                  }).toList(),
+                              items: DosageUnit.values.map((unit) {
+                                return DropdownMenuItem<DosageUnit>(
+                                  value: unit,
+                                  child: Text(_getUnitDisplayName(unit)),
+                                );
+                              }).toList(),
                               onChanged: (value) {
-                                setState(() {
-                                  _selectedUnit = value!;
-                                });
+                                if (value != null) {
+                                  setState(() {
+                                    _selectedUnit = value;
+                                  });
+                                }
                               },
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // Description
                       TextFormField(
                         controller: _descriptionController,
                         decoration: const InputDecoration(
@@ -988,15 +885,13 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                           border: OutlineInputBorder(),
                           alignLabelWithHint: true,
                         ),
-                        maxLines: 3,
+                        maxLines: 2,
                       ),
                       const SizedBox(height: 16),
-
-                      // Instructions
                       TextFormField(
                         controller: _instructionsController,
                         decoration: const InputDecoration(
-                          labelText: 'Instructions (Optional)',
+                          labelText: 'Instructions (e.g. Take with meals)',
                           border: OutlineInputBorder(),
                           alignLabelWithHint: true,
                         ),
@@ -1008,7 +903,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
               ),
               const SizedBox(height: 16),
 
-              // Scheduling Section
+              // Scheduling Section Card
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -1023,7 +918,6 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       _buildFrequencySection(),
                       _buildDaysSection(),
                       _buildTimesSection(),
@@ -1034,21 +928,21 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 24),
 
-              // Save Button
               ElevatedButton(
-                onPressed: _saveMedication,
+                onPressed: _isSaving ? null : _saveMedication,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
-                child: Text(
-                  widget.existingMedication != null
-                      ? 'Update Medication'
-                      : 'Save Medication',
-                  style: const TextStyle(fontSize: 16),
-                ),
+                child: _isSaving
+                    ? const CircularProgressIndicator()
+                    : Text(
+                        widget.existingMedication != null
+                            ? 'Update Medication'
+                            : 'Save Medication',
+                        style: const TextStyle(fontSize: 16),
+                      ),
               ),
             ],
           ),
