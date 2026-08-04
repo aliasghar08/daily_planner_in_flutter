@@ -29,14 +29,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
         _error = null;
       });
 
-      // ✅ Step 1: Use cached currentUser first (works offline)
+      // Step 1: Use cached currentUser first (works offline & across restarts)
       _user = FirebaseAuth.instance.currentUser;
-      debugPrint('🔐 Cached user: ${_user?.email ?? 'null'}');
+      debugPrint('🔐 Cached user session: ${_user?.email ?? 'No active session'}');
 
-      // ✅ Step 2: Listen for auth state changes in background
+      // Step 2: Listen for auth state changes in background
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
         if (mounted) {
-          debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'null'}');
+          debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'Signed out'}');
           setState(() {
             _user = newUser;
             _isLoading = false;
@@ -44,48 +44,37 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       });
 
-      // ✅ Step 3: If user exists, verify their data in Firestore
+      // Step 3: Ensure Firestore profile exists without logging out
       if (_user != null) {
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_user!.uid)
-              .get();
-
-          if (!doc.exists) {
-            // User data doesn't exist - force logout
-            debugPrint('⚠️ User data not found in Firestore, logging out');
-            await FirebaseAuth.instance.signOut();
-            if (mounted) {
-              setState(() {
-                _user = null;
-                _error = 'User data not found';
-              });
-            }
-          } else {
-            debugPrint('✅ User data verified in Firestore');
-          }
-        } catch (e) {
-          // Network error - keep user logged in if cached data exists
-          debugPrint('⚠️ Could not verify user data (network error): $e');
-        }
+        _syncUserDocument(_user!);
       }
-
-      // ✅ Step 4: Small delay to ensure everything is loaded
-      await Future.delayed(const Duration(milliseconds: 300));
-      
     } catch (e) {
       debugPrint('❌ Auth initialization error: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
-          _user = null;
         });
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _syncUserDocument(User user) async {
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        await docRef.set({
+          'fullName': user.displayName ?? (user.email?.split('@').first ?? 'User'),
+          'email': user.email ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint('⚠️ Firestore sync note: $e');
     }
   }
 
@@ -125,7 +114,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   color: Colors.red.shade400,
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Authentication Error',
                   style: TextStyle(
                     fontSize: 20,

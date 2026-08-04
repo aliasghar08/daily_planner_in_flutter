@@ -333,8 +333,9 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
                               showTitles: true,
                               getTitlesWidget: (value, meta) {
                                 final index = value.toInt();
-                                if (index < 0 || index > 6)
+                                if (index < 0 || index > 6) {
                                   return const SizedBox();
+                                }
                                 final date = DateTime.now().subtract(
                                   Duration(days: 6 - index),
                                 );

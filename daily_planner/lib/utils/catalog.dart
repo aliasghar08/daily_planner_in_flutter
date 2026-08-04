@@ -203,37 +203,26 @@ class DailyTask extends Task {
   final bool morning;
 
   DailyTask({
-    required String? docId,
-    required String title,
-    required String detail,
-    DateTime? date,
-    required bool isCompleted,
-    required DateTime createdAt,
-    DateTime? completedAt,
+    required super.docId,
+    required super.title,
+    required super.detail,
+    super.date,
+    required super.isCompleted,
+    required DateTime super.createdAt,
+    super.completedAt,
     this.morning = true,
-    List<DateTime>? completionStamps,
-    required List<DateTime> notificationTimes,
+    super.completionStamps,
+    required List<DateTime> super.notificationTimes,
 
     // New fields
     String? notificationRecurrence,
-    Map<String, int>? notificationRecurrenceTime,
-    Map<String, bool>? selectedDays,
+    super.notificationRecurrenceTime,
+    super.selectedDays,
   }) : super(
-         docId: docId,
-         title: title,
-         detail: detail,
-         date: date,
-         isCompleted: isCompleted,
-         createdAt: createdAt,
-         completedAt: completedAt,
          taskType: 'DailyTask',
-         notificationTimes: notificationTimes,
-         completionStamps: completionStamps,
 
          // ✅ FIXED: Use null-coalescing
          notificationRecurrence: notificationRecurrence ?? 'none',
-         notificationRecurrenceTime: notificationRecurrenceTime,
-         selectedDays: selectedDays,
        );
 
   @override
@@ -331,36 +320,25 @@ class DailyTask extends Task {
 
 class WeeklyTask extends Task {
   WeeklyTask({
-    required String? docId,
-    required String title,
-    required String detail,
-    DateTime? date,
-    required bool isCompleted,
-    required DateTime createdAt,
-    DateTime? completedAt,
-    List<DateTime>? completionStamps,
-    required List<DateTime> notificationTimes,
+    required super.docId,
+    required super.title,
+    required super.detail,
+    super.date,
+    required super.isCompleted,
+    required DateTime super.createdAt,
+    super.completedAt,
+    super.completionStamps,
+    required List<DateTime> super.notificationTimes,
 
     // New fields
     String? notificationRecurrence,
-    Map<String, int>? notificationRecurrenceTime,
-    Map<String, bool>? selectedDays,
+    super.notificationRecurrenceTime,
+    super.selectedDays,
   }) : super(
-         docId: docId,
-         title: title,
-         detail: detail,
-         date: date,
-         isCompleted: isCompleted,
-         createdAt: createdAt,
-         completedAt: completedAt,
          taskType: 'WeeklyTask',
-         notificationTimes: notificationTimes,
-         completionStamps: completionStamps,
 
          // ✅ FIXED: Use null-coalescing
          notificationRecurrence: notificationRecurrence ?? 'none',
-         notificationRecurrenceTime: notificationRecurrenceTime,
-         selectedDays: selectedDays,
        );
 
   @override
@@ -459,37 +437,26 @@ class MonthlyTask extends Task {
   final int dayOfMonth;
 
   MonthlyTask({
-    required String? docId,
-    required String title,
-    required String detail,
-    DateTime? date,
-    required bool isCompleted,
-    required DateTime createdAt,
-    DateTime? completedAt,
+    required super.docId,
+    required super.title,
+    required super.detail,
+    super.date,
+    required super.isCompleted,
+    required DateTime super.createdAt,
+    super.completedAt,
     required this.dayOfMonth,
-    List<DateTime>? completionStamps,
-    required List<DateTime> notificationTimes,
+    super.completionStamps,
+    required List<DateTime> super.notificationTimes,
 
     // New fields
     String? notificationRecurrence,
-    Map<String, int>? notificationRecurrenceTime,
-    Map<String, bool>? selectedDays,
+    super.notificationRecurrenceTime,
+    super.selectedDays,
   }) : super(
-         docId: docId,
-         title: title,
-         detail: detail,
-         date: date,
-         isCompleted: isCompleted,
-         createdAt: createdAt,
-         completedAt: completedAt,
          taskType: 'MonthlyTask',
-         notificationTimes: notificationTimes,
-         completionStamps: completionStamps,
 
          // ✅ FIXED: Use null-coalescing
          notificationRecurrence: notificationRecurrence ?? 'none',
-         notificationRecurrenceTime: notificationRecurrenceTime,
-         selectedDays: selectedDays,
        );
 
   @override

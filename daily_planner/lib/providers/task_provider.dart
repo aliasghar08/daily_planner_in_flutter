@@ -15,14 +15,36 @@ class TaskProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
 
+  // Analytics & Dashboard Summary Getters
+  int get totalTasksCount => _displayTasks.length;
+  
+  int get completedTasksCount =>
+      _displayTasks.where((t) => getEffectiveCompletionStatus(t)).length;
+
+  int get incompleteTasksCount =>
+      _displayTasks.where((t) => !getEffectiveCompletionStatus(t) && !isTaskOverdue(t)).length;
+
+  int get overdueTasksCount =>
+      _displayTasks.where((t) => !getEffectiveCompletionStatus(t) && isTaskOverdue(t)).length;
+
+  double get completionRate {
+    if (_displayTasks.isEmpty) return 0.0;
+    return (completedTasksCount / _displayTasks.length).clamp(0.0, 1.0);
+  }
+
   void setSearchQuery(String query) {
-    _searchQuery = query.trim().toLowerCase();
-    notifyListeners();
+    final trimmed = query.trim().toLowerCase();
+    if (_searchQuery != trimmed) {
+      _searchQuery = trimmed;
+      notifyListeners();
+    }
   }
 
   void clearSearch() {
-    _searchQuery = "";
-    notifyListeners();
+    if (_searchQuery.isNotEmpty) {
+      _searchQuery = "";
+      notifyListeners();
+    }
   }
 
   // Helper to get start of week (Monday)
@@ -36,6 +58,10 @@ class TaskProvider extends ChangeNotifier {
   Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks, User user) async {
     final List<Task> updatedTasks = [];
     final List<Task> tasksToReset = [];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = _getWeekStart(now);
+    final currentMonth = DateTime(now.year, now.month);
 
     for (var task in fetchedTasks) {
       Task updatedTask = Task(
@@ -57,13 +83,11 @@ class TaskProvider extends ChangeNotifier {
 
       // For recurring tasks that are marked as completed
       if (task.isCompleted && task.completedAt != null) {
-        final now = DateTime.now();
         final completedDate = task.completedAt!;
         bool needsReset = false;
 
         switch (task.taskType) {
           case 'DailyTask':
-            final today = DateTime(now.year, now.month, now.day);
             final completedDay = DateTime(
               completedDate.year,
               completedDate.month,
@@ -73,13 +97,11 @@ class TaskProvider extends ChangeNotifier {
             break;
 
           case 'WeeklyTask':
-            final currentWeekStart = _getWeekStart(now);
             final completedWeekStart = _getWeekStart(completedDate);
             needsReset = completedWeekStart.isBefore(currentWeekStart);
             break;
 
           case 'MonthlyTask':
-            final currentMonth = DateTime(now.year, now.month);
             final completedMonth = DateTime(completedDate.year, completedDate.month);
             needsReset = completedMonth.isBefore(currentMonth);
             break;
@@ -97,9 +119,9 @@ class TaskProvider extends ChangeNotifier {
       updatedTasks.add(updatedTask);
     }
 
-    // Update Firestore for tasks that need reset
+    // Update Firestore for tasks that need reset in background
     if (tasksToReset.isNotEmpty) {
-      await _resetTasksInFirestore(tasksToReset, user);
+      _resetTasksInFirestore(tasksToReset, user);
     }
 
     return updatedTasks;
@@ -137,11 +159,7 @@ class TaskProvider extends ChangeNotifier {
       return task.isCompleted;
     }
 
-    if (!task.isCompleted) {
-      return false;
-    }
-
-    if (task.completedAt == null) {
+    if (!task.isCompleted || task.completedAt == null) {
       return false;
     }
 
@@ -150,23 +168,20 @@ class TaskProvider extends ChangeNotifier {
 
     switch (task.taskType) {
       case 'DailyTask':
-        final today = DateTime(now.year, now.month, now.day);
-        final completedDay = DateTime(
-          completedDate.year,
-          completedDate.month,
-          completedDate.day,
-        );
-        return completedDay.isAtSameMomentAs(today);
+        return completedDate.year == now.year &&
+            completedDate.month == now.month &&
+            completedDate.day == now.day;
 
       case 'WeeklyTask':
         final currentWeekStart = _getWeekStart(now);
         final completedWeekStart = _getWeekStart(completedDate);
-        return completedWeekStart.isAtSameMomentAs(currentWeekStart);
+        return completedWeekStart.year == currentWeekStart.year &&
+            completedWeekStart.month == currentWeekStart.month &&
+            completedWeekStart.day == currentWeekStart.day;
 
       case 'MonthlyTask':
-        final currentMonth = DateTime(now.year, now.month);
-        final completedMonth = DateTime(completedDate.year, completedDate.month);
-        return completedMonth.isAtSameMomentAs(currentMonth);
+        return completedDate.year == now.year &&
+            completedDate.month == now.month;
 
       default:
         return task.isCompleted;
@@ -174,17 +189,9 @@ class TaskProvider extends ChangeNotifier {
   }
 
   bool isTaskOverdue(Task task) {
-    final taskToCheck = _displayTasks.firstWhere(
-      (t) => t.docId == task.docId,
-      orElse: () => task,
-    );
-
-    if (getEffectiveCompletionStatus(taskToCheck)) return false;
-
+    if (getEffectiveCompletionStatus(task)) return false;
     if (task.date == null) return false;
-
-    final now = DateTime.now();
-    return task.date!.isBefore(now);
+    return task.date!.isBefore(DateTime.now());
   }
 
   List<Task> getFilteredTasks(TaskFilter filter) {
@@ -198,9 +205,11 @@ class TaskProvider extends ChangeNotifier {
         TaskFilter.all => true,
       };
 
-      final matchesSearch = task.title.toLowerCase().contains(_searchQuery);
+      if (!matchesFilter) return false;
 
-      return matchesFilter && matchesSearch;
+      if (_searchQuery.isEmpty) return true;
+      return task.title.toLowerCase().contains(_searchQuery) ||
+          task.detail.toLowerCase().contains(_searchQuery);
     }).toList();
   }
 
@@ -210,10 +219,10 @@ class TaskProvider extends ChangeNotifier {
 
   Color getFilterColor(TaskFilter filter) {
     return switch (filter) {
-      TaskFilter.all => Colors.blue,
-      TaskFilter.completed => Colors.green,
-      TaskFilter.incomplete => Colors.orange,
-      TaskFilter.overdue => Colors.red,
+      TaskFilter.all => const Color(0xFF2563EB),
+      TaskFilter.completed => const Color(0xFF10B981),
+      TaskFilter.incomplete => const Color(0xFFF59E0B),
+      TaskFilter.overdue => const Color(0xFFEF4444),
     };
   }
 
@@ -221,10 +230,8 @@ class TaskProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    List<Task> allTasks = [];
-
     try {
-      // Try cache first
+      // 1. Try cache first for immediate UI response
       final cachedSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -232,25 +239,23 @@ class TaskProvider extends ChangeNotifier {
           .orderBy('createdAt', descending: true)
           .get(const GetOptions(source: Source.cache));
 
-      allTasks = cachedSnapshot.docs
-          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-          .toList();
+      if (cachedSnapshot.docs.isNotEmpty) {
+        final cachedTasks = cachedSnapshot.docs
+            .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+            .toList();
 
-      debugPrint("✅ Loaded ${allTasks.length} tasks from cache");
-
-      // Update completion status and get display tasks
-      final updatedTasks = await _updateTasksCompletionStatus(allTasks, user);
-
-      _tasks = allTasks;
-      _displayTasks = updatedTasks;
-      _isLoading = false;
-      notifyListeners();
+        final updatedCached = await _updateTasksCompletionStatus(cachedTasks, user);
+        _tasks = cachedTasks;
+        _displayTasks = updatedCached;
+        _isLoading = false;
+        notifyListeners();
+      }
     } catch (e) {
-      debugPrint("Error loading cached tasks: $e");
+      debugPrint("Cache fetch note: $e");
     }
 
     try {
-      // Then try server
+      // 2. Fetch fresh server data
       final serverSnapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -262,22 +267,26 @@ class TaskProvider extends ChangeNotifier {
           .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
           .toList();
 
-      debugPrint("✅ Loaded ${serverTasks.length} tasks from server");
-
-      // Update completion status and get display tasks
-      final updatedTasks = await _updateTasksCompletionStatus(serverTasks, user);
-
+      final updatedServer = await _updateTasksCompletionStatus(serverTasks, user);
       _tasks = serverTasks;
-      _displayTasks = updatedTasks;
+      _displayTasks = updatedServer;
+    } catch (e) {
+      debugPrint("Server fetch note: $e");
+    } finally {
       _isLoading = false;
       notifyListeners();
-    } catch (e) {
-      debugPrint("Server fetch failed (offline?): $e");
+    }
+  }
 
-      if (_isLoading) {
-        _isLoading = false;
-        notifyListeners();
-      }
+  // Optimistic UI state updater
+  void updateTaskOptimistically(String docId, bool isCompleted, DateTime? completedAt) {
+    final index = _displayTasks.indexWhere((t) => t.docId == docId);
+    if (index != -1) {
+      _displayTasks[index] = _displayTasks[index].copyWith(
+        isCompleted: isCompleted,
+        completedAt: completedAt,
+      );
+      notifyListeners();
     }
   }
 

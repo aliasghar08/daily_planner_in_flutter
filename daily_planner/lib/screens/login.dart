@@ -2,8 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/signup.dart';
+import 'package:daily_planner/utils/passkey_auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,13 +22,107 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
+  bool _isPasskeyAvailable = false;
+  bool _isPasskeyLoading = false;
 
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  final PasskeyAuthService _passkeyAuthService = PasskeyAuthService();
 
   @override
   void initState() {
     super.initState();
     _loadRememberMePreference();
+    _checkPasskeyAvailability();
+  }
+
+  // ✅ Check if Passkeys/Biometrics are supported and enabled
+  Future<void> _checkPasskeyAvailability() async {
+    try {
+      final isSupported = await _passkeyAuthService.isDeviceSupported();
+      final hasCreds = (await _passkeyAuthService.getSavedPasskeyCredential()) != null;
+      final isEnabled = await _passkeyAuthService.isPasskeyEnabled();
+      if (mounted) {
+        setState(() {
+          _isPasskeyAvailable = isSupported && (hasCreds || isEnabled);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking passkey availability: $e');
+    }
+  }
+
+  // ✅ Sign in with Passkey / Biometrics
+  Future<void> signInWithPasskey() async {
+    setState(() => _isPasskeyLoading = true);
+    try {
+      final authenticated = await _passkeyAuthService.verifyWithPasskey(
+        reason: 'Verify with Passkey to sign in to Daily Planner',
+      );
+
+      if (!authenticated) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Passkey verification cancelled or not recognized.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final savedCreds = await _passkeyAuthService.getSavedPasskeyCredential();
+      if (savedCreds != null) {
+        final email = savedCreds['email']!;
+        final password = savedCreds['password']!;
+
+        final userCredential = await FirebaseAuth.instance
+            .signInWithEmailAndPassword(email: email, password: password);
+
+        TextInput.finishAutofillContext(shouldSave: true);
+
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+
+        String fullName = userDoc.data()?['fullName'] ?? 'User';
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Welcome back, $fullName! (Verified with Passkey)')),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MyHome()),
+          );
+        }
+      } else if (FirebaseAuth.instance.currentUser != null) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const MyHome()),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please sign in with email and password once to register your Passkey.'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Passkey login error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPasskeyLoading = false);
+    }
   }
 
   // ✅ Load saved "Remember Me" preference
@@ -75,11 +171,23 @@ class _LoginPageState extends State<LoginPage> {
     );
 
     try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
       final userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
+            email: email,
+            password: password,
           );
+
+      // ✅ Trigger Google Password Manager and Apple Passwords save dialog
+      TextInput.finishAutofillContext(shouldSave: true);
+
+      // ✅ Store passkey credential for future one-tap passkey login
+      await _passkeyAuthService.savePasskeyCredential(
+        email: email,
+        password: password,
+      );
 
       final userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -96,10 +204,12 @@ class _LoginPageState extends State<LoginPage> {
         context,
       ).showSnackBar(SnackBar(content: Text('Welcome, $fullName!')));
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MyHome()),
-      );
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MyHome()),
+        );
+      }
     } on FirebaseAuthException catch (e) {
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
@@ -132,10 +242,8 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await _googleSignIn.initialize();
 
-      final GoogleSignInAccount? googleUser = await _googleSignIn.authenticate();
-      if (googleUser == null) return;
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
@@ -189,169 +297,214 @@ class _LoginPageState extends State<LoginPage> {
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                const Icon(
-                  Icons.lock_outline,
-                  size: 100,
-                  color: Colors.blueAccent,
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Welcome Back!',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 30),
-
-                TextFormField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+          child: AutofillGroup(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.lock_outline,
+                    size: 90,
+                    color: Colors.blueAccent,
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) =>
-                      value != null && value.contains('@') && value.endsWith('.com')
-                          ? null
-                          : 'Enter a valid email (e.g., example@domain.com)',
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: !_isPasswordVisible,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordVisible = !_isPasswordVisible;
-                        });
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Welcome Back!',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
-                  validator: (value) =>
-                      value != null && value.length >= 6
-                          ? null
-                          : 'Password must be at least 6 characters long',
-                ),
-                
-                // ✅ Remember Me Checkbox
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _rememberMe,
-                      onChanged: (value) {
-                        setState(() {
-                          _rememberMe = value ?? false;
-                        });
-                      },
-                      activeColor: Colors.blueAccent,
-                    ),
-                    const Text(
-                      'Remember Me',
-                      style: TextStyle(fontSize: 14),
-                    ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ForgotPasswordScreen(),
-                          ),
-                        );
-                      },
-                      child: const Text("Forgot Password?"),
-                    ),
-                  ],
-                ),
+                  const SizedBox(height: 24),
 
-                const SizedBox(height: 8),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      backgroundColor: Colors.blueAccent,
-                      foregroundColor: Colors.white,
                     ),
-                    onPressed: () async {
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [
+                      AutofillHints.email,
+                      AutofillHints.username,
+                    ],
+                    textInputAction: TextInputAction.next,
+                    validator: (value) =>
+                        value != null && value.contains('@') && value.endsWith('.com')
+                            ? null
+                            : 'Enter a valid email (e.g., example@domain.com)',
+                  ),
+                  const SizedBox(height: 16),
+
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: !_isPasswordVisible,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isPasswordVisible = !_isPasswordVisible;
+                          });
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    autofillHints: const [AutofillHints.password],
+                    textInputAction: TextInputAction.done,
+                    onFieldSubmitted: (_) async {
                       FocusScope.of(context).unfocus();
                       await loginUser();
                     },
-                    child: const Text('Login', style: TextStyle(fontSize: 16)),
+                    validator: (value) =>
+                        value != null && value.length >= 6
+                            ? null
+                            : 'Password must be at least 6 characters long',
                   ),
-                ),
+                  
+                  // ✅ Remember Me Checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        onChanged: (value) {
+                          setState(() {
+                            _rememberMe = value ?? false;
+                          });
+                        },
+                        activeColor: Colors.blueAccent,
+                      ),
+                      const Text(
+                        'Remember Me',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ForgotPasswordScreen(),
+                            ),
+                          );
+                        },
+                        child: const Text("Forgot Password?"),
+                      ),
+                    ],
+                  ),
 
-                const SizedBox(height: 12),
+                  const SizedBox(height: 8),
 
-                Center(
-                  child: SizedBox(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        side: const BorderSide(color: Colors.grey),
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
                       ),
                       onPressed: () async {
-                        await signInWithGoogle();
+                        FocusScope.of(context).unfocus();
+                        await loginUser();
                       },
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset('assets/google.png', height: 24),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Continue with Google',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
+                      child: const Text('Login', style: TextStyle(fontSize: 16)),
+                    ),
+                  ),
+
+                  if (_isPasskeyAvailable) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: _isPasskeyLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.fingerprint, size: 22),
+                        label: const Text(
+                          'Sign in with Passkey / Biometrics',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: Colors.indigo.shade600,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                        ],
+                        ),
+                        onPressed: _isPasskeyLoading ? null : signInWithPasskey,
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 12),
+
+                  Center(
+                    child: SizedBox(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          side: const BorderSide(color: Colors.grey),
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () async {
+                          await signInWithGoogle();
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.asset('assets/google.png', height: 24),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Don't have an account?"),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SignupPage(),
-                          ),
-                        );
-                      },
-                      child: const Text("Sign Up"),
-                    ),
-                  ],
-                ),
-              ],
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text("Don't have an account?"),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SignupPage(),
+                            ),
+                          );
+                        },
+                        child: const Text("Sign Up"),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

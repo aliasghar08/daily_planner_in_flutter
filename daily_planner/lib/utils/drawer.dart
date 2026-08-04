@@ -2,6 +2,7 @@ import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
 import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/medication_list_page.dart';
 import 'package:daily_planner/screens/settings.dart';
+import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
 import 'package:daily_planner/utils/performance_page/total_tasks.dart';
 import 'package:flutter/material.dart';
@@ -15,19 +16,27 @@ class MyDrawer extends StatefulWidget {
 }
 
 class _MyDrawerState extends State<MyDrawer> {
-  bool _isinsightsexpanded = false;
+  bool _isInsightsExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<app_auth.AuthProvider>();
     final user = authProvider.user;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final displayName = user?.displayName?.isNotEmpty == true
+        ? user!.displayName!
+        : (user?.email?.split('@').first ?? 'User');
+    final initials = displayName.isNotEmpty
+        ? displayName.substring(0, 1).toUpperCase()
+        : 'U';
 
     return Drawer(
-      width: MediaQuery.of(context).size.width * 0.8,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
       child: SafeArea(
         child: Column(
           children: [
-            // Header Section
+            // Profile Header
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
@@ -35,96 +44,109 @@ class _MyDrawerState extends State<MyDrawer> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Colors.blueAccent.shade700,
-                    Colors.blueAccent.shade400,
-                  ],
+                  colors: isDark
+                      ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                      : [const Color(0xFF2563EB), const Color(0xFF1D4ED8)],
                 ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white.withOpacity(0.9),
-                    child: Icon(
-                      Icons.person,
-                      size: 35,
-                      color: Colors.blueAccent.shade700,
+                    radius: 28,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      initials,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2563EB),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 14),
                   Text(
-                    user?.displayName ?? 'Guest User',
+                    displayName,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     user?.email ?? 'Not signed in',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 14,
+                      color: Colors.white.withValues(alpha: 0.8),
+                      fontSize: 13,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
 
-            // Navigation Items
+            // Drawer Items List
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                 children: [
-                  _buildDrawerItem(
-                    icon: Icons.home_outlined,
-                    activeIcon: Icons.home_rounded,
-                    title: 'Home',
+                  _buildDrawerTile(
+                    icon: Icons.home_rounded,
+                    title: 'My Tasks',
+                    color: const Color(0xFF2563EB),
                     onTap: () => Navigator.pop(context),
                   ),
-
-                  _buildDrawerItem(
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings_rounded,
-                    title: 'Settings',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => SettingsPage()),
-                      );
-                    },
-                  ),
-
-                  _buildDrawerItem(
-                    icon: Icons.medication_outlined,
-                    activeIcon: Icons.medication_rounded,
+                  _buildDrawerTile(
+                    icon: Icons.medication_rounded,
                     title: 'Medications',
+                    color: const Color(0xFF10B981),
                     onTap: () {
+                      Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (context) => const MedicationListPage(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const MedicationListPage()),
                       );
                     },
                   ),
+                  _buildDrawerTile(
+                    icon: Icons.settings_rounded,
+                    title: 'Settings',
+                    color: const Color(0xFF6366F1),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SettingsPage()),
+                      );
+                    },
+                  ),
+                  _buildDrawerTile(
+                    icon: Icons.battery_charging_full_rounded,
+                    title: 'Alarm Reliability & OEM Guide',
+                    color: const Color(0xFFF59E0B),
+                    onTap: () {
+                      Navigator.pop(context);
+                      NativeAlarmHelper.showOemOptimizationGuide(context);
+                    },
+                  ),
 
-                  // Insights Section
-                  _buildExpandableInsightsSection(),
+                  const SizedBox(height: 4),
+
+                  // Expandable Analytics/Insights
+                  _buildInsightsSection(isDark),
 
                   const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Divider(height: 1),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Divider(),
                   ),
 
-                  _buildDrawerItem(
-                    icon: Icons.logout_outlined,
-                    title: 'Logout',
+                  _buildDrawerTile(
+                    icon: Icons.logout_rounded,
+                    title: 'Sign Out',
+                    color: const Color(0xFFEF4444),
                     onTap: _handleLogout,
-                    color: Colors.redAccent,
                   ),
                 ],
               ),
@@ -135,140 +157,115 @@ class _MyDrawerState extends State<MyDrawer> {
     );
   }
 
-  Widget _buildDrawerItem({
+  Widget _buildDrawerTile({
     required IconData icon,
-    IconData? activeIcon,
     required String title,
+    required Color color,
     required VoidCallback onTap,
-    Color? color,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Container(
-          width: 40,
-          height: 40,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
-            color: (color ?? Colors.blueAccent).withOpacity(0.1),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(icon, color: color ?? Colors.blueAccent, size: 22),
+          child: Icon(icon, color: color, size: 20),
         ),
         title: Text(
           title,
           style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            color: color ?? Colors.grey.shade800,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
           ),
         ),
-        trailing: color == null ? null : const SizedBox.shrink(),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        trailing: Icon(
+          Icons.chevron_right,
+          size: 18,
+          color: isDark ? Colors.grey.shade600 : Colors.grey.shade400,
+        ),
         onTap: onTap,
       ),
     );
   }
 
-  Widget _buildExpandableInsightsSection() {
+  Widget _buildInsightsSection(bool isDark) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: Column(
         children: [
           ListTile(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             leading: Container(
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
-                color: Colors.purpleAccent.withOpacity(0.1),
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                Icons.insights_outlined,
-                color: Colors.purpleAccent,
-                size: 22,
+              child: const Icon(Icons.insights_rounded, color: Color(0xFF8B5CF6), size: 20),
+            ),
+            title: Text(
+              "Analytics & Stats",
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
             ),
-            title: const Text(
-              "Insights",
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
             trailing: Icon(
-              _isinsightsexpanded
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              color: Colors.grey.shade600,
-            ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              _isInsightsExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 20,
+              color: isDark ? Colors.grey.shade500 : Colors.grey.shade400,
             ),
             onTap: () {
               setState(() {
-                _isinsightsexpanded = !_isinsightsexpanded;
+                _isInsightsExpanded = !_isInsightsExpanded;
               });
             },
           ),
-
-          AnimatedSize(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            child: Visibility(
-              visible: _isinsightsexpanded,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 16, right: 8),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 4),
-                    _buildSubMenuItem(
-                      title: "Daily Tasks Stats",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const DailyTasksStats(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildSubMenuItem(
-                      title: "Total Tasks Stats",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => TotalTasks()),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
+          if (_isInsightsExpanded)
+            Padding(
+              padding: const EdgeInsets.only(left: 48, right: 8, top: 2),
+              child: Column(
+                children: [
+                  ListTile(
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    title: const Text("Daily Tasks Stats", style: TextStyle(fontSize: 13)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const DailyTasksStats()),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    dense: true,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    title: const Text("Total Tasks History", style: TextStyle(fontSize: 13)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => TotalTasks()),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
-          ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSubMenuItem({
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 2),
-      child: ListTile(
-        leading: const SizedBox(
-          width: 32,
-          child: Icon(Icons.circle, size: 6, color: Colors.grey),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-        ),
-        minLeadingWidth: 20,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        onTap: onTap,
       ),
     );
   }
@@ -276,45 +273,32 @@ class _MyDrawerState extends State<MyDrawer> {
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text(
-              "Log out Confirmation",
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            content: const Text("Are you sure you want to log out?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                ),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text("Logout"),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text("Log Out Confirmation"),
+        content: const Text("Are you sure you want to sign out of your account?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Cancel"),
           ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Sign Out"),
+          ),
+        ],
+      ),
     );
 
-    if (shouldLogout == true) {
+    if (shouldLogout == true && mounted) {
       await context.read<app_auth.AuthProvider>().signOut();
-      Navigator.pop(context); // Close the drawer
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Logged out successfully"),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => LoginPage()),
-      );
+      if (mounted) {
+        Navigator.pop(context); // Close the drawer
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+        );
+      }
     }
   }
 }

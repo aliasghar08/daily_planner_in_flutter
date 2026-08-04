@@ -1,312 +1,387 @@
 package com.example.daily_planner
 
 import android.app.AlarmManager
-import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
-import androidx.core.content.ContextCompat  // For ContextCompat.getSystemService
-import io.flutter.embedding.android.FlutterActivity
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
-    private val CHANNEL = "exact_alarm_permission"
-    private val ALARM_SERVICE_CHANNEL = "daily_planner/alarm_service"
+    companion object {
+        private const val TAG = "MainActivity"
+        const val CHANNEL_EXACT_ALARM = "exact_alarm_permission"
+        const val CHANNEL_MAIN_ALARM = "com.example.daily_planner/alarm"
+        const val CHANNEL_SERVICE = "daily_planner/alarm_service"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AlarmReceiver.createNotificationChannel(this)
 
-        // Start foreground service when app launches
-        AlarmForegroundService.start(this)
+        // Reschedule/validate alarms on startup
+        AlarmScheduler.rescheduleAllAlarms(this)
+
+        // Start foreground service if helpful
+        try {
+            AlarmForegroundService.start(this)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not start foreground service on create: ${e.message}")
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         AlarmReceiver.createNotificationChannel(this)
 
-        // Channel 1
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-            .setMethodCallHandler { call, result ->
-                try {
-                    when (call.method) {
-                        "scheduleNativeAlarm" -> {
-                            val id = call.argument<Int>("id") ?: 0
-                            val title = call.argument<String>("title") ?: "No Title"
-                            val body = call.argument<String>("body") ?: "No Body"
-                            val time = call.argument<Long>("time") ?: 0L
-
-                            scheduleAlarm(id, title, body, time)
-                            AlarmForegroundService.start(this)
-                            result.success(null)
-                        }
-
-                        "requestExactAlarmPermission" -> {
-                            requestExactAlarmPermission(this)
-                            result.success(null)
-                        }
-
-                        "checkExactAlarmPermission" -> {
-                            result.success(canScheduleExactAlarms())
-                        }
-
-                        "disableBatteryOptimization" -> {
-                            promptDisableBatteryOptimization()
-                            result.success(null)
-                        }
-
-                        "ensureNotificationChannel" -> {
-                            AlarmReceiver.createNotificationChannel(this)
-                            result.success(null)
-                        }
-
-                        "showAlarmNotification" -> {
-                            val id = call.argument<Int>("id") ?: 0
-                            val title = call.argument<String>("title") ?: "No Title"
-                            val body = call.argument<String>("body") ?: "No Body"
-
-                            val intent = Intent(this, AlarmReceiver::class.java).apply {
-                                putExtra(AlarmReceiver.EXTRA_ID, id)
-                                putExtra(AlarmReceiver.EXTRA_TITLE, title)
-                                putExtra(AlarmReceiver.EXTRA_BODY, body)
-                            }
-                            sendBroadcast(intent)
-                            result.success(null)
-                        }
-
-                        else -> result.notImplemented()
-                    }
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Method call failed: ${call.method}", e)
-                    result.error("ERROR", "Method failed", e.message)
-                }
-            }
-
-        // Channel 2
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_SERVICE_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                try {
-                    when (call.method) {
-                        "startForegroundService" -> {
-                            AlarmForegroundService.start(this)
-                            Log.d("ServiceControl", "Foreground service started")
-                            result.success(true)
-                        }
-
-                        "stopForegroundService" -> {
-                            AlarmForegroundService.stop(this)
-                            Log.d("ServiceControl", "Foreground service stopped")
-                            result.success(true)
-                        }
-
-                        "openAutoStartSettings" -> {
-                            openAutoStartSettings()
-                            result.success(true)
-                        }
-
-                        "isServiceRunning" -> {
-                            result.success(true)
-                        }
-
-                        else -> result.notImplemented()
-                    }
-                } catch (e: Exception) {
-                    Log.e("ServiceControl", "Service control failed: ${call.method}", e)
-                    result.error("SERVICE_ERROR", "Service control failed", e.message)
-                }
-            }
-    }
-
-    private fun scheduleAlarm(id: Int, title: String, body: String, time: Long) {
-        AlarmReceiver.createNotificationChannel(this)
-
-        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val intent = Intent(this, AlarmReceiver::class.java).apply {
-            putExtra(AlarmReceiver.EXTRA_TITLE, title)
-            putExtra(AlarmReceiver.EXTRA_BODY, body)
-            putExtra(AlarmReceiver.EXTRA_ID, id)
+        val handler = MethodChannel.MethodCallHandler { call, result ->
+            handleMethodCall(call, result)
         }
 
-        val pendingIntent = PendingIntent.getBroadcast(
-            this, id, intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    time,
-                    pendingIntent
-                )
-                Log.d("AlarmSchedule", "Alarm scheduled ID: $id at $time")
-            } else {
-                Log.w("AlarmWarning", "Exact alarm permission missing, trying anyway")
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    time,
-                    pendingIntent
-                )
-            }
-        } else {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                time,
-                pendingIntent
-            )
-        }
+        // Register handlers for all channel names used in Dart code
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_EXACT_ALARM).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_MAIN_ALARM).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SERVICE).setMethodCallHandler(handler)
     }
 
-    private fun openAutoStartSettings() {
-        val manufacturer = Build.MANUFACTURER.lowercase()
-        val intent = Intent()
-        
+    private fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
         try {
-            when {
-                manufacturer.contains("xiaomi") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.miui.securitycenter",
-                        "com.miui.permcenter.autostart.AutoStartManagementActivity"
-                    )
-                }
-                manufacturer.contains("oppo") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.coloros.safecenter",
-                        "com.coloros.safecenter.permission.startup.StartupAppListActivity"
-                    )
-                }
-                manufacturer.contains("vivo") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.vivo.permissionmanager",
-                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"
-                    )
-                }
-                manufacturer.contains("huawei") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.huawei.systemmanager",
-                        "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
-                    )
-                }
-                manufacturer.contains("samsung") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.samsung.android.lool",
-                        "com.samsung.android.sm.ui.battery.BatteryActivity"
-                    )
-                }
-                manufacturer.contains("oneplus") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.oneplus.security",
-                        "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity"
-                    )
-                }
-                manufacturer.contains("infinix") -> {
-                    intent.component = android.content.ComponentName(
-                        "com.transsion.phonemanager",
-                        "com.transsion.phonemanager.activity.StartupAppListActivity"
-                    )
-                }
-                else -> {
-                    // Fallback to generic settings
-                    intent.action = Settings.ACTION_SETTINGS
-                }
-            }
-            
-            if (intent.component != null) {
-                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                 startActivity(intent)
-                 Log.d("AutoStart", "Opened AutoStart settings for $manufacturer")
-            } else {
-                 // Try generic fallback if no component matched but we want to do something
-                 val genericIntent = Intent(Settings.ACTION_SETTINGS).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                 }
-                 startActivity(genericIntent)
-                 Log.d("AutoStart", "Opened generic settings for $manufacturer")
-            }
+            when (call.method) {
+                "scheduleNativeAlarm", "scheduleAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    val title = call.argument<String>("title") ?: "Daily Planner"
+                    val body = call.argument<String>("body") ?: "You have a scheduled reminder"
+                    val time = call.argument<Long>("time")
+                        ?: call.argument<Long>("timeInMillis")
+                        ?: 0L
+                    val payload = call.argument<String>("payload")
 
+                    if (id <= 0 || time <= 0L) {
+                        result.error("INVALID_ARGS", "Valid id and time are required", null)
+                        return
+                    }
+
+                    val success = AlarmScheduler.scheduleAlarm(
+                        context = this,
+                        id = id,
+                        timeInMillis = time,
+                        title = title,
+                        body = body,
+                        payload = payload,
+                        saveToStorage = true
+                    )
+                    result.success(success)
+                }
+
+                "cancelAlarm", "cancelNativeAlarm" -> {
+                    val id = call.argument<Int>("id") ?: 0
+                    val success = if (id > 0) {
+                        AlarmScheduler.cancelAlarm(this, id)
+                    } else {
+                        false
+                    }
+                    result.success(success)
+                }
+
+                "cancelAllAlarms" -> {
+                    val success = AlarmScheduler.cancelAllAlarms(this)
+                    result.success(success)
+                }
+
+                "getScheduledAlarms" -> {
+                    val alarms = AlarmStorage.getAllAlarms(this).map {
+                        mapOf(
+                            "id" to it.id,
+                            "title" to it.title,
+                            "body" to it.body,
+                            "timeInMillis" to it.timeInMillis,
+                            "payload" to (it.payload ?: ""),
+                            "createdAt" to it.createdAt
+                        )
+                    }
+                    result.success(alarms)
+                }
+
+                "checkExactAlarmPermission" -> {
+                    result.success(canScheduleExactAlarms())
+                }
+
+                "requestExactAlarmPermission", "openExactAlarmSettings" -> {
+                    requestExactAlarmPermission(this)
+                    result.success(true)
+                }
+
+                "isIgnoringBatteryOptimizations" -> {
+                    result.success(isIgnoringBatteryOptimizations())
+                }
+
+                "disableBatteryOptimization" -> {
+                    promptDisableBatteryOptimization()
+                    result.success(true)
+                }
+
+                "openAutoStartSettings" -> {
+                    val opened = openAutoStartSettings()
+                    result.success(opened)
+                }
+
+                "getDeviceBrandInfo" -> {
+                    val brandInfo = mapOf(
+                        "manufacturer" to Build.MANUFACTURER.lowercase(),
+                        "brand" to Build.BRAND.lowercase(),
+                        "model" to Build.MODEL,
+                        "sdkVersion" to Build.VERSION.SDK_INT,
+                        "isIgnoringBatteryOptimizations" to isIgnoringBatteryOptimizations(),
+                        "canScheduleExactAlarms" to canScheduleExactAlarms()
+                    )
+                    result.success(brandInfo)
+                }
+
+                "ensureNotificationChannel" -> {
+                    AlarmReceiver.createNotificationChannel(this)
+                    result.success(true)
+                }
+
+                "startForegroundService" -> {
+                    AlarmForegroundService.start(this)
+                    result.success(true)
+                }
+
+                "stopForegroundService" -> {
+                    AlarmForegroundService.stop(this)
+                    result.success(true)
+                }
+
+                "isServiceRunning" -> {
+                    result.success(true)
+                }
+
+                "getAndroidSdkVersion" -> {
+                    result.success(Build.VERSION.SDK_INT)
+                }
+
+                "openAppSettings" -> {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:$packageName")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    startActivity(intent)
+                    result.success(true)
+                }
+
+                else -> result.notImplemented()
+            }
         } catch (e: Exception) {
-            Log.e("AutoStart", "Specific screen not found, opening generic settings", e)
+            Log.e(TAG, "Method call failed: ${call.method}", e)
+            result.error("ERROR", "Method execution failed: ${e.message}", null)
+        }
+    }
+
+    private fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = ContextCompat.getSystemService(this, AlarmManager::class.java)
+            alarmManager?.canScheduleExactAlarms() ?: false
+        } else {
+            true
+        }
+    }
+
+    private fun requestExactAlarmPermission(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return
+        }
+
+        val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java)
+        if (alarmManager?.canScheduleExactAlarms() == true) {
+            return
+        }
+
+        try {
+            val primaryIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            if (primaryIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(primaryIntent)
+                return
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not open exact alarm intent, trying fallback: ${e.message}")
+        }
+
+        val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(fallbackIntent)
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(POWER_SERVICE) as? PowerManager
+            pm?.isIgnoringBatteryOptimizations(packageName) ?: true
+        } else {
+            true
+        }
+    }
+
+    private fun promptDisableBatteryOptimization() {
+        try {
+            val pm = getSystemService(POWER_SERVICE) as? PowerManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && pm?.isIgnoringBatteryOptimizations(packageName) == false) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to request battery optimization disable", e)
+        }
+
+        try {
+            val appDetailsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(appDetailsIntent)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Resilient AutoStart & Background Execution launcher for Chinese OEMs:
+     * Infinix, Tecno, itel (Transsion), Xiaomi, Redmi, Poco, Oppo, Realme, Vivo, iQOO, Huawei, Honor, OnePlus, Samsung
+     */
+    private fun openAutoStartSettings(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val brand = Build.BRAND.lowercase()
+
+        val candidateIntents = mutableListOf<Intent>()
+
+        // 1. Infinix / Tecno / itel (Transsion) - HiOS, XOS
+        if (manufacturer.contains("infinix") || manufacturer.contains("tecno") ||
+            manufacturer.contains("transsion") || manufacturer.contains("itel") ||
+            brand.contains("infinix") || brand.contains("tecno") || brand.contains("itel")
+        ) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemaster", "com.transsion.phonemaster.AutoStartManagementActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemaster", "com.transsion.phonemaster.activity.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemanager", "com.transsion.phonemanager.activity.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemanager", "com.transsion.phonemanager.activity.AutoStartActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemaster", "com.transsion.phonemaster.powersave.PowerSaveManagerActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemaster", "com.transsion.phonemaster.activity.PowerManagerActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.phonemaster", "com.transsion.phonemaster.activity.SettingsActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.transsion.smartpanel", "com.transsion.smartpanel.settings.AutoStartManageActivity")))
+        }
+
+        // 2. Xiaomi / Redmi / Poco (MIUI, HyperOS)
+        if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco") ||
+            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco")
+        ) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.powercenter.PowerSettings")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.permissions.PermissionsEditorActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.appmanager.AppManagerMainActivity")))
+            candidateIntents.add(Intent("miui.intent.action.OP_AUTO_START").addCategory(Intent.CATEGORY_DEFAULT))
+        }
+
+        // 3. Oppo / Realme (ColorOS, RealmeUI)
+        if (manufacturer.contains("oppo") || manufacturer.contains("realme") ||
+            brand.contains("oppo") || brand.contains("realme")
+        ) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startupmanager.StartupManagerActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.coloros.oppoguardelf", "com.coloros.oppoguardelf.permission.startup.StartupAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.oplus.battery", "com.oplus.battery.AppBatteryMainActivity")))
+        }
+
+        // 4. Vivo / iQOO (FuntouchOS, OriginOS)
+        if (manufacturer.contains("vivo") || manufacturer.contains("iqoo") ||
+            brand.contains("vivo") || brand.contains("iqoo")
+        ) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.PurviewTabActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.vivo.abe", "com.vivo.applicationbehaviorengine.ui.ExcessivePowerManagerActivity")))
+        }
+
+        // 5. Huawei / Honor (EMUI, MagicUI, HarmonyOS)
+        if (manufacturer.contains("huawei") || manufacturer.contains("honor") ||
+            brand.contains("huawei") || brand.contains("honor")
+        ) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.bootstart.BootStartActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.mainscreen.MainScreenActivity")))
+        }
+
+        // 6. OnePlus (OxygenOS)
+        if (manufacturer.contains("oneplus") || brand.contains("oneplus")) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.oneplus.security", "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.oplus.battery", "com.oplus.battery.AppBatteryMainActivity")))
+        }
+
+        // 7. Samsung (OneUI)
+        if (manufacturer.contains("samsung") || brand.contains("samsung")) {
+            candidateIntents.add(Intent().setComponent(ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity")))
+            candidateIntents.add(Intent().setComponent(ComponentName("com.samsung.android.sm_cn", "com.samsung.android.sm.ui.battery.BatteryActivity")))
+        }
+
+        // Try candidate intents in order
+        for (candidate in candidateIntents) {
+            try {
+                candidate.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                if (candidate.resolveActivity(packageManager) != null) {
+                    startActivity(candidate)
+                    Log.d(TAG, "Successfully opened OEM autostart screen: ${candidate.component}")
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed candidate: ${candidate.component}, ${e.message}")
+            }
+        }
+
+        // Fallback: Open application details or battery settings
+        try {
+            val appDetailsIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(appDetailsIntent)
+            return true
+        } catch (_: Exception) {
             try {
                 val genericIntent = Intent(Settings.ACTION_SETTINGS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 startActivity(genericIntent)
-            } catch (_: Exception) {}
-        }
-    }
-
-    private fun canScheduleExactAlarms(): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val alarmManager = ContextCompat.getSystemService(this, AlarmManager::class.java)
-        alarmManager?.canScheduleExactAlarms() ?: false
-    } else {
-        true
-    }
-}
-
-    private fun requestExactAlarmPermission(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-        return  // No permission needed before Android 12
-    }
-
-    val alarmManager = ContextCompat.getSystemService(context, AlarmManager::class.java)
-    alarmManager?.let { am: AlarmManager ->
-        if (am.canScheduleExactAlarms()) {
-            return  // Permission already granted
-        }
-    }
-
-    // Primary method: Standard system intent
-    val primaryIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
-        data = android.net.Uri.parse("package:${context.packageName}")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    }
-
-    // Backup method: App info page
-    val fallbackIntent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = android.net.Uri.parse("package:${context.packageName}")
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    }
-
-    // Try intents in order
-    if (primaryIntent.resolveActivity(context.packageManager) != null) {
-        context.startActivity(primaryIntent)
-    } else {
-        context.startActivity(fallbackIntent)
-    }
-}
-    private fun promptDisableBatteryOptimization() {
-        try {
-            val packageName = applicationContext.packageName
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
-                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = android.net.Uri.parse("package:$packageName")
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(intent)
-                }
+                return true
+            } catch (_: Exception) {
+                return false
             }
-        } catch (e: Exception) {
-            Log.e("BatteryOpt", "Failed to request battery optimization disable", e)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        AlarmForegroundService.start(this)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // Do not stop the service if you want alarms to work when app is closed
+        try {
+            AlarmForegroundService.start(this)
+        } catch (_: Exception) {}
     }
 }

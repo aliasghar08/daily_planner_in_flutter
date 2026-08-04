@@ -313,7 +313,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
       case NotificationRecurrence.monthly:
         final dayOfMonth = widget.task.date?.day ?? DateTime.now().day;
         final suffix = _getDaySuffix(dayOfMonth);
-        return "Monthly on ${dayOfMonth}$suffix$timeStr";
+        return "Monthly on $dayOfMonth$suffix$timeStr";
       case NotificationRecurrence.custom:
         if (_selectedDaysNotifier.value.values.any((v) => v)) {
           final selectedDayNames = _getSelectedDayNames();
@@ -647,12 +647,15 @@ class _EditTaskPageState extends State<EditTaskPage> {
         final stampsInPeriod =
             currentStamps.where((ts) {
               final dt = ts.toLocal();
-              if (widget.task.taskType == 'DailyTask')
+              if (widget.task.taskType == 'DailyTask') {
                 return _isSameDay(dt, now);
-              if (widget.task.taskType == 'WeeklyTask')
+              }
+              if (widget.task.taskType == 'WeeklyTask') {
                 return _isSameWeek(dt, now);
-              if (widget.task.taskType == 'MonthlyTask')
+              }
+              if (widget.task.taskType == 'MonthlyTask') {
                 return _isSameMonth(dt, now);
+              }
               return false;
             }).toList();
 
@@ -775,9 +778,9 @@ class _EditTaskPageState extends State<EditTaskPage> {
             // Recurrence Type Selection
             ValueListenableBuilder<NotificationRecurrence>(
               valueListenable: _notificationRecurrenceNotifier,
-              builder: (_, recurrence, __) {
+              builder: (_, recurrence, _) {
                 return DropdownButtonFormField<NotificationRecurrence>(
-                  value: recurrence,
+                  initialValue: recurrence,
                   decoration: InputDecoration(
                     labelText: "How often?",
                     border: OutlineInputBorder(
@@ -825,7 +828,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
             // Time Picker for Recurring Notifications
             ValueListenableBuilder<NotificationRecurrence>(
               valueListenable: _notificationRecurrenceNotifier,
-              builder: (_, recurrence, __) {
+              builder: (_, recurrence, _) {
                 if (recurrence == NotificationRecurrence.none) {
                   return const SizedBox.shrink();
                 }
@@ -843,7 +846,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                     const SizedBox(height: 8),
                     ValueListenableBuilder<TimeOfDay>(
                       valueListenable: _recurringTimeNotifier,
-                      builder: (_, time, __) {
+                      builder: (_, time, _) {
                         return InkWell(
                           onTap: _pickRecurringTime,
                           child: Container(
@@ -889,7 +892,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
             // Custom Days Selector
             ValueListenableBuilder<bool>(
               valueListenable: _showCustomDaysNotifier,
-              builder: (_, showCustomDays, __) {
+              builder: (_, showCustomDays, _) {
                 if (!showCustomDays) return const SizedBox.shrink();
 
                 return Column(
@@ -904,7 +907,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
             // Single Notifications (only when recurrence is "none")
             ValueListenableBuilder<NotificationRecurrence>(
               valueListenable: _notificationRecurrenceNotifier,
-              builder: (_, recurrence, __) {
+              builder: (_, recurrence, _) {
                 if (recurrence != NotificationRecurrence.none) {
                   return const SizedBox.shrink();
                 }
@@ -923,7 +926,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                     const SizedBox(height: 8),
                     ValueListenableBuilder<List<DateTime>>(
                       valueListenable: _notificationTimesNotifier,
-                      builder: (_, times, __) {
+                      builder: (_, times, _) {
                         if (times.isEmpty) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 8),
@@ -1009,7 +1012,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
             // ✅ NEW: Show current recurrence description
             ValueListenableBuilder<NotificationRecurrence>(
               valueListenable: _notificationRecurrenceNotifier,
-              builder: (_, recurrence, __) {
+              builder: (_, recurrence, _) {
                 if (recurrence == NotificationRecurrence.none) {
                   return const SizedBox.shrink();
                 }
@@ -1020,10 +1023,10 @@ class _EditTaskPageState extends State<EditTaskPage> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: recurrence.color.withOpacity(0.1),
+                        color: recurrence.color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: recurrence.color.withOpacity(0.3),
+                          color: recurrence.color.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -1078,7 +1081,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
           const SizedBox(height: 8),
           ValueListenableBuilder<Map<String, bool>>(
             valueListenable: _selectedDaysNotifier,
-            builder: (_, selectedDays, __) {
+            builder: (_, selectedDays, _) {
               return Wrap(
                 spacing: 8,
                 children: List.generate(7, (index) {
@@ -1106,7 +1109,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
           const SizedBox(height: 8),
           ValueListenableBuilder<Map<String, bool>>(
             valueListenable: _selectedDaysNotifier,
-            builder: (_, selectedDays, __) {
+            builder: (_, selectedDays, _) {
               final selectedDayNames = _getSelectedDayNames();
               return Text(
                 selectedDayNames.isEmpty
@@ -1153,7 +1156,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: _getTaskTypeColor().withOpacity(0.1),
+                          color: _getTaskTypeColor().withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -1260,7 +1263,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                             ValueListenableBuilder<bool>(
                               valueListenable: _hasEndDateNotifier,
                               builder:
-                                  (_, hasEndDate, __) => Icon(
+                                  (_, hasEndDate, _) => Icon(
                                     hasEndDate
                                         ? Icons.event_available
                                         : Icons.event_busy,
@@ -1282,7 +1285,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                             ValueListenableBuilder<bool>(
                               valueListenable: _hasEndDateNotifier,
                               builder:
-                                  (_, value, __) => Switch(
+                                  (_, value, _) => Switch(
                                     value: value,
                                     onChanged: (val) {
                                       _hasEndDateNotifier.value = val;
@@ -1293,7 +1296,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                                             DateTime.now();
                                       }
                                     },
-                                    activeColor: Colors.green,
+                                    activeThumbColor: Colors.green,
                                   ),
                             ),
                           ],
@@ -1301,7 +1304,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                         const SizedBox(height: 8),
                         ValueListenableBuilder<bool>(
                           valueListenable: _hasEndDateNotifier,
-                          builder: (_, hasEndDate, __) {
+                          builder: (_, hasEndDate, _) {
                             return Text(
                               hasEndDate
                                   ? "This task will end on the selected date"
@@ -1408,7 +1411,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
                     children: [
                       ValueListenableBuilder<bool>(
                         valueListenable: _isCompletedNotifier,
-                        builder: (_, isCompleted, __) {
+                        builder: (_, isCompleted, _) {
                           return Icon(
                             isCompleted
                                 ? Icons.check_circle
@@ -1431,11 +1434,11 @@ class _EditTaskPageState extends State<EditTaskPage> {
                       ValueListenableBuilder<bool>(
                         valueListenable: _isCompletedNotifier,
                         builder:
-                            (_, value, __) => Switch(
+                            (_, value, _) => Switch(
                               value: value,
                               onChanged:
                                   (val) => _isCompletedNotifier.value = val,
-                              activeColor: Colors.green,
+                              activeThumbColor: Colors.green,
                             ),
                       ),
                     ],
@@ -1488,7 +1491,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
               // ✅ NEW: Delete Recurring Notifications Button
               ValueListenableBuilder<NotificationRecurrence>(
                 valueListenable: _notificationRecurrenceNotifier,
-                builder: (_, recurrence, __) {
+                builder: (_, recurrence, _) {
                   if (recurrence == NotificationRecurrence.none) {
                     return const SizedBox.shrink();
                   }

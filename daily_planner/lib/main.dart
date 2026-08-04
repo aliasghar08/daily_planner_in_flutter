@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
 import 'package:daily_planner/providers/medication_provider.dart';
 import 'package:daily_planner/providers/task_provider.dart';
@@ -18,8 +19,8 @@ import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/changePass.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:daily_planner/utils/app_theme.dart';
 import 'firebase_options.dart';
 
 final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -31,7 +32,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  print("Handling a background message: ${message.messageId}");
+  debugPrint("Handling a background message: ${message.messageId}");
 
   // Show notification when app is in background/terminated
   if (message.notification != null) {
@@ -162,7 +163,7 @@ Future<void> testNotificationSystem() async {
     scheduledTime: testTime,
   );
 
-  print('Test notification scheduled: $success');
+  debugPrint('Test notification scheduled: $success');
 
   // Print all scheduled notifications
   await notifications.debugPrintScheduledNotifications();
@@ -256,23 +257,6 @@ Future<void> _saveFCMTokenToFirestore(String? token) async {
   }
 }
 
-Future<void> _removeFCMTokenFromFirestore(String? token) async {
-  if (token == null) return;
-
-  try {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {
-          'fcmTokens': FieldValue.arrayRemove([token]),
-        },
-      );
-    }
-  } catch (e) {
-    debugPrint('Error removing FCM token from Firestore: $e');
-  }
-}
-
 Future<void> _initializeAndroidServices() async {
   try {
     await Permission.notification.request();
@@ -345,8 +329,8 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             title: "Daily Planner",
             debugShowCheckedModeBanner: false,
-            theme: ThemeData.light(),
-            darkTheme: ThemeData.dark(),
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             navigatorKey: navigatorKey,
             home: const AuthWrapper(),

@@ -1,5 +1,5 @@
-// auth_service.dart
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class AuthService {
@@ -9,12 +9,11 @@ class AuthService {
   Future<User?> signInWithGoogle() async {
     try {
       await _googleSignIn.initialize();
-      final GoogleSignInAccount? googleUser =
+      final GoogleSignInAccount googleUser =
           await _googleSignIn.authenticate();
-      if (googleUser == null) return null;
 
       final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+          googleUser.authentication;
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
         idToken: googleAuth.idToken,
@@ -27,7 +26,7 @@ class AuthService {
 
       return userCredential.user;
     } catch (e) {
-      print("Google Sign-In Error: $e");
+      debugPrint("Google Sign-In Error: $e");
       return null;
     }
   }
@@ -37,7 +36,7 @@ class AuthService {
       await _googleSignIn.signOut();
       await _auth.signOut();
     } catch (e) {
-      print("Sign out error: $e");
+      debugPrint("Sign out error: $e");
     }
   }
 }

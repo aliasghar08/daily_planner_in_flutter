@@ -308,8 +308,8 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: _selectedIcon == icon
-                        ? Colors.blue.withOpacity(0.2)
-                        : Colors.grey.withOpacity(0.1),
+                        ? Colors.blue.withValues(alpha: 0.2)
+                        : Colors.grey.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Center(
@@ -432,7 +432,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<MedicationFrequency>(
-          value: _selectedFrequency,
+          initialValue: _selectedFrequency,
           decoration: const InputDecoration(
             labelText: 'Frequency',
             border: OutlineInputBorder(),
@@ -476,7 +476,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
               label: Text(day['short']),
               selected: isSelected,
               onSelected: (selected) => _toggleDay(day['index']),
-              selectedColor: Colors.blue.withOpacity(0.2),
+              selectedColor: Colors.blue.withValues(alpha: 0.2),
               checkmarkColor: Colors.blue,
             );
           }).toList(),
@@ -618,7 +618,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
-          value: _reminderMinutesBefore,
+          initialValue: _reminderMinutesBefore,
           decoration: const InputDecoration(
             labelText: 'Remind Before',
             border: OutlineInputBorder(),
@@ -742,7 +742,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                                   width: 60,
                                   height: 60,
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.withOpacity(0.1),
+                                    color: Colors.grey.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Center(
@@ -855,7 +855,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                           Expanded(
                             flex: 1,
                             child: DropdownButtonFormField<DosageUnit>(
-                              value: _selectedUnit,
+                              initialValue: _selectedUnit,
                               decoration: const InputDecoration(
                                 labelText: 'Unit',
                                 border: OutlineInputBorder(),

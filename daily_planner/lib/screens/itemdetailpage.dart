@@ -225,8 +225,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               AndroidFlutterLocalNotificationsPlugin
             >();
     final channels = await androidImpl?.getNotificationChannels();
-    if (channels == null || channels.isEmpty)
+    if (channels == null || channels.isEmpty) {
       await _createNotificationChannel();
+    }
   }
 
   Future<void> _createNotificationChannel() async {
@@ -270,7 +271,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         return "Every $dayName$timeStr";
       case NotificationRecurrence.monthly:
         final dayOfMonth = widget.task.date?.day ?? DateTime.now().day;
-        return "Monthly on ${dayOfMonth}${_getDaySuffix(dayOfMonth)}$timeStr";
+        return "Monthly on $dayOfMonth${_getDaySuffix(dayOfMonth)}$timeStr";
       case NotificationRecurrence.custom:
         if (_selectedDays != null && _selectedDays!.isNotEmpty) {
           final selectedDayNames = _getSelectedDayNames();
@@ -635,7 +636,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Task Detail"),
-          backgroundColor: _getTaskTypeColor().withOpacity(0.1),
+          backgroundColor: _getTaskTypeColor().withValues(alpha: 0.1),
           foregroundColor: _getTaskTypeColor(),
         ),
         body: Padding(
@@ -654,7 +655,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: _getTaskTypeColor().withOpacity(0.1),
+                            color: _getTaskTypeColor().withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
@@ -837,10 +838,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: _getRecurrenceColor().withOpacity(0.1),
+                            color: _getRecurrenceColor().withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _getRecurrenceColor().withOpacity(0.3),
+                              color: _getRecurrenceColor().withValues(alpha: 0.3),
                             ),
                           ),
                           child: Column(
@@ -1110,7 +1111,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getRecurrenceColor().withOpacity(0.1),
+                color: _getRecurrenceColor().withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(

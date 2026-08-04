@@ -22,51 +22,52 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // Step 1: Get cached user immediately (works offline)
-      _user = FirebaseAuth.instance.currentUser;
-      debugPrint('🔐 Cached user: ${_user?.email ?? 'null'}');
+      // Step 1: Ensure Local Persistence is active
+      try {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      } catch (e) {
+        debugPrint('Auth persistence setting warning: $e');
+      }
 
-      // Step 2: Listen for auth state changes (handles token refresh, logout, etc.)
+      // Step 2: Read current authenticated user session
+      _user = FirebaseAuth.instance.currentUser;
+      debugPrint('🔐 Current active user session: ${_user?.email ?? "No session"}');
+
+      // Step 3: Listen for auth state changes continuously
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
-        debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'null'}');
+        debugPrint('🔄 Auth state changed: ${newUser?.email ?? "Signed out"}');
         _user = newUser;
         _isLoading = false;
         notifyListeners();
       });
 
-      // Step 3: If user exists, verify their data in Firestore
+      // Step 4: Ensure Firestore user document exists without ever logging the user out
       if (_user != null) {
-        try {
-          final doc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(_user!.uid)
-              .get();
-
-          if (!doc.exists) {
-            // User data doesn't exist - force logout
-            debugPrint('⚠️ User data not found in Firestore, logging out');
-            await FirebaseAuth.instance.signOut();
-            _user = null;
-            _error = 'User data not found';
-            notifyListeners();
-          } else {
-            debugPrint('✅ User data verified in Firestore');
-          }
-        } catch (e) {
-          // Network error - keep user logged in if cached data exists
-          debugPrint('⚠️ Could not verify user data (network error): $e');
-        }
+        _syncUserDocument(_user!);
       }
-
-      // Step 4: Small delay to ensure everything is loaded
-      await Future.delayed(const Duration(milliseconds: 500));
     } catch (e) {
       debugPrint('❌ Auth check error: $e');
       _error = e.toString();
-      _user = null;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _syncUserDocument(User currentUser) async {
+    try {
+      final docRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        await docRef.set({
+          'fullName': currentUser.displayName ?? (currentUser.email?.split('@').first ?? 'User'),
+          'email': currentUser.email ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint('✅ Synced user profile document to Firestore');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Non-fatal Firestore profile sync note: $e');
     }
   }
 
@@ -81,11 +82,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Explicit sign out - ONLY called when user explicitly taps Logout
   Future<void> signOut() async {
     try {
       await FirebaseAuth.instance.signOut();
       _user = null;
+      _error = null;
       notifyListeners();
+      debugPrint('👋 User successfully logged out');
     } catch (e) {
       debugPrint('❌ Sign out error: $e');
       rethrow;

@@ -249,8 +249,24 @@ class HelperFunctions {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text(value, style: TextStyle(fontWeight: FontWeight.w500, color: color)),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                value,
+                style: TextStyle(fontWeight: FontWeight.w500, color: color),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -384,7 +400,7 @@ class HelperFunctions {
   }
 
   static Color getChartColor(double value) {
-    if (value == 0) return Colors.grey.withOpacity(0.3);
+    if (value == 0) return Colors.grey.withValues(alpha: 0.3);
     if (value < 3) return Colors.orange.shade300;
     if (value < 6) return Colors.blue.shade300;
     return Colors.blue.shade300;

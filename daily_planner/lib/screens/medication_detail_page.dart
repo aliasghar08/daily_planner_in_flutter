@@ -203,7 +203,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -215,7 +215,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: medColor.withOpacity(0.15),
+                  color: medColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -335,9 +335,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50.withOpacity(isDark ? 0.1 : 0.8),
+              color: Colors.blue.shade50.withValues(alpha: isDark ? 0.1 : 0.8),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [

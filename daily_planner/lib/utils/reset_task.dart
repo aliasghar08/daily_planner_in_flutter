@@ -94,8 +94,8 @@ Map<String, dynamic> _prepareResetUpdates(Task task) {
 
   // Preserve completion stamps
   if (task.completedAt != null &&
-      !task.completionStamps!.any((ts) => ts.isAtSameMomentAs(task.completedAt!))) {
-    final updatedStamps = [...?task.completionStamps, task.completedAt!];
+      !task.completionStamps.any((ts) => ts.isAtSameMomentAs(task.completedAt!))) {
+    final updatedStamps = [...task.completionStamps, task.completedAt!];
     updates['completionStamps'] = updatedStamps.map((dt) => dt.toIso8601String()).toList();
   }
 

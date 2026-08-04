@@ -283,7 +283,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                           ? Colors.blueAccent
                           : (isCurrentToday
                               ? (isDark
-                                  ? Colors.blueAccent.withOpacity(0.2)
+                                  ? Colors.blueAccent.withValues(alpha: 0.2)
                                   : Colors.blue.shade50)
                               : (isDark
                                   ? const Color(0xFF2A2A2A)
@@ -293,7 +293,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                         color: isSelected
                             ? Colors.blueAccent
                             : (isCurrentToday
-                                ? Colors.blueAccent.withOpacity(0.5)
+                                ? Colors.blueAccent.withValues(alpha: 0.5)
                                 : Colors.transparent),
                         width: 1.5,
                       ),
@@ -370,7 +370,7 @@ class _MedicationListPageState extends State<MedicationListPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.blueAccent.withOpacity(0.2),
+            color: Colors.blueAccent.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -388,7 +388,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                 CircularProgressIndicator(
                   value: total == 0 ? 0.0 : pct,
                   strokeWidth: 7,
-                  backgroundColor: Colors.white.withOpacity(0.2),
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
                   valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
                 ),
                 Center(
@@ -409,22 +409,27 @@ class _MedicationListPageState extends State<MedicationListPage>
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  total == 0
-                      ? 'No Medications Scheduled'
-                      : (pct >= 1.0
-                          ? '🎉 All Medications Taken!'
-                          : '$taken of $total doses completed'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    total == 0
+                        ? 'No Medications Scheduled'
+                        : (pct >= 1.0
+                            ? '🎉 All Medications Taken!'
+                            : '$taken of $total doses completed'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Wrap(
-                  spacing: 8,
+                  spacing: 6,
                   runSpacing: 6,
                   children: [
                     _buildStatPill('Taken: $taken', Colors.greenAccent.shade400, Colors.green.shade900),
@@ -445,15 +450,19 @@ class _MedicationListPageState extends State<MedicationListPage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: bgColor.withOpacity(0.5),
+        color: bgColor.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.bold,
-          fontSize: 11,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+          ),
+          maxLines: 1,
         ),
       ),
     );
@@ -528,12 +537,12 @@ class _MedicationListPageState extends State<MedicationListPage>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isTaken
-              ? Colors.green.withOpacity(0.3)
+              ? Colors.green.withValues(alpha: 0.3)
               : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -558,7 +567,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: medColor.withOpacity(0.15),
+                  color: medColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -715,7 +724,7 @@ class _MedicationListPageState extends State<MedicationListPage>
       ),
       child: Column(
         children: [
-          Icon(Icons.event_available_rounded, size: 64, color: Colors.blueAccent.withOpacity(0.5)),
+          Icon(Icons.event_available_rounded, size: 64, color: Colors.blueAccent.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
           const Text(
             'No Intakes Scheduled',
@@ -807,7 +816,7 @@ class _MedicationListPageState extends State<MedicationListPage>
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: medColor.withOpacity(0.15),
+                color: medColor.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
               child: Center(

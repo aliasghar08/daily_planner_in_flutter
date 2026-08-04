@@ -17,7 +17,7 @@ class TaskHistoryWidget extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.blueGrey.withOpacity(0.1),
+      color: Colors.blueGrey.withValues(alpha: 0.1),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(

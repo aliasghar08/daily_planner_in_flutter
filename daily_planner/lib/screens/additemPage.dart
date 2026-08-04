@@ -113,13 +113,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
   bool _isCompleted = false;
   bool _isSaving = false;
   bool _hasEndDate = true;
-  List<DateTime> _notificationTimes = []; // For single notifications only
+  final List<DateTime> _notificationTimes = []; // For single notifications only
   bool _nativeAlarmInitialized = false;
 
   // New variables for recurring notifications
   NotificationRecurrence _notificationRecurrence = NotificationRecurrence.none;
   TimeOfDay _recurringTime = const TimeOfDay(hour: 21, minute: 0); // Default 9 PM
-  Map<String, bool> _selectedDays = {
+  final Map<String, bool> _selectedDays = {
     '1': false, // Monday
     '2': false, // Tuesday
     '3': false, // Wednesday
@@ -726,9 +726,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _selectedType.color.withOpacity(0.1),
+        color: _selectedType.color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _selectedType.color.withOpacity(0.3)),
+        border: Border.all(color: _selectedType.color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -852,7 +852,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             
             // Recurrence Type Selection
             DropdownButtonFormField<NotificationRecurrence>(
-              value: _notificationRecurrence,
+              initialValue: _notificationRecurrence,
               decoration: InputDecoration(
                 labelText: "How often?",
                 border: OutlineInputBorder(
@@ -995,7 +995,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _notificationTimes.remove(time);
                                 });
                               },
-                              backgroundColor: Colors.blue.withOpacity(0.1),
+                              backgroundColor: Colors.blue.withValues(alpha: 0.1),
                             );
                           }).toList(),
                     ),
@@ -1115,7 +1115,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<TaskType>(
-                        value: _selectedType,
+                        initialValue: _selectedType,
                         decoration: InputDecoration(
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -1215,7 +1215,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   }
                                 });
                               },
-                              activeColor: Colors.green,
+                              activeThumbColor: Colors.green,
                             ),
                           ],
                         ),
@@ -1372,7 +1372,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                             _isCompleted = val;
                           });
                         },
-                        activeColor: Colors.green,
+                        activeThumbColor: Colors.green,
                       ),
                     ],
                   ),

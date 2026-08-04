@@ -15,12 +15,18 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECEIVE_USER_PRESENT" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
-    <!-- Add this for Android 12+ to keep alarms after reboot -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- OEM Autostart & Background Protection Permissions (Infinix, Tecno, Xiaomi, Oppo) -->
+    <uses-permission android:name="com.transsion.phonemaster.permission.AUTO_START" />
+    <uses-permission android:name="com.transsion.phonemaster.permission.PROTECT_APP" />
+    <uses-permission android:name="oppo.permission.OPPO_COMPONENT_SAFE" />
+    <uses-permission android:name="com.miui.securitycenter.permission.AUTO_START" />
 
     <application
-        android:label="daily_planner"
+        android:label="Daily Planner"
         android:icon="@mipmap/ic_launcher"
         android:name="${applicationName}">
 
@@ -112,38 +118,31 @@
             </intent-filter>
         </receiver>
 
-        <!-- ✅ UPDATED ALARM RECEIVER - FIXED INTENT FILTERS -->
+        <!-- ✅ CUSTOM NATIVE ALARM RECEIVER -->
         <receiver
             android:name=".AlarmReceiver"
             android:exported="true"
             android:enabled="true">
-
-            <!-- Regular alarm intents -->
             <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <action android:name="android.intent.action.TIME_SET" />
-            </intent-filter>
-
-            <!-- Custom actions for stop/snooze -->
-            <intent-filter>
+                <action android:name="daily_planner.ACTION_TRIGGER_ALARM" />
                 <action android:name="daily_planner.STOP" />
                 <action android:name="daily_planner.SNOOZE" />
             </intent-filter>
         </receiver>
 
-        <!-- ✅ ADD BOOT COMPLETED RECEIVER TO RESTART ALARMS AFTER REBOOT -->
+        <!-- ✅ CUSTOM NATIVE BOOT RECEIVER TO RESTORE ALARMS AFTER REBOOT -->
         <receiver
-            android:name=".BootCompleteReceiver"
+            android:name=".BootReceiver"
             android:enabled="true"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 

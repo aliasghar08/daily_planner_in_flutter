@@ -1,27 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:daily_planner/providers/task_provider.dart';
 import 'package:daily_planner/screens/itemdetailedit.dart';
 import 'package:daily_planner/screens/itemdetailpage.dart';
 import 'package:daily_planner/screens/taskInsights.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
-import 'package:daily_planner/utils/notification_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ItemWidget extends StatefulWidget {
   final Task item;
   final VoidCallback? onEditDone;
   final String searchQuery;
-  final VoidCallback? onTaskStatusChanged; // NEW: Callback for status changes
+  final VoidCallback? onTaskStatusChanged;
 
   const ItemWidget({
     super.key,
     required this.item,
     this.onEditDone,
     this.searchQuery = '',
-    this.onTaskStatusChanged, // NEW: Added callback parameter
+    this.onTaskStatusChanged,
   });
 
   @override
@@ -29,46 +30,21 @@ class ItemWidget extends StatefulWidget {
 }
 
 class _ItemWidgetState extends State<ItemWidget> {
-  bool? isChecked;
-  List<DateTime> completedList = [];
+  bool _isChecked = false;
+  bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeTask();
+    _isChecked = widget.item.isCompleted;
   }
 
   @override
   void didUpdateWidget(ItemWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Refresh when the task data changes from parent
-    if (oldWidget.item.docId != widget.item.docId ||
-        oldWidget.item.isCompleted != widget.item.isCompleted) {
-      _initializeTask();
-    }
-  }
-
-  void _initializeTask() {
-    try {
-      print('Initializing task: ${widget.item.title}');
-      print('Task type: ${widget.item.taskType}');
-      print('Task date: ${widget.item.date}');
-      print('Task docId: ${widget.item.docId}');
-      print('Task isCompleted: ${widget.item.isCompleted}');
-
-      isChecked = widget.item.isCompleted ?? false;
-
-      loadCompletionStamps(widget.item).then((loadedList) {
-        if (mounted) {
-          setState(() {
-            completedList = loadedList;
-          });
-        }
-      });
-    } catch (e) {
-      print('Error initializing task: $e');
-      isChecked = false;
-      completedList = [];
+    if (oldWidget.item.isCompleted != widget.item.isCompleted ||
+        oldWidget.item.docId != widget.item.docId) {
+      _isChecked = widget.item.isCompleted;
     }
   }
 
@@ -79,11 +55,8 @@ class _ItemWidgetState extends State<ItemWidget> {
     return widget.item.docId!.hashCode & 0x7FFFFFFF;
   }
 
-  // Helper functions for period comparisons
   bool _isSameDay(DateTime a, DateTime b) {
-    final aUtc = DateTime.utc(a.year, a.month, a.day);
-    final bUtc = DateTime.utc(b.year, b.month, b.day);
-    return aUtc == bUtc;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   int _weekNumber(DateTime d) {
@@ -93,71 +66,77 @@ class _ItemWidgetState extends State<ItemWidget> {
   }
 
   bool _isSameWeek(DateTime date1, DateTime date2) {
-    date1 = date1.toLocal();
-    date2 = date2.toLocal();
-    return date1.year == date2.year && _weekNumber(date1) == _weekNumber(date2);
+    final d1 = date1.toLocal();
+    final d2 = date2.toLocal();
+    return d1.year == d2.year && _weekNumber(d1) == _weekNumber(d2);
   }
 
   bool _isSameMonth(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month;
   }
 
-  Future<void> changeCompleted(bool? newStatus) async {
-    final previousStatus = isChecked;
+  Future<void> _toggleCompleted() async {
+    if (_isProcessing) return;
 
+    final newStatus = !_isChecked;
+    final previousStatus = _isChecked;
+
+    // Optimistic UI update
     setState(() {
-      isChecked = newStatus ?? false;
-      widget.item.isCompleted = newStatus ?? false;
+      _isChecked = newStatus;
+      _isProcessing = true;
     });
+
+    final now = DateTime.now();
+    final docId = widget.item.docId;
+
+    if (docId != null) {
+      context.read<TaskProvider>().updateTaskOptimistically(
+        docId,
+        newStatus,
+        newStatus ? now : null,
+      );
+    }
 
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) throw Exception("User not logged in");
-      if (widget.item.docId == null) throw Exception("Task has no document ID");
+      if (uid == null || docId == null) throw Exception("User or Task not found");
 
       final taskRef = FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('tasks')
-          .doc(widget.item.docId);
-
-      final now = DateTime.now();
+          .doc(docId);
 
       final snapshot = await taskRef.get();
       final currentData = snapshot.data();
       List<Timestamp> updatedStamps = [];
 
       if (currentData != null && currentData['completionStamps'] != null) {
-        updatedStamps =
-            (currentData['completionStamps'] as List).map((e) {
-              if (e is Timestamp) return e;
-              if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
-              if (e is String) return Timestamp.fromDate(DateTime.parse(e));
-              if (e is DateTime) return Timestamp.fromDate(e);
-              return Timestamp.now();
-            }).toList();
+        updatedStamps = (currentData['completionStamps'] as List).map((e) {
+          if (e is Timestamp) return e;
+          if (e is int) return Timestamp.fromMillisecondsSinceEpoch(e);
+          if (e is String) return Timestamp.fromDate(DateTime.parse(e));
+          if (e is DateTime) return Timestamp.fromDate(e);
+          return Timestamp.now();
+        }).toList();
       }
 
       Map<String, dynamic> updateData = {'isCompleted': newStatus};
 
-      if (newStatus == true) {
+      if (newStatus) {
         final ts = Timestamp.fromDate(now);
-
+        final taskType = widget.item.taskType.toLowerCase();
         bool shouldAddStamp = true;
-        final taskType = widget.item.taskType?.toLowerCase();
+
         if (taskType != 'onetime') {
-          shouldAddStamp =
-              !updatedStamps.any((stamp) {
-                final date = stamp.toDate();
-                if (taskType == 'dailytask') {
-                  return _isSameDay(date, now);
-                } else if (taskType == 'weeklytask') {
-                  return _isSameWeek(date, now);
-                } else if (taskType == 'monthlytask') {
-                  return _isSameMonth(date, now);
-                }
-                return false;
-              });
+          shouldAddStamp = !updatedStamps.any((stamp) {
+            final date = stamp.toDate();
+            if (taskType == 'dailytask') return _isSameDay(date, now);
+            if (taskType == 'weeklytask') return _isSameWeek(date, now);
+            if (taskType == 'monthlytask') return _isSameMonth(date, now);
+            return false;
+          });
         }
 
         if (shouldAddStamp) {
@@ -168,141 +147,94 @@ class _ItemWidgetState extends State<ItemWidget> {
 
         await NativeAlarmHelper.cancelAlarmById(notificationId);
       } else {
-        final taskType = widget.item.taskType?.toLowerCase();
-        updatedStamps =
-            updatedStamps.where((stamp) {
-              final date = stamp.toDate();
-
-              if (taskType == 'onetime') {
-                return false;
-              } else if (taskType == 'dailytask') {
-                return !_isSameDay(date, now);
-              } else if (taskType == 'weeklytask') {
-                return !_isSameWeek(date, now);
-              } else if (taskType == 'monthlytask') {
-                return !_isSameMonth(date, now);
-              }
-              return true;
-            }).toList();
+        final taskType = widget.item.taskType.toLowerCase();
+        updatedStamps = updatedStamps.where((stamp) {
+          final date = stamp.toDate();
+          if (taskType == 'onetime') return false;
+          if (taskType == 'dailytask') return !_isSameDay(date, now);
+          if (taskType == 'weeklytask') return !_isSameWeek(date, now);
+          if (taskType == 'monthlytask') return !_isSameMonth(date, now);
+          return true;
+        }).toList();
 
         updateData['completedAt'] = null;
         updateData['completionStamps'] = updatedStamps;
 
-        if (widget.item.date != null) {
-          if (widget.item.date!.isAfter(DateTime.now())) {
-            await NativeAlarmHelper.scheduleAlarmAtTime(
-              id: notificationId,
-              title: widget.item.title,
-              body: widget.item.detail,
-              dateTime: widget.item.date!,
-            );
-          }
+        if (widget.item.date != null && widget.item.date!.isAfter(DateTime.now())) {
+          await NativeAlarmHelper.scheduleAlarmAtTime(
+            id: notificationId,
+            title: widget.item.title,
+            body: widget.item.detail,
+            dateTime: widget.item.date!,
+          );
         }
       }
 
-      // Update Firestore
       await taskRef.update(updateData);
+      widget.item.isCompleted = newStatus;
+      widget.item.completedAt = newStatus ? now : null;
 
-      // Update local object
-      final updatedDates = updatedStamps.map((ts) => ts.toDate()).toList();
-      if (widget.item is DailyTask) {
-        (widget.item as DailyTask).completionStamps
-          ..clear()
-          ..addAll(updatedDates);
-      } else if (widget.item is WeeklyTask) {
-        (widget.item as WeeklyTask).completionStamps
-          ..clear()
-          ..addAll(updatedDates);
-      } else if (widget.item is MonthlyTask) {
-        (widget.item as MonthlyTask).completionStamps
-          ..clear()
-          ..addAll(updatedDates);
-      }
-
-      // Update local state
-      if (mounted) {
-        setState(() {
-          completedList = updatedDates;
-        });
-      }
-
-      widget.item.completedAt = newStatus == true ? now : null;
-
-      // NEW: Call all refresh callbacks
       widget.onEditDone?.call();
-      widget.onTaskStatusChanged
-          ?.call(); // NEW: Call the status change callback
+      widget.onTaskStatusChanged?.call();
     } catch (e) {
-      print('Error changing completion status: $e');
+      debugPrint('Error toggling task completion: $e');
       if (mounted) {
         setState(() {
-          isChecked = previousStatus;
-          widget.item.isCompleted = previousStatus ?? false;
+          _isChecked = previousStatus;
+        });
+        if (docId != null) {
+          context.read<TaskProvider>().updateTaskOptimistically(
+            docId,
+            previousStatus,
+            previousStatus ? now : null,
+          );
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update task: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
         });
       }
-      _showSnackbar("❌ Failed to update task: ${e.toString()}");
     }
   }
 
-  // String generateNotificationId(String taskId, DateTime time) {
-  //   return (taskId + time.toIso8601String()).hashCode.abs().toString();
-  // }
-
-  int generateNotificationId(String taskId, DateTime time) {
-  return (taskId + time.toIso8601String()).hashCode.abs();
-}
-
-  Future<void> deleteTask(Task task) async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null || task.docId == null) {
-      _showSnackbar("❌ Cannot delete: Missing user or task ID.");
-      return;
-    }
-
-    final confirm = await showDialog<bool>(
+  Future<void> _deleteTask(Task task) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text("Confirm Deletion"),
-            content: const Text("Are you sure you want to delete this task?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.red),
+            SizedBox(width: 8),
+            Text("Delete Task"),
+          ],
+        ),
+        content: Text("Are you sure you want to delete '${task.title}'?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
           ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete"),
+          ),
+        ],
+      ),
     );
 
-    if (confirm != true) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    if (confirmed != true) return;
 
     try {
-      if (task.notificationTimes != null &&
-          task.notificationTimes!.isNotEmpty) {
-        for (final time in task.notificationTimes!) {
-          final id = generateNotificationId(task.docId!, task.date!);
-          await NativeAlarmHelper.cancelAlarmById(id);
-        }
-      } else {
-        if (task.date != null) {
-          final fallbackId = generateNotificationId(task.docId!, task.date!);
-          await NativeAlarmHelper.cancelAlarmById(fallbackId);
-        }
-      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null || task.docId == null) return;
+
+      await NativeAlarmHelper.cancelAlarmById(notificationId);
 
       await FirebaseFirestore.instance
           .collection('users')
@@ -311,30 +243,26 @@ class _ItemWidgetState extends State<ItemWidget> {
           .doc(task.docId)
           .delete();
 
-      if (mounted) Navigator.of(context).pop();
-      _showSnackbar("🗑️ Task deleted successfully");
-
-      // NEW: Call all refresh callbacks
-      widget.onEditDone?.call();
-      widget.onTaskStatusChanged?.call();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Task deleted successfully"),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onEditDone?.call();
+        widget.onTaskStatusChanged?.call();
+      }
     } catch (e) {
-      if (mounted) Navigator.of(context).pop();
-      _showSnackbar("❌ Failed to delete task: ${e.toString()}");
-      debugPrint("Error deleting task: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to delete: $e")),
+        );
+      }
     }
   }
 
-  void _showSnackbar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  TextSpan _highlightSearchText(String text, String query) {
-    final defaultStyle =
-        Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
-
+  TextSpan _highlightSearchText(String text, String query, TextStyle defaultStyle) {
     if (query.isEmpty) return TextSpan(text: text, style: defaultStyle);
 
     final matches = RegExp(
@@ -361,7 +289,8 @@ class _ItemWidgetState extends State<ItemWidget> {
         TextSpan(
           text: text.substring(match.start, match.end),
           style: defaultStyle.copyWith(
-            color: Colors.orange,
+            color: const Color(0xFF2563EB),
+            backgroundColor: const Color(0xFF2563EB).withValues(alpha: 0.15),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -379,218 +308,350 @@ class _ItemWidgetState extends State<ItemWidget> {
     return TextSpan(children: spans);
   }
 
-  Future<List<DateTime>> loadCompletionStamps(Task task) async {
-    List<DateTime> completedList = [];
-
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null || task.docId == null) {
-        debugPrint("Missing UID or docId for task: ${task.title}");
-        return completedList;
-      }
-
-      final taskRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('tasks')
-          .doc(task.docId);
-
-      final snapshot = await taskRef.get();
-      if (!snapshot.exists) {
-        debugPrint("Task document doesn't exist: ${task.docId}");
-        return completedList;
-      }
-
-      final data = snapshot.data();
-      if (data != null && data['completionStamps'] != null) {
-        final List<dynamic> stamps = data['completionStamps'];
-        completedList =
-            stamps.map((stamp) {
-              if (stamp is Timestamp) return stamp.toDate();
-              if (stamp is int)
-                return DateTime.fromMillisecondsSinceEpoch(stamp);
-              if (stamp is String) return DateTime.parse(stamp);
-              if (stamp is DateTime) return stamp;
-              return DateTime.now();
-            }).toList();
-
-        debugPrint(
-          "Loaded ${completedList.length} completion stamps for task: ${task.title}",
-        );
-      }
-    } catch (e) {
-      debugPrint(
-        "❌ Error loading completion stamps for task ${task.title}: $e",
-      );
+  Color _getTaskTypeColor(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'dailytask':
+        return const Color(0xFF3B82F6); // Blue
+      case 'weeklytask':
+        return const Color(0xFF10B981); // Emerald
+      case 'monthlytask':
+        return const Color(0xFF8B5CF6); // Purple
+      default:
+        return const Color(0xFF64748B); // Slate
     }
+  }
 
-    return completedList;
+  String _getTaskTypeLabel(String? type) {
+    switch (type?.toLowerCase()) {
+      case 'dailytask':
+        return 'Daily';
+      case 'weeklytask':
+        return 'Weekly';
+      case 'monthlytask':
+        return 'Monthly';
+      default:
+        return 'One-Time';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    try {
-      final task = widget.item;
+    final task = widget.item;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isOverdue = task.date != null &&
+        task.date!.isBefore(DateTime.now()) &&
+        !_isChecked;
 
-      print('Building ItemWidget for: ${task.title}');
-      print('Task type: ${task.taskType}');
-      print('Date: ${task.date}');
-      print('isCompleted: ${task.isCompleted}');
+    final typeColor = _getTaskTypeColor(task.taskType);
+    final typeLabel = _getTaskTypeLabel(task.taskType);
 
-      final isOverdue =
-          task.date != null &&
-          task.date!.isBefore(DateTime.now()) &&
-          !(task.isCompleted ?? false);
-      final textColor = isOverdue ? Colors.red : null;
+    final titleStyle = TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      decoration: _isChecked ? TextDecoration.lineThrough : null,
+      color: _isChecked
+          ? (isDark ? Colors.grey.shade500 : Colors.grey.shade400)
+          : (isDark ? Colors.white : const Color(0xFF0F172A)),
+    );
 
-      return Card(
-        elevation: 2,
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        child: ListTile(
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isChecked
+              ? (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0))
+              : isOverdue
+                  ? const Color(0xFFEF4444).withValues(alpha: 0.5)
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+          width: isOverdue ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.2)
+                : const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (context) => ItemDetailPage(task: task),
-              ),
+              MaterialPageRoute(builder: (_) => ItemDetailPage(task: task)),
             );
           },
-          leading: IconButton(
-            icon: Icon(
-              (isChecked ?? false)
-                  ? Icons.check_circle
-                  : Icons.radio_button_unchecked,
-              color: (isChecked ?? false) ? Colors.green : Colors.grey,
-              size: 28,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Left Accent Bar
+                Container(
+                  width: 4,
+                  height: 48,
+                  margin: const EdgeInsets.only(right: 12, top: 2),
+                  decoration: BoxDecoration(
+                    color: _isChecked ? Colors.grey.shade400 : typeColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // 2. Interactive Checkbox
+                GestureDetector(
+                  onTap: _toggleCompleted,
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 12, top: 4),
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: _isChecked
+                          ? const Color(0xFF10B981)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _isChecked
+                            ? const Color(0xFF10B981)
+                            : (isDark ? Colors.grey.shade600 : Colors.grey.shade400),
+                        width: 2,
+                      ),
+                    ),
+                    child: _isChecked
+                        ? const Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+
+                // 3. Main Content (Title, Detail, Metadata Chips)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Title
+                      RichText(
+                        text: _highlightSearchText(
+                          task.title,
+                          widget.searchQuery,
+                          titleStyle,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+
+                      // Optional Detail Preview
+                      if (task.detail.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          task.detail.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 8),
+
+                      // Badges Row
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          // Frequency Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: typeColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  task.taskType.toLowerCase() == 'dailytask'
+                                      ? Icons.repeat
+                                      : task.taskType.toLowerCase() == 'weeklytask'
+                                          ? Icons.calendar_view_week
+                                          : task.taskType.toLowerCase() == 'monthlytask'
+                                              ? Icons.calendar_month
+                                              : Icons.push_pin_outlined,
+                                  size: 11,
+                                  color: typeColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  typeLabel,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: typeColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Date / Time Badge
+                          if (task.date != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isOverdue
+                                    ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                                    : (isDark
+                                        ? Colors.white.withValues(alpha: 0.06)
+                                        : const Color(0xFFF1F5F9)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isOverdue
+                                        ? Icons.error_outline
+                                        : Icons.access_time_rounded,
+                                    size: 11,
+                                    color: isOverdue
+                                        ? const Color(0xFFEF4444)
+                                        : (isDark
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade600),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    isOverdue
+                                        ? "Overdue • ${DateFormat('MMM d, h:mm a').format(task.date!)}"
+                                        : DateFormat('MMM d, h:mm a').format(task.date!),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: isOverdue ? FontWeight.bold : FontWeight.w500,
+                                      color: isOverdue
+                                          ? const Color(0xFFEF4444)
+                                          : (isDark
+                                              ? Colors.grey.shade300
+                                              : Colors.grey.shade700),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 4. Quick Action Popup Menu
+                PopupMenuButton<String>(
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 20,
+                    color: isDark ? Colors.grey.shade400 : Colors.grey.shade500,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => EditTaskPage(task: task)),
+                      ).then((_) {
+                        widget.onEditDone?.call();
+                        widget.onTaskStatusChanged?.call();
+                      });
+                    } else if (value == 'delete') {
+                      _deleteTask(task);
+                    } else if (value == 'share') {
+                      SharePlus.instance.share(
+                        ShareParams(
+                          text: task.detail.trim().isNotEmpty
+                              ? "${task.title}\n\n${task.detail}"
+                              : task.title,
+                        ),
+                      );
+                    } else if (value == 'details') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ItemDetailPage(task: task)),
+                      );
+                    } else if (value == 'analytics') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AnalyticsPage(task: task)),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'details',
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 18),
+                          SizedBox(width: 8),
+                          Text('Details'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'analytics',
+                      child: Row(
+                        children: [
+                          Icon(Icons.insights, size: 18),
+                          SizedBox(width: 8),
+                          Text('Analytics'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'share',
+                      child: Row(
+                        children: [
+                          Icon(Icons.share_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Share'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            onPressed: () => changeCompleted(!(isChecked ?? false)),
-          ),
-          title: RichText(
-            text: _highlightSearchText(task.title, widget.searchQuery),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (task.date != null)
-                Text(
-                  DateFormat.yMd().add_jm().format(task.date!),
-                  style: TextStyle(color: textColor, fontSize: 12),
-                ),
-              if (buildExtraInfo(task) != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: buildExtraInfo(task)!,
-                ),
-            ],
-          ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EditTaskPage(task: task),
-                  ),
-                ).then((_) {
-                  // NEW: Refresh after editing
-                  widget.onEditDone?.call();
-                  widget.onTaskStatusChanged?.call();
-                });
-              } else if (value == 'delete') {
-                deleteTask(task);
-              } else if (value == 'share') {
-                Share.share("${task.title}\n\n${task.detail}");
-              } else if (value == 'details') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ItemDetailPage(task: task),
-                  ),
-                );
-              } else if (value == 'Analytics') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => AnalyticsPage(task: task)),
-                );
-              }
-            },
-            itemBuilder:
-                (context) => [
-                  const PopupMenuItem(value: 'edit', child: Text('✏️ Edit')),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Text('🗑️ Delete'),
-                  ),
-                  const PopupMenuItem(value: 'share', child: Text('📤 Share')),
-                  const PopupMenuItem(
-                    value: 'Analytics',
-                    child: Text("📈 Analytics"),
-                  ),
-                  const PopupMenuItem(
-                    value: 'details',
-                    child: Text('📄 Details'),
-                  ),
-                ],
           ),
         ),
-      );
-    } catch (e, stackTrace) {
-      print('Error building ItemWidget: $e');
-      print('Stack trace: $stackTrace');
-
-      return Card(
-        color: Colors.red[100],
-        child: ListTile(
-          leading: const Icon(Icons.error, color: Colors.red),
-          title: Text('Error loading: ${widget.item.title}'),
-          subtitle: Text('Type: ${widget.item.taskType}'),
-          trailing: IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(() {}),
-          ),
-        ),
-      );
-    }
-  }
-
-  Widget? buildExtraInfo(Task task) {
-    final taskType = task.taskType?.toLowerCase();
-    print('buildExtraInfo - taskType: $taskType');
-
-    if (taskType == 'dailytask') {
-      return Text(
-        "Repeats daily",
-        style: TextStyle(
-          color: Colors.blue[700],
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    } else if (taskType == 'weeklytask') {
-      return Text(
-        "Repeats weekly",
-        style: TextStyle(
-          color: Colors.green[700],
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    } else if (taskType == 'monthlytask') {
-      return Text(
-        "Repeats monthly",
-        style: TextStyle(
-          color: Colors.orange[700],
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    } else if (taskType == 'onetime') {
-      return null;
-    }
-
-    return Text(
-      "Task type: $taskType",
-      style: const TextStyle(color: Colors.grey, fontSize: 12),
+      ),
     );
   }
 }
