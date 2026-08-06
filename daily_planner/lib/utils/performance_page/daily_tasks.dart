@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:daily_planner/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 class DailyTasksStats extends StatefulWidget {
   const DailyTasksStats({super.key});
@@ -40,9 +40,6 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
   Future<void> fetchTaskStats(User user) async {
     setState(() => isLoading = true);
     try {
-      final now = DateTime.now();
-      final oneYearAgo = DateTime(now.year - 1, now.month, now.day);
-
       final snapshot =
           await FirebaseFirestore.instance
               .collection('users')
@@ -50,11 +47,6 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
               .collection('tasks')
               .where('taskType', isEqualTo: 'DailyTask')
               .get();
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        print('📄 ${doc.id} → taskType: ${data['taskType']}');
-      }
 
       final filteredTasks =
           snapshot.docs.where((doc) {
@@ -96,20 +88,13 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     final dailyTasks =
         rawTasks.where((task) => task['taskType'] == 'DailyTask').toList();
 
-    // Only count DailyTasks that exist (regardless of completion)
     totalTasks = dailyTasks.length;
 
     final attemptedTasks = dailyTasks.where((task) {
-  return task['completedAt'] != null;
-}).toList();
+      return task['completedAt'] != null;
+    }).toList();
 
-
-    totalTasks = dailyTasks.length;
-
-    completedTasks =
-        attemptedTasks
-            .length; // since we're only counting those with completionStamps
-
+    completedTasks = attemptedTasks.length;
     completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
 
     // Count overdue DailyTasks (task date < today and no completionStamps)
@@ -215,17 +200,17 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     }
   }
 
-  List<PieChartSectionData> generatePieChartData(int completed, int total) {
+  List<CustomPieSliceData> generatePieChartData(int completed, int total) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
     if (total == 0) {
       return [
-        PieChartSectionData(
+        CustomPieSliceData(
           value: 100,
           color: colorScheme.secondary,
           title: 'No data',
-          radius: 60,
+          radius: 50,
           titleStyle: theme.textTheme.bodyMedium?.copyWith(
             color: colorScheme.onSecondary,
           ),
@@ -238,22 +223,24 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     final double incompletePercent = (incomplete / total) * 100;
 
     return [
-      PieChartSectionData(
-        value: completedPercent,
+      CustomPieSliceData(
+        value: completedPercent > 0 ? completedPercent : 0.001,
         color: Colors.green,
         title: '${completedPercent.toStringAsFixed(1)}%',
-        radius: 60,
+        radius: 50,
         titleStyle: theme.textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onPrimary,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
         ),
       ),
-      PieChartSectionData(
-        value: incompletePercent,
+      CustomPieSliceData(
+        value: incompletePercent > 0 ? incompletePercent : 0.001,
         color: Colors.red,
         title: '${incompletePercent.toStringAsFixed(1)}%',
-        radius: 60,
+        radius: 50,
         titleStyle: theme.textTheme.bodyMedium?.copyWith(
-          color: colorScheme.onError,
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
         ),
       ),
     ];
@@ -274,7 +261,7 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     final textStyle = theme.textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text("Daily Tasks Performance"), centerTitle: true),
+      appBar: AppBar(title: const Text("Daily Tasks Performance"), centerTitle: true),
       body:
           isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -302,16 +289,13 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
                   const SizedBox(height: 10),
                   SizedBox(
                     height: 200,
-                    child: PieChart(
-                      PieChartData(
-                        sections: generatePieChartData(
-                          completedTasks,
-                          totalTasks,
-                        ),
-                        centerSpaceRadius: 40,
-                        sectionsSpace: 2,
-                        pieTouchData: PieTouchData(enabled: true),
+                    child: CustomPieChart(
+                      sections: generatePieChartData(
+                        completedTasks,
+                        totalTasks,
                       ),
+                      centerSpaceRadius: 40,
+                      sectionsSpace: 3,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -322,68 +306,30 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
                   const SizedBox(height: 10),
                   SizedBox(
                     height: 250,
-                    child: BarChart(
-                      BarChartData(
-                        gridData: const FlGridData(show: false),
-                        alignment: BarChartAlignment.spaceAround,
-                        barTouchData: BarTouchData(enabled: true),
-                        titlesData: FlTitlesData(
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true,
-                              getTitlesWidget: (value, meta) {
-                                final index = value.toInt();
-                                if (index < 0 || index > 6) {
-                                  return const SizedBox();
-                                }
-                                final date = DateTime.now().subtract(
-                                  Duration(days: 6 - index),
-                                );
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    _getWeekdayAbbreviation(date.weekday),
-                                    style: textStyle.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                );
-                              },
+                    child: CustomBarChart(
+                      barGroups: List.generate(7, (index) {
+                        final date = DateTime.now().subtract(
+                          Duration(days: 6 - index),
+                        );
+                        final key = formatDateKey(date);
+                        final count = completedLast7Days[key] ?? 0;
+                        final weekday = _getWeekdayAbbreviation(date.weekday);
+                        return CustomBarGroupData(
+                          x: index,
+                          label: weekday,
+                          barRods: [
+                            CustomBarRodData(
+                              toY: count.toDouble(),
+                              width: 20,
+                              color: Colors.blueAccent,
+                              borderRadius: BorderRadius.circular(4),
                             ),
-                          ),
-                          leftTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          rightTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                          topTitles: const AxisTitles(
-                            sideTitles: SideTitles(showTitles: false),
-                          ),
-                        ),
-                        borderData: FlBorderData(show: false),
-                        barGroups: List.generate(7, (index) {
-                          final date = DateTime.now().subtract(
-                            Duration(days: 6 - index),
-                          );
-                          final key = formatDateKey(date);
-                          final count = completedLast7Days[key] ?? 0;
-                          return BarChartGroupData(
-                            x: index,
-                            barRods: [
-                              BarChartRodData(
-                                toY: count.toDouble(),
-                                width: 20,
-                                color: Colors.blueAccent,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
+                          ],
+                        );
+                      }),
                     ),
                   ),
-                  SizedBox(height: 23),
+                  const SizedBox(height: 23),
                 ],
               ),
     );
@@ -394,7 +340,7 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: ListTile(
-        leading: Icon(Icons.analytics),
+        leading: const Icon(Icons.analytics),
         title: Text(label, style: theme.textTheme.bodyLarge),
         trailing: Text(value, style: theme.textTheme.titleMedium),
       ),

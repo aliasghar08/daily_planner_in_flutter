@@ -70,9 +70,8 @@ class DefaultFirebaseOptions {
     messagingSenderId: '777337977048',
     projectId: 'daily-planner-593d8',
     storageBucket: 'daily-planner-593d8.firebasestorage.app',
-    androidClientId: '777337977048-vf0nr3plk0e3k5h11u4r1gqsqrbm9o2u.apps.googleusercontent.com',
+    androidClientId: '777337977048-j16obl6r7ejgg4gp4g6g8vbukaesu54c.apps.googleusercontent.com',
     iosClientId: '777337977048-irs04ai9uj7jabkuvt1kv0dv4rj311bt.apps.googleusercontent.com',
     iosBundleId: 'com.example.dailyPlanner',
   );
-
 }

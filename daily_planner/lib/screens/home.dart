@@ -11,7 +11,7 @@ import 'package:daily_planner/utils/drawer.dart';
 import 'package:daily_planner/utils/item.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:daily_planner/services/custom_state_management.dart';
 
 enum TaskFilter { all, completed, incomplete, overdue }
 

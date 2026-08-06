@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/signup.dart';
+import 'package:daily_planner/services/native_google_sign_in.dart';
 import 'package:daily_planner/utils/passkey_auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:daily_planner/services/native_preferences_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -25,7 +25,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasskeyAvailable = false;
   bool _isPasskeyLoading = false;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final PasskeyAuthService _passkeyAuthService = PasskeyAuthService();
 
   @override
@@ -240,14 +239,14 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> signInWithGoogle() async {
     try {
-      await _googleSignIn.initialize();
-
-      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
-      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+      final googleAccount = await NativeGoogleSignIn.signIn();
+      if (googleAccount == null || googleAccount.idToken == null) {
+        return;
+      }
 
       final OAuthCredential credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-        accessToken: googleAuth.idToken,
+        idToken: googleAccount.idToken,
+        accessToken: googleAccount.idToken,
       );
 
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
@@ -260,22 +259,24 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!userDoc.exists) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'fullName': googleUser.displayName,
-          'email': googleUser.email,
+          'fullName': googleAccount.displayName ?? userCredential.user?.displayName,
+          'email': googleAccount.email ?? userCredential.user?.email,
           'createdAt': Timestamp.now(),
         });
       }
 
       // ✅ Save Remember Me preference for Google sign-in
-      if (_rememberMe) {
+      if (_rememberMe && googleAccount.email != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('rememberMe', true);
-        await prefs.setString('savedEmail', googleUser.email);
+        await prefs.setString('savedEmail', googleAccount.email!);
       }
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Welcome, ${googleUser.displayName ?? "User"}!'),
+          content: Text('Welcome, ${googleAccount.displayName ?? userCredential.user?.displayName ?? "User"}!'),
         ),
       );
 
@@ -284,10 +285,12 @@ class _LoginPageState extends State<LoginPage> {
         MaterialPageRoute(builder: (_) => const MyHome()),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Google sign-in failed.')));
-      print("Google sign-in error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Google sign-in failed.')));
+      }
+      debugPrint("Google sign-in error: $e");
     }
   }
 

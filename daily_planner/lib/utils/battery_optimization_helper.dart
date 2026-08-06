@@ -1,54 +1,47 @@
-import 'package:disable_battery_optimization/disable_battery_optimization.dart';
 import 'package:flutter/foundation.dart';
+import 'native_permission_service.dart';
 
+/// Custom Battery Optimization & AutoStart Helper
+/// Uses native Android system intents and power manager APIs directly.
 class BatteryOptimizationHelper {
-  /// Checks if battery optimization is disabled and,
-  /// if not, prompts the user to disable it.
+  /// Checks if battery optimization is disabled and prompts the user if needed.
   static Future<void> ensureDisabled() async {
     try {
-      final isIgnored =
-          await DisableBatteryOptimization.isBatteryOptimizationDisabled;
+      final isIgnored = await NativePermissionService.isIgnoringBatteryOptimizations();
 
       if (kDebugMode) {
-        print("🔋 Battery optimization ignored: $isIgnored");
+        debugPrint("🔋 Battery optimization ignored: $isIgnored");
       }
 
-      if (!isIgnored!) {
-        final result =
-            await DisableBatteryOptimization.showDisableBatteryOptimizationSettings();
-
-        if (kDebugMode) {
-          print("🔋 Battery optimization disable request result: $result");
-        }
+      if (!isIgnored) {
+        await NativePermissionService.disableBatteryOptimization();
       }
     } catch (e) {
       if (kDebugMode) {
-        print("❌ Error requesting battery optimization disable: $e");
+        debugPrint("❌ Error requesting battery optimization disable: $e");
       }
     }
   }
 
-    static Future<void> ensureManufacturerBatteryOptimizationDisabled() async {
-    bool? isManBatteryOptimizationDisabled =
-        await DisableBatteryOptimization.isManufacturerBatteryOptimizationDisabled;
-
-    if (isManBatteryOptimizationDisabled == false) {
-      await DisableBatteryOptimization.showDisableManufacturerBatteryOptimizationSettings(
-        "Your device has additional battery optimization",
-        "Follow the steps and disable the optimizations to allow smooth functioning of this app",
-      );
+  /// Opens OEM-specific power saver / autostart settings if applicable.
+  static Future<void> ensureManufacturerBatteryOptimizationDisabled() async {
+    try {
+      final isIgnored = await NativePermissionService.isIgnoringBatteryOptimizations();
+      if (!isIgnored) {
+        await NativePermissionService.openAutoStartSettings();
+      }
+    } catch (e) {
+      debugPrint("❌ Error ensuring manufacturer battery optimization: $e");
     }
   }
 
+  /// Opens OEM autostart settings for Chinese & customized Android ROMs.
   static Future<void> ensureAutoStartEnabled() async {
-    bool? isAutoStartEnabled =
-        await DisableBatteryOptimization.isAutoStartEnabled;
-
-    if (!(isAutoStartEnabled ?? false)) {
-      await DisableBatteryOptimization.showEnableAutoStartSettings(
-        "Enable Auto Start",
-        "Follow the steps and enable the auto start of this app",
-      );
+    try {
+      await NativePermissionService.openAutoStartSettings();
+    } catch (e) {
+      debugPrint("❌ Error opening auto-start settings: $e");
     }
   }
 }
+

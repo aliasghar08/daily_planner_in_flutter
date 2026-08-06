@@ -1,15 +1,12 @@
 import 'dart:convert';
+import 'package:daily_planner/services/native_biometric_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:local_auth/local_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:daily_planner/services/native_preferences_service.dart';
 
 class PasskeyAuthService {
   static final PasskeyAuthService _instance = PasskeyAuthService._internal();
   factory PasskeyAuthService() => _instance;
   PasskeyAuthService._internal();
-
-  final LocalAuthentication _localAuth = LocalAuthentication();
 
   static const String _prefPasskeyEnabled = 'pref_passkey_enabled';
   static const String _prefPasskeyEmail = 'pref_passkey_email';
@@ -18,7 +15,7 @@ class PasskeyAuthService {
   /// Check if the device hardware supports Passkeys / Biometrics
   Future<bool> isDeviceSupported() async {
     try {
-      return await _localAuth.isDeviceSupported();
+      return await NativeBiometricService.isDeviceSupported();
     } catch (e) {
       debugPrint('Error checking device biometric/passkey support: $e');
       return false;
@@ -28,9 +25,7 @@ class PasskeyAuthService {
   /// Check if biometrics or device credentials are enrolled
   Future<bool> canCheckBiometrics() async {
     try {
-      final isSupported = await _localAuth.isDeviceSupported();
-      final canCheck = await _localAuth.canCheckBiometrics;
-      return isSupported && canCheck;
+      return await NativeBiometricService.canCheckBiometrics();
     } catch (e) {
       debugPrint('Error checking canCheckBiometrics: $e');
       return false;
@@ -40,7 +35,7 @@ class PasskeyAuthService {
   /// Get list of available biometric types (face, fingerprint, etc.)
   Future<List<BiometricType>> getAvailableBiometrics() async {
     try {
-      return await _localAuth.getAvailableBiometrics();
+      return await NativeBiometricService.getAvailableBiometrics();
     } catch (e) {
       debugPrint('Error getting available biometrics: $e');
       return [];
@@ -132,24 +127,16 @@ class PasskeyAuthService {
     String reason = 'Verify your identity with Passkey or Biometrics',
   }) async {
     try {
-      final isSupported = await _localAuth.isDeviceSupported();
+      final isSupported = await NativeBiometricService.isDeviceSupported();
       if (!isSupported) {
         debugPrint('Passkey/Biometric not supported on this device');
         return false;
       }
 
-      return await _localAuth.authenticate(
-        localizedReason: reason,
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-          useErrorDialogs: true,
-          sensitiveTransaction: true,
-        ),
+      return await NativeBiometricService.authenticate(
+        title: 'Passkey Verification',
+        description: reason,
       );
-    } on PlatformException catch (e) {
-      debugPrint('PlatformException in verifyWithPasskey: ${e.code} - ${e.message}');
-      return false;
     } catch (e) {
       debugPrint('Unexpected error in verifyWithPasskey: $e');
       return false;

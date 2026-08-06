@@ -1,29 +1,51 @@
 package com.example.daily_planner
 
+import android.Manifest
 import android.app.AlarmManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import android.app.KeyguardManager
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.TimeZone
 
 class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        private const val REQUEST_CODE_NOTIFICATION = 1001
         const val CHANNEL_EXACT_ALARM = "exact_alarm_permission"
         const val CHANNEL_MAIN_ALARM = "com.example.daily_planner/alarm"
         const val CHANNEL_SERVICE = "daily_planner/alarm_service"
+        const val CHANNEL_PERMISSION = "daily_planner/native_permissions"
+        const val CHANNEL_CONNECTIVITY = "daily_planner/native_connectivity"
+        const val CHANNEL_SHARE = "daily_planner/native_share"
+        const val CHANNEL_TIMEZONE = "daily_planner/native_timezone"
+        const val CHANNEL_BIOMETRIC = "daily_planner/native_biometric"
+        const val CHANNEL_GOOGLE_AUTH = "daily_planner/native_google_signin"
+        const val CHANNEL_PREFERENCES = "daily_planner/native_preferences"
     }
+
+    private var pendingPermissionResult: MethodChannel.Result? = null
+    private val googleAuthHandler by lazy { NativeGoogleAuthHandler(this) }
+    private val preferencesHandler by lazy { NativePreferencesHandler(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +74,17 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_EXACT_ALARM).setMethodCallHandler(handler)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_MAIN_ALARM).setMethodCallHandler(handler)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SERVICE).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_PERMISSION).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_CONNECTIVITY).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SHARE).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_TIMEZONE).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_BIOMETRIC).setMethodCallHandler(handler)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_GOOGLE_AUTH).setMethodCallHandler { call, result ->
+            googleAuthHandler.handleMethodCall(call, result)
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_PREFERENCES).setMethodCallHandler { call, result ->
+            preferencesHandler.handleMethodCall(call, result)
+        }
     }
 
     private fun handleMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -81,6 +114,16 @@ class MainActivity : FlutterFragmentActivity() {
                         saveToStorage = true
                     )
                     result.success(success)
+                }
+
+                "showNotification", "showNow" -> {
+                    val id = call.argument<Int>("id") ?: ((System.currentTimeMillis() % 100000).toInt())
+                    val title = call.argument<String>("title") ?: "Daily Planner"
+                    val body = call.argument<String>("body") ?: "Notification"
+                    val payload = call.argument<String>("payload")
+
+                    AlarmReceiver.showNotification(this, id, title, body, payload)
+                    result.success(true)
                 }
 
                 "cancelAlarm", "cancelNativeAlarm" -> {
@@ -121,6 +164,19 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(true)
                 }
 
+                "checkNotificationPermission" -> {
+                    result.success(checkNotificationPermission())
+                }
+
+                "requestNotificationPermission" -> {
+                    requestNotificationPermission(result)
+                }
+
+                "openNotificationSettings" -> {
+                    openNotificationSettings()
+                    result.success(true)
+                }
+
                 "isIgnoringBatteryOptimizations" -> {
                     result.success(isIgnoringBatteryOptimizations())
                 }
@@ -142,7 +198,8 @@ class MainActivity : FlutterFragmentActivity() {
                         "model" to Build.MODEL,
                         "sdkVersion" to Build.VERSION.SDK_INT,
                         "isIgnoringBatteryOptimizations" to isIgnoringBatteryOptimizations(),
-                        "canScheduleExactAlarms" to canScheduleExactAlarms()
+                        "canScheduleExactAlarms" to canScheduleExactAlarms(),
+                        "isNotificationPermissionGranted" to checkNotificationPermission()
                     )
                     result.success(brandInfo)
                 }
@@ -179,12 +236,105 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(true)
                 }
 
+                "checkConnectivity" -> {
+                    val status = checkNetworkConnectivity()
+                    result.success(status)
+                }
+
+                "shareText" -> {
+                    val text = call.argument<String>("text") ?: ""
+                    val subject = call.argument<String>("subject") ?: ""
+                    shareText(text, subject)
+                    result.success(true)
+                }
+
+                "getDeviceTimezone" -> {
+                    val tz = TimeZone.getDefault().id
+                    result.success(tz)
+                }
+
+                "isBiometricSupported" -> {
+                    result.success(isBiometricSupported())
+                }
+
+                "canCheckBiometrics" -> {
+                    result.success(canCheckBiometrics())
+                }
+
+                "getAvailableBiometrics" -> {
+                    result.success(getAvailableBiometrics())
+                }
+
+                "authenticateBiometric" -> {
+                    authenticateBiometric(call, result)
+                }
+
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Method call failed: ${call.method}", e)
             result.error("ERROR", "Method execution failed: ${e.message}", null)
         }
+    }
+
+    private fun checkNotificationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            NotificationManagerCompat.from(this).areNotificationsEnabled()
+        }
+    }
+
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                result.success(true)
+            } else {
+                pendingPermissionResult = result
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    REQUEST_CODE_NOTIFICATION
+                )
+            }
+        } else {
+            result.success(NotificationManagerCompat.from(this).areNotificationsEnabled())
+        }
+    }
+
+    private fun openNotificationSettings() {
+        try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            } else {
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to open notification settings: ${e.message}")
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_NOTIFICATION) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            pendingPermissionResult?.success(granted)
+            pendingPermissionResult = null
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (googleAuthHandler.onActivityResult(requestCode, resultCode, data)) {
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun canScheduleExactAlarms(): Boolean {
@@ -375,6 +525,179 @@ class MainActivity : FlutterFragmentActivity() {
             } catch (_: Exception) {
                 return false
             }
+        }
+    }
+
+    private fun checkNetworkConnectivity(): String {
+        try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return "none"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = cm.activeNetwork ?: return "none"
+                val capabilities = cm.getNetworkCapabilities(network) ?: return "none"
+                return when {
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+                    capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) -> "wifi"
+                    else -> "none"
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                val activeInfo = cm.activeNetworkInfo
+                if (activeInfo != null && activeInfo.isConnected) {
+                    @Suppress("DEPRECATION")
+                    return when (activeInfo.type) {
+                        ConnectivityManager.TYPE_WIFI -> "wifi"
+                        ConnectivityManager.TYPE_MOBILE -> "mobile"
+                        ConnectivityManager.TYPE_ETHERNET -> "ethernet"
+                        else -> "wifi"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to check network connectivity: ${e.message}")
+        }
+        return "none"
+    }
+
+    private fun shareText(text: String, subject: String) {
+        try {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+                if (subject.isNotEmpty()) {
+                    putExtra(Intent.EXTRA_SUBJECT, subject)
+                }
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val chooser = Intent.createChooser(shareIntent, "Share with").apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(chooser)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to share text: ${e.message}", e)
+        }
+    }
+
+    private fun isBiometricSupported(): Boolean {
+        return try {
+            val biometricManager = BiometricManager.from(this)
+            val canAuth = biometricManager.canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            canAuth != BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE
+        } catch (e: Exception) {
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            keyguardManager?.isKeyguardSecure ?: false
+        }
+    }
+
+    private fun canCheckBiometrics(): Boolean {
+        return try {
+            val biometricManager = BiometricManager.from(this)
+            val canAuth = biometricManager.canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            )
+            canAuth == BiometricManager.BIOMETRIC_SUCCESS
+        } catch (e: Exception) {
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            keyguardManager?.isKeyguardSecure ?: false
+        }
+    }
+
+    private fun getAvailableBiometrics(): List<String> {
+        val types = mutableListOf<String>()
+        try {
+            val pm = packageManager
+            if (pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+                types.add("fingerprint")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm.hasSystemFeature(PackageManager.FEATURE_FACE)) {
+                types.add("face")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && pm.hasSystemFeature(PackageManager.FEATURE_IRIS)) {
+                types.add("iris")
+            }
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (keyguardManager?.isKeyguardSecure == true) {
+                types.add("deviceCredential")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error checking available biometrics: ${e.message}")
+        }
+        return types
+    }
+
+    private fun authenticateBiometric(call: MethodCall, result: MethodChannel.Result) {
+        val title = call.argument<String>("title") ?: "Authentication Required"
+        val subtitle = call.argument<String>("subtitle") ?: ""
+        val description = call.argument<String>("description") ?: "Verify your identity to continue"
+        val negativeButtonText = call.argument<String>("negativeButtonText") ?: "Cancel"
+
+        val executor = ContextCompat.getMainExecutor(this)
+        var callbackInvoked = false
+
+        val biometricPrompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(authResult)
+                    if (!callbackInvoked) {
+                        callbackInvoked = true
+                        result.success(true)
+                    }
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    if (!callbackInvoked) {
+                        callbackInvoked = true
+                        if (errorCode == BiometricPrompt.ERROR_USER_CANCELED ||
+                            errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON ||
+                            errorCode == BiometricPrompt.ERROR_CANCELED) {
+                            result.success(false)
+                        } else {
+                            result.error("AUTH_ERROR_$errorCode", errString.toString(), null)
+                        }
+                    }
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    // Still listening for next attempt
+                }
+            }
+        )
+
+        try {
+            val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setDescription(description)
+
+            if (subtitle.isNotEmpty()) {
+                promptInfoBuilder.setSubtitle(subtitle)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                promptInfoBuilder.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                    BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                    BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
+            } else {
+                promptInfoBuilder.setNegativeButtonText(negativeButtonText)
+            }
+
+            val promptInfo = promptInfoBuilder.build()
+            biometricPrompt.authenticate(promptInfo)
+        } catch (e: Exception) {
+            Log.e(TAG, "Biometric authentication setup failed: ${e.message}", e)
+            result.error("BIOMETRIC_EXCEPTION", e.message, null)
         }
     }
 

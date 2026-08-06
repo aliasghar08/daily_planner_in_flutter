@@ -1,5 +1,5 @@
+import 'package:daily_planner/services/native_preferences_service.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsProvider extends ChangeNotifier {
   bool _notificationsEnabled = true;

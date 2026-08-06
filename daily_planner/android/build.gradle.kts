@@ -33,12 +33,11 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.value(newBuildDir)
+val newBuildDir: java.io.File = java.io.File(rootProject.projectDir.parentFile, "build")
+rootProject.layout.buildDirectory.set(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    project.layout.buildDirectory.set(java.io.File(newBuildDir, project.name))
 }
 subprojects {
     project.evaluationDependsOn(":app")

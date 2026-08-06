@@ -8,8 +8,8 @@ import 'package:daily_planner/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:daily_planner/services/custom_state_management.dart';
+import 'package:daily_planner/services/native_share_service.dart';
 
 class ItemWidget extends StatefulWidget {
   final Task item;
@@ -574,12 +574,10 @@ class _ItemWidgetState extends State<ItemWidget> {
                     } else if (value == 'delete') {
                       _deleteTask(task);
                     } else if (value == 'share') {
-                      SharePlus.instance.share(
-                        ShareParams(
-                          text: task.detail.trim().isNotEmpty
-                              ? "${task.title}\n\n${task.detail}"
-                              : task.title,
-                        ),
+                      NativeShareService.share(
+                        task.detail.trim().isNotEmpty
+                            ? "${task.title}\n\n${task.detail}"
+                            : task.title,
                       );
                     } else if (value == 'details') {
                       Navigator.push(

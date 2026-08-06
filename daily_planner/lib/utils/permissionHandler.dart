@@ -1,25 +1,28 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'native_permission_service.dart';
 
 Future<void> requestPermission() async {
-
-    if (kIsWeb) {
-    print("🌐 Web platform: no notification permission required.");
+  if (kIsWeb) {
+    debugPrint("🌐 Web platform: no notification permission required.");
     return;
   }
-  if (Platform.isAndroid) {
-    final status = await Permission.notification.status;
-    if (!status.isGranted) {
-      final result = await Permission.notification.request();
-      if (result.isGranted) {
-        print("✅ Android notification permission granted");
-      } else {
-        print("❌ Android notification permission denied");
-      }
+  
+  final isGranted = await NativePermissionService.isNotificationPermissionGranted();
+  if (!isGranted) {
+    final result = await NativePermissionService.requestNotificationPermission();
+    if (result) {
+      debugPrint("✅ Android notification permission granted");
     } else {
-      print("✅ Android notification already granted");
+      debugPrint("❌ Android notification permission denied");
     }
+  } else {
+    debugPrint("✅ Android notification already granted");
+  }
+
+  // Also check exact alarm permission
+  final exactAlarm = await NativePermissionService.isExactAlarmPermissionGranted();
+  if (!exactAlarm) {
+    await NativePermissionService.requestExactAlarmPermission();
   }
 }
+

@@ -5,25 +5,20 @@ import 'package:daily_planner/providers/task_provider.dart';
 import 'package:daily_planner/providers/theme_provider.dart';
 import 'package:daily_planner/providers/settings_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:daily_planner/utils/native_permission_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:daily_planner/utils/reset_task.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/screens/login.dart';
 import 'package:daily_planner/screens/changePass.dart';
 import 'package:daily_planner/screens/forgotPass.dart';
-import 'package:timezone/timezone.dart' as tz;
-import 'package:provider/provider.dart';
+import 'package:daily_planner/services/custom_state_management.dart';
 import 'package:daily_planner/utils/app_theme.dart';
+import 'package:daily_planner/utils/reset_task.dart';
 import 'firebase_options.dart';
-
-final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -36,7 +31,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   // Show notification when app is in background/terminated
   if (message.notification != null) {
-    await _showNotification(
+    await NativeAlarmHelper.showNow(
+      id: message.hashCode.abs() % 100000,
       title: message.notification!.title ?? 'Daily Planner',
       body: message.notification!.body ?? 'New notification',
     );
@@ -47,22 +43,11 @@ Future<void> showNotification({
   required String title,
   required String body,
 }) async {
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-    'alarm_channel', // channel id
-    'Alarm Notifications', // channel name
-    channelDescription: 'This channel is for alarm notifications',
-    importance: Importance.max,
-    priority: Priority.max,
-    ticker: 'ticker',
-    playSound: true,
-    category: AndroidNotificationCategory.alarm,
+  await NativeAlarmHelper.showNow(
+    id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+    title: title,
+    body: body,
   );
-
-  const NotificationDetails platformDetails = NotificationDetails(
-    android: androidDetails,
-  );
-
-  await flutterLocalNotificationsPlugin.show(0, title, body, platformDetails);
 }
 
 // Show notification helper
@@ -70,30 +55,10 @@ Future<void> _showNotification({
   required String title,
   required String body,
 }) async {
-  const AndroidNotificationDetails androidPlatformChannelSpecifics =
-      AndroidNotificationDetails(
-        'daily_planner_channel',
-        'Daily Planner Notifications',
-        channelDescription: 'Channel for task reminders and notifications',
-        importance: Importance.max,
-        priority: Priority.high,
-        showWhen: true,
-      );
-
-  const NotificationDetails platformChannelSpecifics = NotificationDetails(
-    android: androidPlatformChannelSpecifics,
-    iOS: DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    ),
-  );
-
-  await flutterLocalNotificationsPlugin.show(
-    DateTime.now().millisecondsSinceEpoch.remainder(100000),
-    title,
-    body,
-    platformChannelSpecifics,
+  await NativeAlarmHelper.showNow(
+    id: DateTime.now().millisecondsSinceEpoch.remainder(100000),
+    title: title,
+    body: body,
   );
 }
 
@@ -129,9 +94,6 @@ Future<void> main() async {
     debugPrint("❌ Firebase initialization error: $e");
     // Continue anyway - we'll use offline capabilities
   }
-
-  // Initialize timezone FIRST
-  tz.initializeTimeZones();
 
   // Initialize NotificationService BEFORE running app
   await _initializeNotificationService();
@@ -259,51 +221,15 @@ Future<void> _saveFCMTokenToFirestore(String? token) async {
 
 Future<void> _initializeAndroidServices() async {
   try {
-    await Permission.notification.request();
+    await NativePermissionService.requestAllCorePermissions();
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    final iosInit = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    final initializationSettings = InitializationSettings(
-      android: androidInit,
-      iOS: iosInit,
-    );
-
-    await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        debugPrint('Notification tapped: ${response.payload}');
-
-        // Handle notification tap
-        if (response.actionId == 'STOP_ACTION') {
-          flutterLocalNotificationsPlugin.cancel(response.id!);
-        } else if (response.actionId == 'SNOOZE_ACTION') {
-          flutterLocalNotificationsPlugin.cancel(response.id!);
-          flutterLocalNotificationsPlugin.zonedSchedule(
-            response.id!,
-            'Snoozed Reminder',
-            'Reminder after snooze!',
-            tz.TZDateTime.now(tz.local).add(const Duration(minutes: 5)),
-            const NotificationDetails(
-              android: AndroidNotificationDetails(
-                'daily_planner_channel',
-                'Daily Planner Notifications',
-                channelDescription:
-                    'Channel for task reminders and notifications',
-              ),
-            ),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          );
-        } else {
-          // Regular notification tap - navigate to home
-          navigatorKey.currentState?.pushNamed('/home');
-        }
-      },
-    );
+    NativeAlarmHelper.listenToActions((actionData) {
+      debugPrint('Notification action received: $actionData');
+      final action = actionData['action'];
+      if (action == 'tap') {
+        navigatorKey.currentState?.pushNamed('/home');
+      }
+    });
 
     debugPrint('✅ Android services initialized successfully');
   } catch (e) {

@@ -59,6 +59,17 @@ class AlarmReceiver : BroadcastReceiver() {
                 nm?.createNotificationChannel(channel)
             }
         }
+
+        fun showNotification(context: Context, id: Int, title: String, body: String, payload: String? = null) {
+            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                action = ACTION_TRIGGER_ALARM
+                putExtra(EXTRA_ID, id)
+                putExtra(EXTRA_TITLE, title)
+                putExtra(EXTRA_BODY, body)
+                putExtra(EXTRA_PAYLOAD, payload)
+            }
+            AlarmReceiver().handleTriggerAlarm(context, intent, id)
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {

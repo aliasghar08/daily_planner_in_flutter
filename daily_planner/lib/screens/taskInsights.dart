@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:daily_planner/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:daily_planner/utils/catalog.dart';
@@ -333,45 +333,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           : 0.0;
     });
 
-    return BarChart(
-      BarChartData(
-        barGroups: List.generate(7, (i) {
-          return BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: data[i],
-                color: data[i] > 0 ? Colors.blue[300] : Colors.grey[300],
-                width: 20,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ],
-          );
-        }),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    labels[value.toInt()],
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                );
-              },
-              reservedSize: 30,
+    return CustomBarChart(
+      barGroups: List.generate(7, (i) {
+        return CustomBarGroupData(
+          x: i,
+          label: labels[i],
+          barRods: [
+            CustomBarRodData(
+              toY: data[i],
+              color: data[i] > 0 ? Colors.blue[300]! : Colors.grey[300]!,
+              width: 20,
+              borderRadius: BorderRadius.circular(4),
             ),
-          ),
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        ),
-        gridData: const FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-      ),
+          ],
+        );
+      }),
     );
   }
 
@@ -488,33 +464,36 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     final total = times.length.toDouble();
     final sections = [
-      PieChartSectionData(
-        value: morning / total * 100,
+      CustomPieSliceData(
+        value: morning > 0 ? (morning / total * 100) : 0.001,
         color: Colors.blue,
         title: '${(morning / total * 100).round()}%',
         radius: 40,
       ),
-      PieChartSectionData(
-        value: afternoon / total * 100,
+      CustomPieSliceData(
+        value: afternoon > 0 ? (afternoon / total * 100) : 0.001,
         color: Colors.orange,
         title: '${(afternoon / total * 100).round()}%',
         radius: 40,
       ),
-      PieChartSectionData(
-        value: evening / total * 100,
+      CustomPieSliceData(
+        value: evening > 0 ? (evening / total * 100) : 0.001,
         color: Colors.purple,
         title: '${(evening / total * 100).round()}%',
         radius: 40,
       ),
-      PieChartSectionData(
-        value: night / total * 100,
+      CustomPieSliceData(
+        value: night > 0 ? (night / total * 100) : 0.001,
         color: Colors.grey,
         title: '${(night / total * 100).round()}%',
         radius: 40,
       ),
     ];
 
-    return PieChart(PieChartData(sections: sections, centerSpaceRadius: 30));
+    return CustomPieChart(
+      sections: sections,
+      centerSpaceRadius: 30,
+    );
   }
 
   Widget _buildMonthlyTrendChart(List<DateTime> stamps) {
@@ -543,63 +522,23 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     // Find max value for scaling
     final maxValue = chartData.reduce(max) * 1.2;
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxValue > 0 ? maxValue : 5, // Ensure chart has some height
-        barGroups: List.generate(6, (i) {
-          return BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: chartData[i],
-                color: _getChartColor(chartData[i]),
-                width: 20,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ],
-          );
-        }),
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(
-                    months[value.toInt()],
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                );
-              },
-              reservedSize: 30,
+    return CustomBarChart(
+      maxY: maxValue > 0 ? maxValue : 5,
+      showGrid: true,
+      barGroups: List.generate(6, (i) {
+        return CustomBarGroupData(
+          x: i,
+          label: months[i],
+          barRods: [
+            CustomBarRodData(
+              toY: chartData[i],
+              color: _getChartColor(chartData[i]),
+              width: 20,
+              borderRadius: BorderRadius.circular(4),
             ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: maxValue > 10 ? 2 : 1,
-              getTitlesWidget: (value, meta) {
-                return Text(
-                  value.toInt().toString(),
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                );
-              },
-              reservedSize: 28,
-            ),
-          ),
-          rightTitles: AxisTitles(),
-          topTitles: AxisTitles(),
-        ),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: maxValue > 10 ? 2 : 1,
-        ),
-        borderData: FlBorderData(show: false),
-      ),
+          ],
+        );
+      }),
     );
   }
 
@@ -1596,90 +1535,57 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
             "Hour ${hour.hour}: sent=$sentCount, pending=$pendingCount (total=${sentCount + pendingCount})",
           );
 
-          return BarChartGroupData(
+          String label = '';
+          switch (hour.hour) {
+            case 0:
+              label = "12A";
+              break;
+            case 3:
+              label = "3A";
+              break;
+            case 6:
+              label = "6A";
+              break;
+            case 9:
+              label = "9A";
+              break;
+            case 12:
+              label = "12P";
+              break;
+            case 15:
+              label = "3P";
+              break;
+            case 18:
+              label = "6P";
+              break;
+            case 21:
+              label = "9P";
+              break;
+          }
+
+          return CustomBarGroupData(
             x: hour.hour,
+            label: label,
             barRods: [
-              BarChartRodData(
+              CustomBarRodData(
                 toY: sentCount.toDouble(),
                 color: Colors.green,
-                width: 12,
-                borderRadius: BorderRadius.zero,
+                width: 8,
+                borderRadius: BorderRadius.circular(2),
               ),
-              BarChartRodData(
+              CustomBarRodData(
                 toY: pendingCount.toDouble(),
                 color: Colors.blue,
-                width: 12,
-                borderRadius: BorderRadius.zero,
+                width: 8,
+                borderRadius: BorderRadius.circular(2),
               ),
             ],
           );
         }).toList();
 
-    // Determine max Y value dynamically
-    final maxY = bars
-        .map(
-          (barGroup) => barGroup.barRods
-              .map((rod) => rod.toY)
-              .reduce((a, b) => a > b ? a : b),
-        )
-        .fold<double>(0, (prev, curr) => prev > curr ? prev : curr);
-
-    // Adaptive interval for left axis (as double)
-    final interval = max((maxY / 4).ceilToDouble(), 1.0);
-
-    return BarChart(
-      BarChartData(
-        barGroups: bars,
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 3, // Show every 3 hours
-              getTitlesWidget: (value, meta) {
-                final hour = value.toInt();
-                switch (hour) {
-                  case 0:
-                    return const Text("12AM", style: TextStyle(fontSize: 10));
-                  case 3:
-                    return const Text("3AM", style: TextStyle(fontSize: 10));
-                  case 6:
-                    return const Text("6AM", style: TextStyle(fontSize: 10));
-                  case 9:
-                    return const Text("9AM", style: TextStyle(fontSize: 10));
-                  case 12:
-                    return const Text("12PM", style: TextStyle(fontSize: 10));
-                  case 15:
-                    return const Text("3PM", style: TextStyle(fontSize: 10));
-                  case 18:
-                    return const Text("6PM", style: TextStyle(fontSize: 10));
-                  case 21:
-                    return const Text("9PM", style: TextStyle(fontSize: 10));
-                  default:
-                    return const SizedBox.shrink();
-                }
-              },
-              reservedSize: 36,
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: interval, // ✅ Now a double
-              getTitlesWidget: (value, meta) {
-                return Text(value.toInt().toString());
-              },
-              reservedSize: 28,
-            ),
-          ),
-          rightTitles: const AxisTitles(),
-          topTitles: const AxisTitles(),
-        ),
-        gridData: FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-        alignment: BarChartAlignment.spaceAround,
-        maxY: max(maxY * 1.2, 4), // 20% padding, minimum 4
-      ),
+    return CustomBarChart(
+      barGroups: bars,
+      showGrid: false,
     );
   }
 

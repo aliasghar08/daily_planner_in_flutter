@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:daily_planner/services/native_connectivity_service.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:intl/intl.dart';
 
 class ItemDetailPage extends StatefulWidget {
@@ -18,8 +17,6 @@ class ItemDetailPage extends StatefulWidget {
 }
 
 class _ItemDetailPageState extends State<ItemDetailPage> {
-  late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
-
   List<DateTime> completedList = [];
   List<DateTime> notificationTimes = [];
   bool? _currentCompletionStatus;
@@ -33,23 +30,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   TimeOfDay? _recurrenceTime;
   Map<String, bool>? _selectedDays;
 
-  final AndroidNotificationDetails _androidDetails =
-      const AndroidNotificationDetails(
-        'daily_planner_channel',
-        'Daily Planner Notifications',
-        importance: Importance.max,
-        priority: Priority.high,
-        channelDescription: 'Channel for task reminders',
-        playSound: true,
-        enableLights: true,
-        enableVibration: true,
-        visibility: NotificationVisibility.public,
-      );
-
   @override
   void initState() {
     super.initState();
-    flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     _currentCompletionStatus = widget.task.isCompleted;
 
     // Parse recurrence information from task
@@ -58,7 +41,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     // Initialize NativeAlarmHelper and load data
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeNativeAlarmHelper();
-      await _checkNotificationChannel();
       await _loadTaskData();
     });
   }
@@ -217,37 +199,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     if (oldWidget.task.docId != widget.task.docId) _loadTaskData();
   }
 
-  Future<void> _checkNotificationChannel() async {
-    if (!Platform.isAndroid) return;
-    final androidImpl =
-        flutterLocalNotificationsPlugin
-            .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin
-            >();
-    final channels = await androidImpl?.getNotificationChannels();
-    if (channels == null || channels.isEmpty) {
-      await _createNotificationChannel();
-    }
-  }
 
-  Future<void> _createNotificationChannel() async {
-    if (!Platform.isAndroid) return;
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >()
-        ?.createNotificationChannel(
-          AndroidNotificationChannel(
-            _androidDetails.channelId,
-            _androidDetails.channelName,
-            description: _androidDetails.channelDescription,
-            importance: _androidDetails.importance,
-            playSound: _androidDetails.playSound,
-            enableVibration: _androidDetails.enableVibration,
-            enableLights: _androidDetails.enableLights,
-          ),
-        );
-  }
 
   // ✅ NEW: Format recurrence information for display
   String _getRecurrenceDescription() {
@@ -356,15 +308,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       }
 
       // Get connectivity status for user feedback
-      final connectivity = Connectivity();
-      final results = await connectivity.checkConnectivity();
-      final isOnline = results.any(
-        (result) =>
-            result == ConnectivityResult.wifi ||
-            result == ConnectivityResult.mobile ||
-            result == ConnectivityResult.ethernet ||
-            result == ConnectivityResult.vpn,
-      );
+      final isOnline = await NativeConnectivityService.isConnected;
 
       // Prepare payload with recurrence info
       final payload = {

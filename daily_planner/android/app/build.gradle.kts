@@ -73,6 +73,9 @@ dependencies {
 
     // WorkManager for background tasks
     implementation("androidx.work:work-runtime-ktx:2.8.1")
+
+    // Biometric authentication (Fingerprint, Face, Passkey/Device Credential)
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
 }
 
 // ✅ Important: DO NOT add any `flutter { source = ... }` block here

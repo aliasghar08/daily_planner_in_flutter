@@ -4,7 +4,7 @@ import 'package:daily_planner/providers/settings_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/passkey_auth_service.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:daily_planner/services/custom_state_management.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});

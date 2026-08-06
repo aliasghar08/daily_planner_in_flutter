@@ -1,10 +1,8 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:daily_planner/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:intl/intl.dart';
 
 class HelperFunctions {
@@ -290,72 +288,47 @@ class HelperFunctions {
       final pendingCount = pending.where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour)).length;
       final sentCount = sent.where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour)).length;
 
-      return BarChartGroupData(
+      String label = '';
+      switch (hour.hour) {
+        case 0:
+          label = "12A";
+          break;
+        case 3:
+          label = "3A";
+          break;
+        case 6:
+          label = "6A";
+          break;
+        case 9:
+          label = "9A";
+          break;
+        case 12:
+          label = "12P";
+          break;
+        case 15:
+          label = "3P";
+          break;
+        case 18:
+          label = "6P";
+          break;
+        case 21:
+          label = "9P";
+          break;
+      }
+
+      return CustomBarGroupData(
         x: hour.hour,
+        label: label,
         barRods: [
-          BarChartRodData(toY: sentCount.toDouble(), color: Colors.green, width: 12),
-          BarChartRodData(toY: pendingCount.toDouble(), color: Colors.blue, width: 12),
+          CustomBarRodData(toY: sentCount.toDouble(), color: Colors.green, width: 8),
+          CustomBarRodData(toY: pendingCount.toDouble(), color: Colors.blue, width: 8),
         ],
       );
     }).toList();
 
-    final maxY = bars
-        .map((barGroup) => barGroup.barRods.map((rod) => rod.toY).reduce(max))
-        .fold<double>(0, (prev, curr) => prev > curr ? prev : curr);
-
-    final interval = max((maxY / 4).ceilToDouble(), 1.0);
-
-    return BarChart(
-      BarChartData(
-        barGroups: bars,
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: 3,
-              getTitlesWidget: (value, meta) {
-                final hour = value.toInt();
-                switch (hour) {
-                  case 0:
-                    return const Text("12AM", style: TextStyle(fontSize: 10));
-                  case 3:
-                    return const Text("3AM", style: TextStyle(fontSize: 10));
-                  case 6:
-                    return const Text("6AM", style: TextStyle(fontSize: 10));
-                  case 9:
-                    return const Text("9AM", style: TextStyle(fontSize: 10));
-                  case 12:
-                    return const Text("12PM", style: TextStyle(fontSize: 10));
-                  case 15:
-                    return const Text("3PM", style: TextStyle(fontSize: 10));
-                  case 18:
-                    return const Text("6PM", style: TextStyle(fontSize: 10));
-                  case 21:
-                    return const Text("9PM", style: TextStyle(fontSize: 10));
-                  default:
-                    return const SizedBox.shrink();
-                }
-              },
-              reservedSize: 36,
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: interval,
-              getTitlesWidget: (value, meta) => Text(value.toInt().toString()),
-              reservedSize: 28,
-            ),
-          ),
-          rightTitles: const AxisTitles(),
-          topTitles: const AxisTitles(),
-        ),
-        gridData: FlGridData(show: false),
-        borderData: FlBorderData(show: false),
-        alignment: BarChartAlignment.spaceAround,
-        maxY: max(maxY * 1.2, 4),
-      ),
+    return CustomBarChart(
+      barGroups: bars,
+      showGrid: false,
     );
   }
 

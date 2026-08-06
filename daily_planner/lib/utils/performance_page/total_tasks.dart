@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:daily_planner/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
 
 class TotalTasks extends StatefulWidget {
@@ -157,7 +157,7 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
     }
   }
 
-  List<PieChartSectionData> generatePieChartData(int completed, int total) {
+  List<CustomPieSliceData> generatePieChartData(int completed, int total) {
     final theme = Theme.of(context);
     final completedColor = Colors.green;
     final incompleteColor = Colors.red;
@@ -171,21 +171,21 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
         safeTotal == 0 ? 0 : (incomplete / safeTotal) * 100;
 
     return [
-      PieChartSectionData(
-        value: completedPercent,
+      CustomPieSliceData(
+        value: completedPercent > 0 ? completedPercent : 0.001,
         color: completedColor,
         title: '${completedPercent.toStringAsFixed(1)}%',
-        radius: 60,
+        radius: 50,
         titleStyle: theme.textTheme.bodyMedium?.copyWith(
           fontWeight: FontWeight.bold,
           color: Colors.white,
         ),
       ),
-      PieChartSectionData(
-        value: incompletePercent,
+      CustomPieSliceData(
+        value: incompletePercent > 0 ? incompletePercent : 0.001,
         color: incompleteColor,
         title: '${incompletePercent.toStringAsFixed(1)}%',
-        radius: 60,
+        radius: 50,
         titleStyle: theme.textTheme.bodyMedium?.copyWith(
           fontWeight: FontWeight.bold,
           color: Colors.white,
@@ -209,7 +209,7 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
     final barColor = Colors.blueAccent;
 
     return Scaffold(
-      appBar: AppBar(title: Text("Total Tasks Performance",), centerTitle: true,),
+      appBar: AppBar(title: const Text("Total Tasks Performance"), centerTitle: true),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -230,73 +230,39 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
                     ? const Center(child: Text("No data for pie chart"))
                     : SizedBox(
                         height: 200,
-                        child: PieChart(
-                          PieChartData(
-                            sections: generatePieChartData(
-                                completedTasks, totalTasks),
-                            centerSpaceRadius: 40,
-                            sectionsSpace: 2,
-                            pieTouchData: PieTouchData(enabled: true),
-                          ),
+                        child: CustomPieChart(
+                          sections: generatePieChartData(
+                              completedTasks, totalTasks),
+                          centerSpaceRadius: 40,
+                          sectionsSpace: 3,
                         ),
                       ),
                 const SizedBox(height: 20),
                 Text("Completed Tasks (Last 7 Days)",
                     style: theme.textTheme.titleMedium),
+                const SizedBox(height: 10),
                 SizedBox(
                   height: 250,
-                  child: BarChart(
-                    BarChartData(
-                      gridData: const FlGridData(show: false),
-                      alignment: BarChartAlignment.spaceAround,
-                      barTouchData: BarTouchData(enabled: true),
-                      titlesData: FlTitlesData(
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index > 6) {
-                                return const SizedBox.shrink();
-                              }
-                              final date = DateTime.now()
-                                  .subtract(Duration(days: 6 - index));
-                              final weekday = _getWeekdayAbbreviation(
-                                  date.weekday);
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(weekday,
-                                    style: theme.textTheme.bodySmall),
-                              );
-                            },
+                  child: CustomBarChart(
+                    barGroups: List.generate(7, (index) {
+                      final date = DateTime.now()
+                          .subtract(Duration(days: 6 - index));
+                      final key = formatDateKey(date);
+                      final count = completedLast7Days[key] ?? 0;
+                      final weekday = _getWeekdayAbbreviation(date.weekday);
+                      return CustomBarGroupData(
+                        x: index,
+                        label: weekday,
+                        barRods: [
+                          CustomBarRodData(
+                            toY: count.toDouble(),
+                            width: 20,
+                            color: barColor,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ),
-                        leftTitles:
-                            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles:
-                            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles:
-                            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      barGroups: List.generate(7, (index) {
-                        final date = DateTime.now()
-                            .subtract(Duration(days: 6 - index));
-                        final key = formatDateKey(date);
-                        final count = completedLast7Days[key] ?? 0;
-                        return BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                              toY: count.toDouble(),
-                              width: 20,
-                              color: barColor,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
+                        ],
+                      );
+                    }),
                   ),
                 ),
                 const SizedBox(height: 23),
@@ -310,7 +276,7 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
       margin: const EdgeInsets.symmetric(vertical: 8),
       color: theme.cardColor,
       child: ListTile(
-        leading: Icon(Icons.analytics),
+        leading: const Icon(Icons.analytics),
         title: Text(label, style: theme.textTheme.bodyLarge),
         trailing: Text(value,
             style: theme.textTheme.titleMedium

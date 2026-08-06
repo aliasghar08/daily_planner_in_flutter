@@ -8,7 +8,7 @@ import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:daily_planner/services/custom_state_management.dart';
 
 class MedicationDetailPage extends StatefulWidget {
   final Medication medication;
