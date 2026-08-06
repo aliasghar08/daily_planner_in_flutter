@@ -20,4 +20,4 @@ workflows:
           cd build/ios/iphoneos
           zip -qq -r -9 app.ipa Payload
     artifacts:
-      - daily_planner/build/ios/iphoneos/app.ipa
+      - "**/*.ipa"
