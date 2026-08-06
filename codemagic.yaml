@@ -3,6 +3,7 @@ workflows:
     name: iOS Unsigned IPA
     max_build_duration: 120
     instance_type: mac_mini_m2
+    working_directory: daily_planner
     environment:
       flutter: stable
       xcode: latest
@@ -19,4 +20,4 @@ workflows:
           cd build/ios/iphoneos
           zip -qq -r -9 app.ipa Payload
     artifacts:
-      - build/ios/iphoneos/app.ipa
+      - daily_planner/build/ios/iphoneos/app.ipa
