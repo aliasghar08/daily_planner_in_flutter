@@ -12,7 +12,7 @@ class NativeTimezoneService {
   static Future<String> getLocalTimezone() async {
     if (_cachedTimezone != null) return _cachedTimezone!;
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       try {
         final String? tzId =
             await _channel.invokeMethod<String>('getDeviceTimezone');

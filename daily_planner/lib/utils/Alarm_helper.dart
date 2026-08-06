@@ -32,9 +32,9 @@ class NativeAlarmHelper {
 
   /// MUST call once during app startup
   static Future<void> initialize() async {
-    // Ensure Kotlin notification channel is created
+    // Ensure notification channel/categories are created
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         await _alarmChannel.invokeMethod('ensureNotificationChannel');
       }
     } catch (_) {}
@@ -173,7 +173,7 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Schedule native Android alarm using custom Kotlin engine
+  /// Schedule native alarm using platform engine (Kotlin on Android, UserNotifications on iOS)
   static Future<void> _scheduleNativeAlarm({
     required int id,
     required String title,
@@ -182,7 +182,7 @@ class NativeAlarmHelper {
     String? payload,
   }) async {
     try {
-      if (!Platform.isAndroid) return;
+      if (!Platform.isAndroid && !Platform.isIOS) return;
       await _alarmChannel.invokeMethod('scheduleNativeAlarm', {
         'id': id,
         'title': title,
@@ -191,7 +191,7 @@ class NativeAlarmHelper {
         'payload': payload ?? '',
       });
 
-      debugPrint('🎯 Native alarm scheduled via Kotlin: ID $id');
+      debugPrint('🎯 Native alarm scheduled: ID $id');
     } catch (e) {
       debugPrint('❌ Native alarm failed: $e');
       rethrow;
@@ -231,8 +231,8 @@ class NativeAlarmHelper {
   /// Cancel alarm natively
   static Future<void> cancelHybridAlarm(int id) async {
     try {
-      if (Platform.isAndroid) {
-        // Cancel custom native alarm from AlarmManager & AlarmStorage
+      if (Platform.isAndroid || Platform.isIOS) {
+        // Cancel custom native alarm from AlarmManager / UNUserNotificationCenter
         await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
       }
 
@@ -245,7 +245,7 @@ class NativeAlarmHelper {
   /// Cancel all alarms
   static Future<void> cancelAllAlarms() async {
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         await _alarmChannel.invokeMethod('cancelAllAlarms');
       }
       debugPrint('✅ All native alarms cancelled');
@@ -257,7 +257,7 @@ class NativeAlarmHelper {
   /// Get list of active native alarms from persistent storage
   static Future<List<dynamic>> getScheduledAlarms() async {
     try {
-      if (!Platform.isAndroid) return [];
+      if (!Platform.isAndroid && !Platform.isIOS) return [];
       final List<dynamic>? alarms = await _alarmChannel.invokeMethod('getScheduledAlarms');
       return alarms ?? [];
     } catch (e) {
@@ -304,7 +304,7 @@ class NativeAlarmHelper {
     required String body,
   }) async {
     try {
-      if (Platform.isAndroid) {
+      if (Platform.isAndroid || Platform.isIOS) {
         await _alarmChannel.invokeMethod('showNotification', {
           'id': id,
           'title': title,

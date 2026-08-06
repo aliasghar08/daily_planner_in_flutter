@@ -101,9 +101,9 @@ Future<void> main() async {
   // Call runApp AFTER all critical initializations
   runApp(const MyApp());
 
-  // Initialize FCM and other services
+  // Initialize FCM and other platform services
   await _initializeFCM();
-  await _initializeAndroidServices();
+  await _initializePlatformServices();
 
   // Perform async initializations in background
   resetAllTasksIfNeeded();
@@ -219,7 +219,7 @@ Future<void> _saveFCMTokenToFirestore(String? token) async {
   }
 }
 
-Future<void> _initializeAndroidServices() async {
+Future<void> _initializePlatformServices() async {
   try {
     await NativePermissionService.requestAllCorePermissions();
 
@@ -231,11 +231,13 @@ Future<void> _initializeAndroidServices() async {
       }
     });
 
-    debugPrint('✅ Android services initialized successfully');
+    debugPrint('✅ Platform services initialized successfully');
   } catch (e) {
-    debugPrint('❌ Error initializing Android services: $e');
+    debugPrint('❌ Error initializing platform services: $e');
   }
 }
+
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

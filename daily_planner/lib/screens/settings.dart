@@ -34,6 +34,48 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _showThemeDialog(BuildContext context, ThemeProvider themeProvider) {
+    final modes = [
+      {'title': 'System Default', 'mode': ThemeMode.system, 'icon': Icons.brightness_auto},
+      {'title': 'Light Mode', 'mode': ThemeMode.light, 'icon': Icons.light_mode_outlined},
+      {'title': 'Dark Mode', 'mode': ThemeMode.dark, 'icon': Icons.dark_mode_outlined},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Select Theme"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: modes.map((item) {
+            final mode = item['mode'] as ThemeMode;
+            final isSelected = themeProvider.themeMode == mode;
+            return ListTile(
+              leading: Icon(
+                item['icon'] as IconData,
+                color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
+              ),
+              title: Text(
+                item['title'] as String,
+                style: TextStyle(
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+              trailing: Icon(
+                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
+              ),
+              onTap: () {
+                themeProvider.setThemeMode(mode);
+                Navigator.pop(ctx);
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   void _showLanguageDialog(BuildContext context) {
     final settingsProvider = context.read<SettingsProvider>();
 
@@ -155,19 +197,27 @@ class _SettingsPageState extends State<SettingsPage> {
           _buildSettingsCard(
             isDark: isDark,
             children: [
-              SwitchListTile(
-                secondary: Container(
+              ListTile(
+                leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: const Color(0xFF6366F1).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.dark_mode_outlined, color: Color(0xFF6366F1), size: 20),
+                  child: Icon(
+                    themeProvider.themeMode == ThemeMode.dark
+                        ? Icons.dark_mode_outlined
+                        : (themeProvider.themeMode == ThemeMode.light
+                            ? Icons.light_mode_outlined
+                            : Icons.brightness_auto),
+                    color: const Color(0xFF6366F1),
+                    size: 20,
+                  ),
                 ),
-                title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: const Text('Toggle between dark and light themes'),
-                value: themeProvider.isDarkMode,
-                onChanged: (val) => themeProvider.toggleTheme(val),
+                title: const Text('Theme Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(themeProvider.themeModeName),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () => _showThemeDialog(context, themeProvider),
               ),
               const Divider(indent: 56),
               SwitchListTile(

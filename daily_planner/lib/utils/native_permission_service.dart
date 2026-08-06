@@ -11,7 +11,7 @@ class NativePermissionService {
 
   /// Check if notification permission is granted
   static Future<bool> isNotificationPermissionGranted() async {
-    if (kIsWeb || !Platform.isAndroid) return true;
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
       final bool? granted = await _channel.invokeMethod<bool>('checkNotificationPermission');
       return granted ?? false;
@@ -21,9 +21,9 @@ class NativePermissionService {
     }
   }
 
-  /// Request notification permission (Android 13+ runtime permission)
+  /// Request notification permission (Android 13+ & iOS runtime permission)
   static Future<bool> requestNotificationPermission() async {
-    if (kIsWeb || !Platform.isAndroid) return true;
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
       final bool? granted = await _channel.invokeMethod<bool>('requestNotificationPermission');
       return granted ?? false;
@@ -33,9 +33,11 @@ class NativePermissionService {
     }
   }
 
-  /// Check if exact alarms can be scheduled (Android 12+ API 31)
+  /// Check if exact alarms can be scheduled (Android 12+ API 31, always true on iOS)
   static Future<bool> isExactAlarmPermissionGranted() async {
-    if (kIsWeb || !Platform.isAndroid) return true;
+    if (kIsWeb) return true;
+    if (Platform.isIOS) return true;
+    if (!Platform.isAndroid) return true;
     try {
       final bool? granted = await _channel.invokeMethod<bool>('checkExactAlarmPermission');
       return granted ?? true;
@@ -45,7 +47,7 @@ class NativePermissionService {
     }
   }
 
-  /// Request exact alarm permission (opens system exact alarm settings)
+  /// Request exact alarm permission (opens system exact alarm settings on Android)
   static Future<void> requestExactAlarmPermission() async {
     if (kIsWeb || !Platform.isAndroid) return;
     try {
@@ -55,7 +57,7 @@ class NativePermissionService {
     }
   }
 
-  /// Check if app is ignoring battery optimizations (unrestricted background)
+  /// Check if app is ignoring battery optimizations (unrestricted background on Android)
   static Future<bool> isIgnoringBatteryOptimizations() async {
     if (kIsWeb || !Platform.isAndroid) return true;
     try {
@@ -67,7 +69,7 @@ class NativePermissionService {
     }
   }
 
-  /// Request user to disable battery optimizations for reliable background alarms
+  /// Request user to disable battery optimizations for reliable background alarms (Android)
   static Future<void> disableBatteryOptimization() async {
     if (kIsWeb || !Platform.isAndroid) return;
     try {
@@ -77,7 +79,7 @@ class NativePermissionService {
     }
   }
 
-  /// Open OEM autostart settings (Infinix, Tecno, Xiaomi, Vivo, Oppo, Samsung, Huawei)
+  /// Open OEM autostart settings (Android OEM specific)
   static Future<bool> openAutoStartSettings() async {
     if (kIsWeb || !Platform.isAndroid) return false;
     try {
@@ -91,7 +93,7 @@ class NativePermissionService {
 
   /// Open application details settings
   static Future<void> openAppSettings() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
     try {
       await _channel.invokeMethod('openAppSettings');
     } catch (e) {
@@ -101,7 +103,7 @@ class NativePermissionService {
 
   /// Open notification channel / app notification settings
   static Future<void> openNotificationSettings() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
     try {
       await _channel.invokeMethod('openNotificationSettings');
     } catch (e) {
@@ -111,7 +113,7 @@ class NativePermissionService {
 
   /// Fetch device brand, OEM, and battery optimization state
   static Future<Map<String, dynamic>> getDeviceBrandInfo() async {
-    if (kIsWeb || !Platform.isAndroid) return {};
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return {};
     try {
       final dynamic info = await _alarmChannel.invokeMethod('getDeviceBrandInfo');
       if (info is Map) {
@@ -125,14 +127,16 @@ class NativePermissionService {
 
   /// Request all essential initial permissions
   static Future<void> requestAllCorePermissions() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
     final notifGranted = await isNotificationPermissionGranted();
     if (!notifGranted) {
       await requestNotificationPermission();
     }
-    final exactAlarmGranted = await isExactAlarmPermissionGranted();
-    if (!exactAlarmGranted) {
-      await requestExactAlarmPermission();
+    if (Platform.isAndroid) {
+      final exactAlarmGranted = await isExactAlarmPermissionGranted();
+      if (!exactAlarmGranted) {
+        await requestExactAlarmPermission();
+      }
     }
   }
 }

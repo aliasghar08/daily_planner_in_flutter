@@ -47,5 +47,10 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Authenticate securely with Face ID or Touch ID</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

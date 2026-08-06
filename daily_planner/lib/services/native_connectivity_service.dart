@@ -49,7 +49,7 @@ class NativeConnectivityService {
 
   /// Check current network connectivity state
   static Future<CustomConnectivityResult> checkConnectivity() async {
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       try {
         final String? status =
             await _channel.invokeMethod<String>('checkConnectivity');

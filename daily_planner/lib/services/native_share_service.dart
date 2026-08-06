@@ -10,7 +10,7 @@ class NativeShareService {
   static Future<void> share(String text, {String? subject}) async {
     if (text.isEmpty) return;
 
-    if (Platform.isAndroid) {
+    if (Platform.isAndroid || Platform.isIOS) {
       try {
         await _channel.invokeMethod('shareText', {
           'text': text,
