@@ -1,3 +1,29 @@
 {
-    "java.configuration.updateBuildConfiguration": "interactive"
+    "dart.flutterSdkPath": "C:\\Users\\alias\\flutter",
+    "[dart]": {
+        "editor.formatOnSave": true,
+        "editor.formatOnType": true,
+        "editor.rulers": [
+            80
+        ],
+        "editor.selectionHighlight": false,
+        "editor.tabCompletion": "onlySnippets",
+        "editor.wordBasedSuggestions": "off"
+    },
+    "editor.codeActionsOnSave": {},
+    "files.autoSave": "afterDelay",
+    "editor.formatOnSave": true,
+    "workbench.tree.renderIndentGuides": "always",
+    "files.autoSaveWhenNoErrors": true,
+    "files.associations": {
+        "*.dart": "dart"
+    },
+    "workbench.editor.empty.hint": "hidden",
+    "git.followTagsWhenSync": true,
+    "workbench.settings.applyToAllProfiles": [
+        "chat.sessionSync.enabled"
+    ],
+    "settingsSync.ignoredSettings": [],
+    "gitlens.ai.model": "vscode",
+    "gitlens.ai.vscode.model": "copilot:gpt-4o-mini"
 }

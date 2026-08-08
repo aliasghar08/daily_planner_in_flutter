@@ -96,7 +96,7 @@ class _ChangeNotifierProviderState<T extends ChangeNotifier>
   @override
   Widget build(BuildContext context) {
     final effectiveNotifier = _notifier ?? widget.value;
-    Widget current = _InheritedChangeNotifier<T>(
+    final Widget current = _InheritedChangeNotifier<T>(
       notifier: effectiveNotifier,
       child: widget.builder != null
           ? Builder(

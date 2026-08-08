@@ -3,6 +3,7 @@ import 'package:daily_planner/providers/theme_provider.dart';
 import 'package:daily_planner/providers/settings_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/passkey_auth_service.dart';
+import 'package:daily_planner/screens/sync_integrations_page.dart';
 import 'package:flutter/material.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
 
@@ -252,7 +253,40 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
 
-          // 2. Security & Passkeys
+          // 2. Cloud Sync & Integrations
+          _buildSectionHeader('CLOUD SYNC & INTEGRATIONS'),
+          _buildSettingsCard(
+            isDark: isDark,
+            children: [
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.sync_outlined, color: Color(0xFF2563EB), size: 20),
+                ),
+                title: const Text('Google & Health Sync', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  'Google Calendar, Google Tasks & Health Connect / Apple Health',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right, size: 20),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SyncIntegrationsPage()),
+                  );
+                },
+              ),
+            ],
+          ),
+
+          // 3. Security & Passkeys
           _buildSectionHeader('SECURITY & PASSKEYS'),
           _buildSettingsCard(
             isDark: isDark,

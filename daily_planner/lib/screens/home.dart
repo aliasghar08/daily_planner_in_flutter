@@ -87,7 +87,7 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
 
     final added = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => AddTaskPage()),
+      MaterialPageRoute(builder: (_) => const AddTaskPage()),
     );
     if (added == true && authProvider.user != null) {
       await taskProvider.fetchTasks(authProvider.user!);
@@ -490,7 +490,7 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
     final filtered = taskProvider.getFilteredTasks(filter);
     final isSearching = taskProvider.searchQuery.isNotEmpty;
 
-    if (taskProvider.isLoading) {
+    if (taskProvider.isLoading && taskProvider.tasks.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
@@ -527,10 +527,11 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
     return RefreshIndicator(
       onRefresh: () async {
         if (authProvider.user != null) {
-          await taskProvider.fetchTasks(authProvider.user!);
+          await taskProvider.fetchTasks(authProvider.user!, showLoading: false);
         }
       },
       child: ListView.builder(
+        key: PageStorageKey<String>('taskList_${filter.name}'),
         padding: const EdgeInsets.only(bottom: 96, top: 4),
         itemCount: groups.fold<int>(0, (sum, g) => sum + 1 + g.$2.length),
         itemBuilder: (context, index) {
@@ -580,11 +581,12 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
             if (index < count + taskList.length) {
               final task = taskList[index - count];
               return ItemWidget(
+                key: ValueKey('task_${task.docId ?? task.title}'),
                 item: task,
                 searchQuery: taskProvider.searchQuery,
                 onEditDone: () async {
                   if (authProvider.user != null) {
-                    await taskProvider.fetchTasks(authProvider.user!);
+                    await taskProvider.fetchTasks(authProvider.user!, showLoading: false);
                   }
                 },
               );

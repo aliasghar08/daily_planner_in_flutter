@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/services/native_connectivity_service.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
@@ -389,7 +388,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       if (_nativeAlarmInitialized) {
         // Cancel all potential alarms for this task
         final now = DateTime.now();
-        final futureCutoff = now.add(const Duration(days: 30));
 
         // Generate possible alarm IDs for the near future and cancel them
         for (int i = 0; i < 100; i++) {
@@ -461,7 +459,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     );
 
     if (value) {
-      bool exists = currentStamps.any((ts) {
+      final bool exists = currentStamps.any((ts) {
         final dt = ts.toDate().toLocal();
         if (widget.task.taskType == 'DailyTask') return _isSameDay(dt, now);
         if (widget.task.taskType == 'WeeklyTask') return _isSameWeek(dt, now);

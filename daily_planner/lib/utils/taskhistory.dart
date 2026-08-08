@@ -31,7 +31,7 @@ class TaskHistoryWidget extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("🕒 Edit History:", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text("🕒 Edit History:", style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   ...editHistory.map((edit) {
                     final formatted = DateFormat('MMM d, yyyy – h:mm a').format(edit.timestamp);

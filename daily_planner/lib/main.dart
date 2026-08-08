@@ -4,6 +4,7 @@ import 'package:daily_planner/providers/medication_provider.dart';
 import 'package:daily_planner/providers/task_provider.dart';
 import 'package:daily_planner/providers/theme_provider.dart';
 import 'package:daily_planner/providers/settings_provider.dart';
+import 'package:daily_planner/providers/sync_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/native_permission_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
@@ -115,7 +116,7 @@ Future<void> testNotificationSystem() async {
   await notifications.initialize();
 
   // Schedule a test notification 1 minute from now
-  final testTime = DateTime.now().add(Duration(minutes: 1));
+  final testTime = DateTime.now().add(const Duration(minutes: 1));
   final testId = DateTime.now().millisecondsSinceEpoch;
 
   final success = await notifications.scheduleNotification(
@@ -139,7 +140,7 @@ Future<void> _initializeFCM() async {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     // Request notification permissions
-    NotificationSettings settings = await messaging.requestPermission(
+    final NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -152,7 +153,7 @@ Future<void> _initializeFCM() async {
 
     // Get FCM token
     try {
-      String? token = await messaging.getToken();
+      final String? token = await messaging.getToken();
       debugPrint('FCM Token: $token');
 
       // Save token to user's document in Firestore
@@ -251,6 +252,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => MedicationProvider()),
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
@@ -317,7 +319,7 @@ class AuthWrapper extends StatelessWidget {
                   color: Colors.red.shade400,
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Authentication Error',
                   style: TextStyle(
                     fontSize: 20,

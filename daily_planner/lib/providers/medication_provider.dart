@@ -12,11 +12,7 @@ class MedicationProvider extends ChangeNotifier {
   List<Medication> _medications = [];
   List<MedicationSchedule> _schedules = [];
   List<MedicationIntake> _selectedDateIntakes = [];
-  DateTime _selectedDate = DateTime(
-    DateTime.now().year,
-    DateTime.now().month,
-    DateTime.now().day,
-  );
+  DateTime _selectedDate = MedicationIntake.getLogicalDate(DateTime.now());
   bool _isLoading = false;
   String? _errorMessage;
   String? _userId;
@@ -26,9 +22,45 @@ class MedicationProvider extends ChangeNotifier {
   List<MedicationSchedule> get schedules => List.unmodifiable(_schedules);
   List<MedicationIntake> get selectedDateIntakes =>
       List.unmodifiable(_selectedDateIntakes);
+  List<MedicationIntake> get todayIntakes => selectedDateIntakes;
   DateTime get selectedDate => _selectedDate;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  /// Current circadian logical date (runs 4 AM to 3:59 AM next day)
+  DateTime get currentLogicalDate => MedicationIntake.getLogicalDate(DateTime.now());
+
+  /// Whether the currently viewed date is the active logical day
+  bool get isSelectedDateToday {
+    final sel = MedicationIntake.getLogicalDate(_selectedDate);
+    final cur = currentLogicalDate;
+    return sel.year == cur.year && sel.month == cur.month && sel.day == cur.day;
+  }
+
+  /// Whether current wall-clock time is in the bedtime/night cycle (9 PM - 4 AM)
+  bool get isNightCycleActive {
+    final h = DateTime.now().hour;
+    return h >= 21 || h < 5;
+  }
+
+  /// Returns intakes that are actively "Due Now" or needing attention right now
+  List<MedicationIntake> get dueNowIntakes {
+    final now = DateTime.now();
+    return _selectedDateIntakes.where((i) => i.isDueNow(now)).toList();
+  }
+
+  /// Returns the next upcoming intake scheduled in the future for today or tomorrow
+  MedicationIntake? get nextUpcomingIntake {
+    final now = DateTime.now();
+    final upcoming = _selectedDateIntakes
+        .where((i) => i.status == IntakeStatus.pending && i.scheduledTime.isAfter(now))
+        .toList();
+    if (upcoming.isNotEmpty) {
+      upcoming.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
+      return upcoming.first;
+    }
+    return null;
+  }
 
   // Adherence Stats for Selected Date
   int get totalIntakesCount => _selectedDateIntakes.length;
@@ -64,6 +96,7 @@ class MedicationProvider extends ChangeNotifier {
       } else if (hour >= 17 && hour < 21) {
         groups['Evening']!.add(intake);
       } else {
+        // Night: 9 PM - 4:59 AM (Bedtime)
         groups['Night']!.add(intake);
       }
     }
@@ -114,7 +147,7 @@ class MedicationProvider extends ChangeNotifier {
         return MedicationSchedule.fromMap(data, doc.id, matchedMed);
       }).toList();
 
-      // 3. Generate & hydrate intakes for currently selected date
+      // 3. Generate & hydrate intakes for currently selected logical date
       await _loadIntakesForDateInternal(_selectedDate);
 
       // 4. Schedule notifications for upcoming intakes
@@ -130,7 +163,7 @@ class MedicationProvider extends ChangeNotifier {
 
   /// Change selected date (Apple Health calendar strip)
   Future<void> selectDate(DateTime date) async {
-    _selectedDate = DateTime(date.year, date.month, date.day);
+    _selectedDate = MedicationIntake.getLogicalDate(date);
     _isLoading = true;
     notifyListeners();
 
@@ -145,21 +178,22 @@ class MedicationProvider extends ChangeNotifier {
     }
   }
 
-  /// Generate candidate intakes for date and overlay saved intake documents from Firestore
+  /// Generate candidate intakes for logical date and overlay saved intake documents from Firestore
   Future<void> _loadIntakesForDateInternal(DateTime date) async {
     if (_userId == null) return;
 
-    final normalizedDate = DateTime(date.year, date.month, date.day);
-    final startOfDay = normalizedDate;
-    final endOfDay = normalizedDate.add(const Duration(days: 1));
+    final logicalDate = MedicationIntake.getLogicalDate(date);
+    final startOfLogicalWindow = DateTime(logicalDate.year, logicalDate.month, logicalDate.day, 0, 0);
+    // Cover full logical day up to 5:00 AM next day
+    final endOfLogicalWindow = DateTime(logicalDate.year, logicalDate.month, logicalDate.day + 1, 5, 0);
 
-    // 1. Generate scheduled intakes for this date
+    // 1. Generate scheduled intakes for this logical date
     final List<MedicationIntake> generatedIntakes = [];
     for (final schedule in _schedules) {
-      generatedIntakes.addAll(schedule.generateIntakesForDate(normalizedDate));
+      generatedIntakes.addAll(schedule.generateIntakesForDate(logicalDate));
     }
 
-    // 2. Fetch all recorded intakes for today across all user medications
+    // 2. Fetch all recorded intakes for this window across user medications
     final Map<String, MedicationIntake> recordedIntakes = {};
     for (final medication in _medications) {
       final snapshot = await _firestore
@@ -169,8 +203,8 @@ class MedicationProvider extends ChangeNotifier {
           .doc(medication.medicationId)
           .collection('intakes')
           .where('scheduledTime',
-              isGreaterThanOrEqualTo: startOfDay.millisecondsSinceEpoch)
-          .where('scheduledTime', isLessThan: endOfDay.millisecondsSinceEpoch)
+              isGreaterThanOrEqualTo: startOfLogicalWindow.millisecondsSinceEpoch)
+          .where('scheduledTime', isLessThanOrEqualTo: endOfLogicalWindow.millisecondsSinceEpoch)
           .get();
 
       for (final doc in snapshot.docs) {
@@ -200,10 +234,8 @@ class MedicationProvider extends ChangeNotifier {
       if (recordedIntakes.containsKey(candidate.intakeId)) {
         resolvedIntakes.add(recordedIntakes[candidate.intakeId]!);
       } else {
-        // If not recorded yet and scheduled time has passed for past days or earlier today,
-        // it stays pending unless past day where we can flag as pending/missed.
-        if (candidate.scheduledTime.isBefore(now.subtract(const Duration(hours: 2))) &&
-            normalizedDate.isBefore(DateTime(now.year, now.month, now.day))) {
+        // If not recorded yet and grace period has ended in the past, mark missed
+        if (candidate.isOverdue(now) && logicalDate.isBefore(currentLogicalDate)) {
           resolvedIntakes.add(candidate.copyWith(status: IntakeStatus.missed));
         } else {
           resolvedIntakes.add(candidate);
@@ -211,9 +243,10 @@ class MedicationProvider extends ChangeNotifier {
       }
     }
 
-    // Also include any extra as-needed or ad-hoc recorded intakes for this date
+    // Also include any extra as-needed or ad-hoc recorded intakes for this logical date
     for (final recorded in recordedIntakes.values) {
-      if (!resolvedIntakes.any((i) => i.intakeId == recorded.intakeId)) {
+      if (recorded.isForLogicalDate(logicalDate) &&
+          !resolvedIntakes.any((i) => i.intakeId == recorded.intakeId)) {
         resolvedIntakes.add(recorded);
       }
     }
@@ -389,14 +422,15 @@ class MedicationProvider extends ChangeNotifier {
   /// Schedule notifications for all upcoming pending intakes today & tomorrow
   void _scheduleMedicationNotifications() {
     final now = DateTime.now();
+    final logicalToday = MedicationIntake.getLogicalDate(now);
+    final logicalTomorrow = logicalToday.add(const Duration(days: 1));
 
     for (final schedule in _schedules) {
       final med = schedule.medication;
       if (!med.isActive) continue;
 
-      final todayIntakes = schedule.generateIntakesForDate(now);
-      final tomorrowIntakes =
-          schedule.generateIntakesForDate(now.add(const Duration(days: 1)));
+      final todayIntakes = schedule.generateIntakesForDate(logicalToday);
+      final tomorrowIntakes = schedule.generateIntakesForDate(logicalTomorrow);
 
       final allUpcoming = [...todayIntakes, ...tomorrowIntakes];
 

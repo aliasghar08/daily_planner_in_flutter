@@ -46,7 +46,7 @@ class HelperFunctions {
         checkDate = checkDate.subtract(recurrence);
       }
     } else if (normalizedStamps.isNotEmpty) {
-      DateTime lastDate = normalizedStamps.last;
+      final DateTime lastDate = normalizedStamps.last;
       DateTime checkDate = lastDate;
       currentStreak = 1;
 

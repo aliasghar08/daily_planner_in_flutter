@@ -91,7 +91,7 @@ void main() {
 
       final scheduledTime = DateTime(2026, 8, 4, 8, 30);
       final intakeId = MedicationIntake.generateIntakeId('sched_123', scheduledTime);
-      expect(intakeId, 'sched_123_2026-08-04_0830');
+      expect(intakeId, 'intake_sched_123_2026_8_4_8_30');
 
       final intake = MedicationIntake(
         intakeId: intakeId,

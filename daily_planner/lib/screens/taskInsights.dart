@@ -43,7 +43,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         title: Text("Analytics: ${widget.task.title}"),
         actions: [
           IconButton(
-            icon: Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh),
             onPressed: () {
               setState(() {
                 _taskDataFuture = _fetchTaskData();
@@ -56,7 +56,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         future: _taskDataFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -76,26 +76,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  SizedBox(height: 16),
-                  Text(
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
                     'Error loading data',
                     style: TextStyle(fontSize: 18, color: Colors.red),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     '${snapshot.error}',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
+                    style: const TextStyle(color: Colors.grey),
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: () {
                       setState(() {
                         _taskDataFuture = _fetchTaskData();
                       });
                     },
-                    child: Text('Retry'),
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
@@ -103,7 +103,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           }
 
           if (!snapshot.hasData || !snapshot.data!.exists) {
-            return Center(
+            return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -145,7 +145,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                             Icons.insights,
                             color: Theme.of(context).primaryColor,
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
                             'Visual Insights',
                             style: TextStyle(
@@ -169,11 +169,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               height: 220,
                               child: _buildStreakChart(
                                 stamps,
-                                Duration(days: 1),
+                                const Duration(days: 1),
                               ),
                             ),
-                            SizedBox(height: 8),
-                            Text(
+                            const SizedBox(height: 8),
+                            const Text(
                               "Last 7 days completion status",
                               style: TextStyle(
                                 fontSize: 12,
@@ -193,8 +193,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                   notificationTimes,
                                 ),
                               ),
-                              SizedBox(height: 8),
-                              Text(
+                              const SizedBox(height: 8),
+                              const Text(
                                 "Pending (blue) vs Sent (green) notifications",
                                 style: TextStyle(
                                   fontSize: 12,
@@ -202,8 +202,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              SizedBox(height: 12),
-                              Text(
+                              const SizedBox(height: 12),
+                              const Text(
                                 "Upcoming Notifications:",
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
@@ -228,7 +228,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                       .toList(),
                                 ),
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
 
                               Text(
                                 "Notification Time Distribution",
@@ -277,8 +277,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           height: 220,
                           child: _buildMonthlyTrendChart(stamps),
                         ),
-                        SizedBox(height: 8),
-                        Text(
+                        const SizedBox(height: 8),
+                        const Text(
                           "Completion pattern over last 6 months",
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                           textAlign: TextAlign.center,
@@ -296,8 +296,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           height: 220,
                           child: _buildMonthlyTrendChart(stamps),
                         ),
-                        SizedBox(height: 8),
-                        Text(
+                        const SizedBox(height: 8),
+                        const Text(
                           "Monthly completion history",
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                           textAlign: TextAlign.center,
@@ -435,7 +435,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
 
     if (next.isBefore(now)) {
-      next = next.add(Duration(days: 1));
+      next = next.add(const Duration(days: 1));
     }
 
     return DateFormat('EEEE, MMMM d, y').format(next);
@@ -455,7 +455,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildTimeDistributionChart(List<TimeOfDay> times) {
-    if (times.isEmpty) return SizedBox.shrink();
+    if (times.isEmpty) return const SizedBox.shrink();
 
     final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
     final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
@@ -733,14 +733,14 @@ Widget _buildOneTimeTaskAnalytics(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   "Notification Times",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 // Use the function that handles DateTime objects
                 _buildNotificationTimesList(context, notificationTimes!),
               ],
@@ -756,7 +756,7 @@ List<Widget> _buildNotificationTimesListforOneTimeTask(BuildContext context, dyn
   try {
     final times = _parseNotificationTimes(notificationTimes);
     if (times.isEmpty) {
-      return [Text("No notification times", style: TextStyle(color: Colors.grey))];
+      return [const Text("No notification times", style: TextStyle(color: Colors.grey))];
     }
     
     return times.map((time) {
@@ -764,7 +764,7 @@ List<Widget> _buildNotificationTimesListforOneTimeTask(BuildContext context, dyn
         padding: const EdgeInsets.only(bottom: 4),
         child: Text(
           _formatTimeOfDay(context, time as TimeOfDay),
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14, // Match your existing style
           ),
         ),
@@ -773,7 +773,7 @@ List<Widget> _buildNotificationTimesListforOneTimeTask(BuildContext context, dyn
   } catch (e) {
     // Fallback if there's any parsing error
     return [
-      Text(
+      const Text(
         "Error displaying times",
         style: TextStyle(color: Colors.red),
       )
@@ -805,7 +805,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
     final last7Count = stamps.where((d) => d.isAfter(last7Days)).length;
     final last30Count = stamps.where((d) => d.isAfter(last30Days)).length;
 
-    final streakInfo = _calculateStreak(stamps, Duration(days: 1));
+    final streakInfo = _calculateStreak(stamps, const Duration(days: 1));
     final currentStreak = streakInfo['current'] as int;
     final longestStreak = streakInfo['longest'] as int;
 
@@ -855,12 +855,12 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
                 timeStats['average'] as String,
               ),
             if (notificationTimes.isNotEmpty) ...[
-              SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 8),
+              const Text(
                 "Scheduled Times:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
             ],
             if (timeStats['onTimeRate'] != null)
@@ -889,18 +889,18 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
                   _findMostCommonTime(notificationTimes),
                 ),
               ),
-              SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 8),
+              const Text(
                 "Time Distribution:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               ..._getTimeDistributionList(
                 _convertToTimeOfDay(notificationTimes),
               ).map(
                 (part) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2.0),
-                  child: Text(part, style: TextStyle(fontSize: 14)),
+                  child: Text(part, style: const TextStyle(fontSize: 14)),
                 ),
               ),
             ],
@@ -970,13 +970,13 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
           _buildAnalyticsCard(
             title: "Notification Schedule",
             children: [
-              Text(
+              const Text(
                 "Notification Times:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               _buildInfoRow(
                 "Most Common Time",
                 _formatTimeOfDay(
@@ -1061,13 +1061,13 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
           _buildAnalyticsCard(
             title: "Notification Schedule",
             children: [
-              Text(
+              const Text(
                 "Notification Times:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
+              const SizedBox(height: 4),
               _buildNotificationTimesList(context, notificationTimes),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               _buildInfoRow(
                 "Most Common Time",
                 _formatTimeOfDay(
@@ -1237,7 +1237,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
     }
     else {
       // Task NOT completed today
-      final yesterdayNormalized = todayNormalized.subtract(Duration(days: 1));
+      final yesterdayNormalized = todayNormalized.subtract(const Duration(days: 1));
       
       if (normalizedStamps.contains(yesterdayNormalized)) {
         // Task completed yesterday but not today - count backwards from yesterday
@@ -1615,7 +1615,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
     );
 
     if (next.isBefore(now)) {
-      next = next.add(Duration(days: 1));
+      next = next.add(const Duration(days: 1));
     }
 
     return next;

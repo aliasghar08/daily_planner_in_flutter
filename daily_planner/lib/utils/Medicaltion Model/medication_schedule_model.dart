@@ -91,17 +91,20 @@ class MedicationSchedule {
 
     // Generate intakes for each time of day
     for (final time in timesPerDay) {
+      // If time is before circadian cutoff (e.g. 1:00 AM), it occurs on the calendar morning following this logical day
+      final targetDate = (time.hour < MedicationIntake.defaultCircadianCutoffHour)
+          ? normalizedDate.add(const Duration(days: 1))
+          : normalizedDate;
+
       final scheduledTime = DateTime(
-        date.year,
-        date.month,
-        date.day,
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
         time.hour,
         time.minute,
       );
 
-      // Create a stable, deterministic ID based on scheduleId, date, and time
-      final intakeId =
-          'intake_${scheduleId}_${scheduledTime.year}_${scheduledTime.month}_${scheduledTime.day}_${scheduledTime.hour}_${scheduledTime.minute}';
+      final intakeId = MedicationIntake.generateIntakeId(scheduleId, scheduledTime);
 
       final intake = MedicationIntake(
         intakeId: intakeId,

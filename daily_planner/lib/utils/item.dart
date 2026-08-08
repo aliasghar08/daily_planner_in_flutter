@@ -122,7 +122,7 @@ class _ItemWidgetState extends State<ItemWidget> {
         }).toList();
       }
 
-      Map<String, dynamic> updateData = {'isCompleted': newStatus};
+      final Map<String, dynamic> updateData = {'isCompleted': newStatus};
 
       if (newStatus) {
         final ts = Timestamp.fromDate(now);
@@ -174,7 +174,6 @@ class _ItemWidgetState extends State<ItemWidget> {
       widget.item.isCompleted = newStatus;
       widget.item.completedAt = newStatus ? now : null;
 
-      widget.onEditDone?.call();
       widget.onTaskStatusChanged?.call();
     } catch (e) {
       debugPrint('Error toggling task completion: $e');
@@ -244,6 +243,7 @@ class _ItemWidgetState extends State<ItemWidget> {
           .delete();
 
       if (mounted) {
+        context.read<TaskProvider>().deleteTaskOptimistically(task.docId!);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Task deleted successfully"),

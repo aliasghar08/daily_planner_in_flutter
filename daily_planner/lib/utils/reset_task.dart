@@ -44,7 +44,7 @@ Future<void> _processTaskReset(QuerySnapshot snapshot, CollectionReference taskC
     if (data == null) continue;
 
     try {
-      Task task = parseTaskFromMap(data, docId: doc.id);
+      final Task task = parseTaskFromMap(data, docId: doc.id);
       Map<String, dynamic> updates = {};
 
       if (task is DailyTask && task.shouldResetToday()) {

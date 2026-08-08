@@ -77,7 +77,7 @@ class PushNotifications {
     });
 
     // Get initial message if app was terminated
-    RemoteMessage? initialMessage =
+    final RemoteMessage? initialMessage =
         await _firebaseMessaging.getInitialMessage();
     if (initialMessage != null) {
       _onMessageOpenedAppController.add(initialMessage);

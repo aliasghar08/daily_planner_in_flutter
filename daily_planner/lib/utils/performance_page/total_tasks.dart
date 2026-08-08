@@ -159,8 +159,8 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
 
   List<CustomPieSliceData> generatePieChartData(int completed, int total) {
     final theme = Theme.of(context);
-    final completedColor = Colors.green;
-    final incompleteColor = Colors.red;
+    const completedColor = Colors.green;
+    const incompleteColor = Colors.red;
 
     final int safeTotal = total < completed ? completed : total;
     final int incomplete = safeTotal - completed;
@@ -206,7 +206,7 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final barColor = Colors.blueAccent;
+    const barColor = Colors.blueAccent;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Total Tasks Performance"), centerTitle: true),

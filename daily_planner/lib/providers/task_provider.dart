@@ -226,9 +226,11 @@ class TaskProvider extends ChangeNotifier {
     };
   }
 
-  Future<void> fetchTasks(User user) async {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> fetchTasks(User user, {bool showLoading = false}) async {
+    if (showLoading || _tasks.isEmpty) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       // 1. Try cache first for immediate UI response
@@ -286,8 +288,21 @@ class TaskProvider extends ChangeNotifier {
         isCompleted: isCompleted,
         completedAt: completedAt,
       );
-      notifyListeners();
     }
+    final taskIndex = _tasks.indexWhere((t) => t.docId == docId);
+    if (taskIndex != -1) {
+      _tasks[taskIndex] = _tasks[taskIndex].copyWith(
+        isCompleted: isCompleted,
+        completedAt: completedAt,
+      );
+    }
+    notifyListeners();
+  }
+
+  void deleteTaskOptimistically(String docId) {
+    _displayTasks.removeWhere((t) => t.docId == docId);
+    _tasks.removeWhere((t) => t.docId == docId);
+    notifyListeners();
   }
 
   void clearTasks() {

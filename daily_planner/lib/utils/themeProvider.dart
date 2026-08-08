@@ -28,7 +28,7 @@ class ThemeProvider with ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
 
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String value = mode == ThemeMode.system
         ? 'system'
         : (mode == ThemeMode.dark ? 'dark' : 'light');
@@ -40,7 +40,7 @@ class ThemeProvider with ChangeNotifier {
   }
 
   void _loadTheme() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
     final storedString = prefs.getString(_themeKey);
     if (storedString != null) {
       switch (storedString) {

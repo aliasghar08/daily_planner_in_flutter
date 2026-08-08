@@ -34,7 +34,7 @@ class _SignupPageState extends State<SignupPage> {
       final password = _passwordController.text.trim();
       final name = _nameController.text.trim();
 
-      UserCredential userCredential = await FirebaseAuth.instance
+      final UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: email,
             password: password,

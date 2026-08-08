@@ -4,7 +4,7 @@ class FCMService {
   
   static Future<String?> getFCMToken() async {
     try {
-      String? token = await FirebaseMessaging.instance.getToken();
+      final String? token = await FirebaseMessaging.instance.getToken();
       debugPrint("FCM Token: $token"); // Set breakpoint here
       return token;
     } catch (e) {

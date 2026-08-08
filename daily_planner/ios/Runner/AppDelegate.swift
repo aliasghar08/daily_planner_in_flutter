@@ -31,7 +31,7 @@ import Network
     // Register notification categories (Stop, Snooze)
     setupNotificationCategories()
 
-    // Register for remote notifications
+    // Register for remote notifications safely on main thread
     application.registerForRemoteNotifications()
 
     // Setup network connectivity monitoring
@@ -95,7 +95,9 @@ import Network
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let userInfo = response.notification.request.content.userInfo
-    let id = (userInfo["id"] as? Int) ?? (Int(response.notification.request.identifier.replacingOccurrences(of: "alarm_", with: "")) ?? 0)
+    let id = (userInfo["id"] as? NSNumber)?.intValue
+      ?? (userInfo["id"] as? Int)
+      ?? (Int(response.notification.request.identifier.replacingOccurrences(of: "alarm_", with: "")) ?? 0)
     let title = response.notification.request.content.title
     let body = response.notification.request.content.body
     let payload = userInfo["payload"] as? String
@@ -109,14 +111,16 @@ import Network
       action = "dismiss"
     }
 
-    // Forward action to Flutter
-    alarmChannel?.invokeMethod("onNotificationAction", arguments: [
-      "action": action,
-      "id": id,
-      "title": title,
-      "body": body,
-      "payload": payload ?? ""
-    ])
+    // Forward action to Flutter on the main queue
+    DispatchQueue.main.async { [weak self] in
+      self?.alarmChannel?.invokeMethod("onNotificationAction", arguments: [
+        "action": action,
+        "id": id,
+        "title": title,
+        "body": body,
+        "payload": payload ?? ""
+      ])
+    }
 
     completionHandler()
   }
@@ -191,7 +195,7 @@ import Network
     }
   }
 
-  // MARK: - Alarm & Notification Handler
+  // MARK: - Alarm & Notification Handler (Crash-Resistant for iOS)
 
   private func handleAlarmCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -201,7 +205,8 @@ import Network
         return
       }
 
-      let id = (args["id"] as? NSNumber)?.intValue ?? 0
+      let rawId = (args["id"] as? NSNumber)?.intValue ?? 0
+      let id = rawId != 0 ? abs(rawId) : Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100000)) + 1
       let title = args["title"] as? String ?? "Daily Planner"
       let body = args["body"] as? String ?? "You have a scheduled task"
       let timeInMillis = (args["time"] as? NSNumber)?.int64Value
@@ -209,34 +214,36 @@ import Network
         ?? 0
       let payload = args["payload"] as? String ?? ""
 
-      if id <= 0 || timeInMillis <= 0 {
-        result(FlutterError(code: "INVALID_ARGS", message: "Valid id and time are required", details: nil))
-        return
-      }
-
       let content = UNMutableNotificationContent()
       content.title = title
       content.body = body
       content.sound = .default
       content.categoryIdentifier = "DAILY_PLANNER_ALARM"
+      if #available(iOS 15.0, *) {
+        content.interruptionLevel = .timeSensitive
+      }
       content.userInfo = [
-        "id": id,
+        "id": NSNumber(value: id),
         "title": title,
         "body": body,
         "payload": payload,
-        "timeInMillis": timeInMillis
+        "timeInMillis": NSNumber(value: timeInMillis)
       ]
 
-      let targetDate = Date(timeIntervalSince1970: Double(timeInMillis) / 1000.0)
-      let timeInterval = targetDate.timeIntervalSinceNow
-
-      let trigger: UNNotificationTrigger
-      if timeInterval > 0 {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: targetDate)
-        trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+      let trigger: UNNotificationTrigger?
+      if timeInMillis > 0 {
+        let targetDate = Date(timeIntervalSince1970: Double(timeInMillis) / 1000.0)
+        let timeInterval = targetDate.timeIntervalSinceNow
+        if timeInterval > 1.0 {
+          let calendar = Calendar.current
+          let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: targetDate)
+          trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        } else {
+          // Immediately deliver using trigger: nil (prevents UNTimeIntervalNotificationTrigger crash on <= 0)
+          trigger = nil
+        }
       } else {
-        trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        trigger = nil
       }
 
       let request = UNNotificationRequest(identifier: "alarm_\(id)", content: content, trigger: trigger)
@@ -257,7 +264,8 @@ import Network
         return
       }
 
-      let id = (args["id"] as? NSNumber)?.intValue ?? Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100000))
+      let rawId = (args["id"] as? NSNumber)?.intValue ?? 0
+      let id = rawId != 0 ? abs(rawId) : Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100000)) + 1
       let title = args["title"] as? String ?? "Daily Planner"
       let body = args["body"] as? String ?? "Notification"
       let payload = args["payload"] as? String ?? ""
@@ -267,15 +275,18 @@ import Network
       content.body = body
       content.sound = .default
       content.categoryIdentifier = "DAILY_PLANNER_ALARM"
+      if #available(iOS 15.0, *) {
+        content.interruptionLevel = .timeSensitive
+      }
       content.userInfo = [
-        "id": id,
+        "id": NSNumber(value: id),
         "title": title,
         "body": body,
         "payload": payload
       ]
 
-      let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
-      let request = UNNotificationRequest(identifier: "alarm_\(id)", content: content, trigger: trigger)
+      // trigger: nil delivers immediately on iOS without crashing
+      let request = UNNotificationRequest(identifier: "alarm_\(id)", content: content, trigger: nil)
 
       UNUserNotificationCenter.current().add(request) { error in
         DispatchQueue.main.async {
@@ -288,15 +299,20 @@ import Network
       }
 
     case "cancelAlarm", "cancelNativeAlarm":
-      guard let args = call.arguments as? [String: Any],
-            let id = (args["id"] as? NSNumber)?.intValue else {
-        result(false)
-        return
+      let id: Int?
+      if let args = call.arguments as? [String: Any], let rawId = (args["id"] as? NSNumber)?.intValue {
+        id = rawId
+      } else if let num = (call.arguments as? NSNumber)?.intValue {
+        id = num
+      } else {
+        id = nil
       }
 
-      let identifiers = ["alarm_\(id)", "\(id)"]
-      UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
-      UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
+      if let id = id {
+        let identifiers = ["alarm_\(id)", "\(id)"]
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers)
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
+      }
       result(true)
 
     case "cancelAllAlarms":
@@ -309,8 +325,12 @@ import Network
         var alarms: [[String: Any]] = []
         for req in requests {
           let userInfo = req.content.userInfo
-          let id = (userInfo["id"] as? Int) ?? (Int(req.identifier.replacingOccurrences(of: "alarm_", with: "")) ?? 0)
-          let timeInMillis = (userInfo["timeInMillis"] as? Int64) ?? 0
+          let id = (userInfo["id"] as? NSNumber)?.intValue
+            ?? (userInfo["id"] as? Int)
+            ?? (Int(req.identifier.replacingOccurrences(of: "alarm_", with: "")) ?? 0)
+          let timeInMillis = (userInfo["timeInMillis"] as? NSNumber)?.int64Value
+            ?? (userInfo["timeInMillis"] as? Int64)
+            ?? 0
           let payload = (userInfo["payload"] as? String) ?? ""
 
           alarms.append([
@@ -388,8 +408,10 @@ import Network
         result(false)
         return
       }
-      UIApplication.shared.open(url, options: [:]) { success in
-        result(success)
+      DispatchQueue.main.async {
+        UIApplication.shared.open(url, options: [:]) { success in
+          result(success)
+        }
       }
 
     case "checkExactAlarmPermission", "isIgnoringBatteryOptimizations":
@@ -403,7 +425,7 @@ import Network
     }
   }
 
-  // MARK: - Persistent Key-Value Preferences Handler (UserDefaults)
+  // MARK: - Persistent Key-Value Preferences Handler (UserDefaults Safe Serialization)
 
   private func handlePreferencesCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     let defaults = UserDefaults.standard
@@ -412,14 +434,66 @@ import Network
     switch call.method {
     case "getAll":
       var dict: [String: Any] = [:]
-      for (key, val) in defaults.dictionaryRepresentation() {
-        dict[key] = val
+      let defaultsDict = defaults.dictionaryRepresentation()
+      for (key, val) in defaultsDict {
+        // Filter out non-serializable objects (NSDate, NSData, internal Apple classes)
+        // that cause FlutterStandardMessageCodec encoding crashes.
+        if let str = val as? String {
+          dict[key] = str
+        } else if let boolVal = val as? Bool {
+          dict[key] = boolVal
+        } else if let num = val as? NSNumber {
+          dict[key] = num
+        } else if let strArr = val as? [String] {
+          dict[key] = strArr
+        }
       }
       result(dict)
+
+    case "getString":
+      if let key = args?["key"] as? String {
+        result(defaults.string(forKey: key))
+      } else {
+        result(nil)
+      }
+
+    case "getBool":
+      if let key = args?["key"] as? String {
+        if defaults.object(forKey: key) != nil {
+          result(defaults.bool(forKey: key))
+        } else {
+          result(nil)
+        }
+      } else {
+        result(nil)
+      }
+
+    case "getInt":
+      if let key = args?["key"] as? String {
+        if defaults.object(forKey: key) != nil {
+          result(defaults.integer(forKey: key))
+        } else {
+          result(nil)
+        }
+      } else {
+        result(nil)
+      }
+
+    case "getDouble":
+      if let key = args?["key"] as? String {
+        if defaults.object(forKey: key) != nil {
+          result(defaults.double(forKey: key))
+        } else {
+          result(nil)
+        }
+      } else {
+        result(nil)
+      }
 
     case "setBool":
       if let key = args?["key"] as? String, let val = args?["value"] as? Bool {
         defaults.set(val, forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
@@ -428,6 +502,7 @@ import Network
     case "setInt":
       if let key = args?["key"] as? String, let val = args?["value"] as? NSNumber {
         defaults.set(val.intValue, forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
@@ -436,6 +511,7 @@ import Network
     case "setDouble":
       if let key = args?["key"] as? String, let val = args?["value"] as? NSNumber {
         defaults.set(val.doubleValue, forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
@@ -444,6 +520,7 @@ import Network
     case "setString":
       if let key = args?["key"] as? String, let val = args?["value"] as? String {
         defaults.set(val, forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
@@ -452,6 +529,7 @@ import Network
     case "setStringList":
       if let key = args?["key"] as? String, let val = args?["value"] as? [String] {
         defaults.set(val, forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
@@ -460,15 +538,17 @@ import Network
     case "remove":
       if let key = args?["key"] as? String {
         defaults.removeObject(forKey: key)
+        defaults.synchronize()
         result(true)
       } else {
         result(false)
       }
 
     case "clear":
-      let domain = Bundle.main.bundleIdentifier!
-      defaults.removePersistentDomain(forName: domain)
-      defaults.synchronize()
+      if let domain = Bundle.main.bundleIdentifier {
+        defaults.removePersistentDomain(forName: domain)
+        defaults.synchronize()
+      }
       result(true)
 
     default:

@@ -141,6 +141,8 @@ class _MedicationListPageState extends State<MedicationListPage>
   Widget _buildDailyScheduleTab(MedicationProvider medProvider, bool isDark) {
     final timeGroups = medProvider.intakesByTimeOfDay;
     final totalDoses = medProvider.totalIntakesCount;
+    final dueNow = medProvider.dueNowIntakes;
+    final isToday = medProvider.isSelectedDateToday;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -160,9 +162,18 @@ class _MedicationListPageState extends State<MedicationListPage>
           // 2. Today's Adherence Summary Card
           _buildAdherenceCard(medProvider, isDark),
 
+          // 3. Due Now / Action Required Hero Card (Apple Health Priority)
+          if (isToday && dueNow.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _buildDueNowHeroCard(dueNow, medProvider, isDark),
+          ] else if (isToday && totalDoses > 0) ...[
+            const SizedBox(height: 12),
+            _buildUpNextBanner(medProvider, isDark),
+          ],
+
           const SizedBox(height: 16),
 
-          // 3. Time-of-Day Sections
+          // 4. Time-of-Day Sections
           if (totalDoses == 0)
             _buildEmptyScheduleCard(medProvider, isDark)
           else ...[
@@ -198,7 +209,7 @@ class _MedicationListPageState extends State<MedicationListPage>
               ),
             if (timeGroups['Night']!.isNotEmpty)
               _buildTimeSection(
-                title: 'Night',
+                title: 'Night & Bedtime',
                 timeRange: '9:00 PM - 5:00 AM',
                 icon: Icons.bedtime_outlined,
                 iconColor: Colors.purple.shade400,
@@ -213,12 +224,177 @@ class _MedicationListPageState extends State<MedicationListPage>
   }
 
   // ----------------------------------------------------
+  // Priority "Due Now" Hero Card
+  // ----------------------------------------------------
+  Widget _buildDueNowHeroCard(
+    List<MedicationIntake> dueNow,
+    MedicationProvider medProvider,
+    bool isDark,
+  ) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF241432) : const Color(0xFFF3E8FF),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? Colors.purple.shade700 : Colors.purple.shade300,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withValues(alpha: isDark ? 0.2 : 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade600,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.access_alarm_rounded, color: Colors.white, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Due Now (${dueNow.length})',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.purple.shade200 : Colors.purple.shade900,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Action required',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.purple.shade300 : Colors.purple.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...dueNow.map((intake) {
+            final med = intake.schedule.medication;
+            final timeStr = DateFormat('h:mm a').format(intake.scheduledTime);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Text(med.icon, style: const TextStyle(fontSize: 20)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          med.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                        Text(
+                          '${med.dosage} ${med.unit.name} • Scheduled $timeStr',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      medProvider.markIntake(
+                        intake: intake,
+                        status: IntakeStatus.taken,
+                        actualTime: DateTime.now(),
+                      );
+                    },
+                    child: const Text('Take', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // "Up Next" Reassurance Banner
+  // ----------------------------------------------------
+  Widget _buildUpNextBanner(MedicationProvider medProvider, bool isDark) {
+    final next = medProvider.nextUpcomingIntake;
+    final allDone = medProvider.pendingIntakesCount == 0 && medProvider.totalIntakesCount > 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1B2A1B) : const Color(0xFFECFDF5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.green.shade800 : Colors.green.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            allDone ? Icons.celebration_rounded : Icons.check_circle_outline_rounded,
+            color: Colors.green,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              allDone
+                  ? 'All caught up! Excellent job staying on track.'
+                  : (next != null
+                      ? 'Up Next: ${next.schedule.medication.name} at ${DateFormat('h:mm a').format(next.scheduledTime)}'
+                      : 'No further doses due right now.'),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.green.shade300 : Colors.green.shade900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
   // Apple Health Style Horizontal Date Strip (14 days)
   // ----------------------------------------------------
   Widget _buildAppleHealthDateStrip(MedicationProvider medProvider, bool isDark) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    // Generate dates: 6 days before today to 7 days after
+    final today = medProvider.currentLogicalDate;
+    // Generate dates: 6 days before logical today to 7 days after
     final dates = List.generate(
       14,
       (i) => today.subtract(const Duration(days: 6)).add(Duration(days: i)),
@@ -245,7 +421,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                 ),
                 Text(
                   DateFormat('EEEE, MMM d').format(medProvider.selectedDate),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     color: Colors.blueAccent,
@@ -601,7 +777,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                         ),
                         Text(
                           timeStr,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: Colors.blueAccent,
@@ -911,9 +1087,11 @@ class _MedicationListPageState extends State<MedicationListPage>
             onPressed: () async {
               Navigator.pop(ctx);
               await medProvider.deleteMedication(med.medicationId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${med.name} deleted')),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${med.name} deleted')),
+                );
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),

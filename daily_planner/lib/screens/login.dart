@@ -85,7 +85,7 @@ class _LoginPageState extends State<LoginPage> {
             .doc(userCredential.user!.uid)
             .get();
 
-        String fullName = userDoc.data()?['fullName'] ?? 'User';
+        final String fullName = userDoc.data()?['fullName'] ?? 'User';
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +193,7 @@ class _LoginPageState extends State<LoginPage> {
           .doc(userCredential.user!.uid)
           .get();
 
-      String fullName = userDoc.data()?['fullName'] ?? 'User';
+      final String fullName = userDoc.data()?['fullName'] ?? 'User';
 
       // ✅ Save Remember Me preference after successful login
       await _saveRememberMePreference();
