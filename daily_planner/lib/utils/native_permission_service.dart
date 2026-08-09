@@ -111,6 +111,42 @@ class NativePermissionService {
     }
   }
 
+  /// Check if critical alert (DND-bypass) permission is granted (iOS 12+ only)
+  static Future<bool> isCriticalAlertPermissionGranted() async {
+    if (kIsWeb || !Platform.isIOS) return false;
+    try {
+      final bool? granted = await _channel.invokeMethod<bool>('checkCriticalAlertPermission');
+      return granted ?? false;
+    } catch (e) {
+      debugPrint('⚠️ Error checking critical alert permission: $e');
+      return false;
+    }
+  }
+
+  /// Request critical alert (DND-bypass) permission on iOS 12+
+  static Future<bool> requestCriticalAlertPermission() async {
+    if (kIsWeb || !Platform.isIOS) return false;
+    try {
+      final bool? granted = await _channel.invokeMethod<bool>('requestCriticalAlertPermission');
+      return granted ?? false;
+    } catch (e) {
+      debugPrint('⚠️ Error requesting critical alert permission: $e');
+      return false;
+    }
+  }
+
+  /// Get Android SDK version (returns 0 on iOS/web)
+  static Future<int> getAndroidSdkVersion() async {
+    if (kIsWeb || !Platform.isAndroid) return 0;
+    try {
+      final int? sdk = await _channel.invokeMethod<int>('getAndroidSdkVersion');
+      return sdk ?? 0;
+    } catch (e) {
+      debugPrint('⚠️ Error getting Android SDK version: $e');
+      return 0;
+    }
+  }
+
   /// Fetch device brand, OEM, and battery optimization state
   static Future<Map<String, dynamic>> getDeviceBrandInfo() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return {};

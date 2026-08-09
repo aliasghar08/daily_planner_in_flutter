@@ -403,6 +403,30 @@ import Network
         }
       }
 
+    case "checkCriticalAlertPermission":
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+        let granted: Bool
+        if #available(iOS 12.0, *) {
+          granted = (settings.criticalAlertSetting == .enabled)
+        } else {
+          granted = false
+        }
+        DispatchQueue.main.async {
+          result(granted)
+        }
+      }
+
+    case "requestCriticalAlertPermission":
+      if #available(iOS 12.0, *) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .criticalAlert]) { granted, error in
+          DispatchQueue.main.async {
+            result(granted)
+          }
+        }
+      } else {
+        result(false)
+      }
+
     case "openNotificationSettings", "openAppSettings":
       guard let url = URL(string: UIApplication.openSettingsURLString) else {
         result(false)
@@ -419,6 +443,9 @@ import Network
 
     case "requestExactAlarmPermission", "disableBatteryOptimization", "openAutoStartSettings":
       result(false)
+
+    case "getAndroidSdkVersion":
+      result(0)
 
     default:
       result(FlutterMethodNotImplemented)

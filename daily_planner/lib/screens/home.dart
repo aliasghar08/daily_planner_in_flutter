@@ -12,6 +12,7 @@ import 'package:daily_planner/utils/item.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
+import 'dart:io' show Platform;
 
 enum TaskFilter { all, completed, incomplete, overdue }
 
@@ -621,7 +622,7 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
               );
             },
           ),
-          if (_nativeAlarmInitialized)
+          if (Platform.isAndroid && _nativeAlarmInitialized)
             IconButton(
               icon: const Icon(Icons.alarm_on_outlined),
               tooltip: 'Background Setup Guide',
