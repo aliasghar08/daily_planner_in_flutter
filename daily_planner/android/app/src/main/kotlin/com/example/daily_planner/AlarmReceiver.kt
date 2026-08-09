@@ -18,8 +18,9 @@ import androidx.core.content.ContextCompat
 class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
-        const val CHANNEL_ID = "daily_planner_channel"
-        const val CHANNEL_NAME = "Daily Planner Notifications"
+        const val CHANNEL_ID = "daily_planner_urgent_reminders"
+        const val CHANNEL_NAME = "Urgent Tasks & Medication Reminders"
+        const val OLD_CHANNEL_ID = "daily_planner_channel"
         const val EXTRA_TITLE = "title"
         const val EXTRA_BODY = "body"
         const val EXTRA_ID = "id"
@@ -33,7 +34,17 @@ class AlarmReceiver : BroadcastReceiver() {
 
         fun createNotificationChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
+
+                // Delete old alarm-sound channel so device does not keep playing endless alarm ringtone
+                try {
+                    nm?.deleteNotificationChannel(OLD_CHANNEL_ID)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not delete old channel: ${e.message}")
+                }
+
+                // Use alarm ringtone so XOS/Transsion treats it with highest audio priority
+                val notificationSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                     ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
                 val attrs = AudioAttributes.Builder()
@@ -46,16 +57,16 @@ class AlarmReceiver : BroadcastReceiver() {
                     CHANNEL_NAME,
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Task reminders and medication alerts"
+                    description = "Urgent high-priority task reminders and medication alerts"
                     enableLights(true)
                     enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
-                    setSound(alarmSound, attrs)
+                    vibrationPattern = longArrayOf(0, 400, 200, 400)
+                    setSound(notificationSound, attrs)
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
                     setBypassDnd(true)
+                    setShowBadge(true)
                 }
 
-                val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
                 nm?.createNotificationChannel(channel)
             }
         }
@@ -77,7 +88,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val id = intent.getIntExtra(EXTRA_ID, -1)
         Log.d(TAG, "🔔 onReceive triggered with action: $action, ID: $id")
 
-        // Acquire WakeLock for 10 seconds to ensure screen/CPU stays awake while presenting alarm
+        // Acquire WakeLock for 5 seconds to ensure screen/CPU stays awake while presenting urgent alert
         acquireWakeLock(context)
 
         when (action) {
@@ -85,7 +96,7 @@ class AlarmReceiver : BroadcastReceiver() {
             ACTION_SNOOZE -> handleSnooze(context, intent, id)
             ACTION_TRIGGER_ALARM, null -> handleTriggerAlarm(context, intent, id)
             else -> {
-                // If ID is valid, trigger alarm
+                // If ID is valid, trigger notification
                 if (id > 0) {
                     handleTriggerAlarm(context, intent, id)
                 } else {
@@ -102,7 +113,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
                 "DailyPlanner:AlarmWakeLock"
             )
-            wakeLock?.acquire(10 * 1000L) // 10 seconds
+            wakeLock?.acquire(5 * 1000L) // 5 seconds
         } catch (e: Exception) {
             Log.e(TAG, "Error acquiring WakeLock", e)
         }
@@ -120,10 +131,11 @@ class AlarmReceiver : BroadcastReceiver() {
         val body = intent.getStringExtra(EXTRA_BODY) ?: "You have a scheduled reminder!"
         val payload = intent.getStringExtra(EXTRA_PAYLOAD)
 
-        val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+        // Alarm-type sound for highest audio priority (plays through DND on XOS)
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
 
-        // 1. STOP Action PendingIntent
+        // 1. DISMISS / DONE Action PendingIntent
         val stopIntent = Intent(context, AlarmReceiver::class.java).apply {
             action = ACTION_STOP
             putExtra(EXTRA_ID, id)
@@ -150,7 +162,7 @@ class AlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 3. TAP / FULL-SCREEN Intent
+        // 3. TAP Intent -> Opens App
         val tapIntent = Intent(context, MainActivity::class.java).apply {
             putExtra(EXTRA_ID, id)
             putExtra(EXTRA_PAYLOAD, payload)
@@ -163,26 +175,38 @@ class AlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // 4. FULL-SCREEN INTENT — critical for Infinix/XOS and locked-screen heads-up banners
+        //    Same as tapPending but used specifically as the fullScreenIntent
+        val fullScreenPending = PendingIntent.getActivity(
+            context,
+            id + 30000,
+            tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // High priority heads-up notification displayed prominently on home screen & lock screen
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(tapPending)
+            .setFullScreenIntent(fullScreenPending, true)  // ← KEY: forces heads-up on XOS/Transsion
             .setAutoCancel(true)
             .setOngoing(false)
-            .setSound(alarmUri)
-            .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+            .setSound(soundUri)
+            .setVibrate(longArrayOf(0, 400, 200, 400))
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)  // CATEGORY_ALARM > CATEGORY_REMINDER on XOS
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setFullScreenIntent(tapPending, true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPending)
+            .setDefaults(NotificationCompat.DEFAULT_LIGHTS)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", stopPending)
             .addAction(android.R.drawable.ic_media_play, "Snooze 5m", snoozePending)
             .build()
 
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
-            Log.d(TAG, "✅ Alarm notification posted successfully for ID: $id ($title)")
+            Log.d(TAG, "✅ Urgent notification posted successfully for ID: $id ($title)")
         } catch (e: SecurityException) {
             Log.e(TAG, "POST_NOTIFICATIONS permission not granted", e)
         } catch (e: Exception) {
@@ -194,7 +218,7 @@ class AlarmReceiver : BroadcastReceiver() {
         if (id > 0) {
             NotificationManagerCompat.from(context).cancel(id)
             AlarmStorage.removeAlarm(context, id)
-            Log.d(TAG, "🛑 Alarm stopped and dismissed for ID: $id")
+            Log.d(TAG, "🛑 Notification dismissed for ID: $id")
         }
     }
 
@@ -220,6 +244,6 @@ class AlarmReceiver : BroadcastReceiver() {
             saveToStorage = true
         )
 
-        Log.d(TAG, "💤 Alarm ID $id snoozed by 5 minutes to $snoozeTime")
+        Log.d(TAG, "💤 Notification ID $id snoozed by 5 minutes to $snoozeTime")
     }
 }

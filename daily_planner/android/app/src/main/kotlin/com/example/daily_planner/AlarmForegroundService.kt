@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -49,7 +50,7 @@ class AlarmForegroundService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Daily Planner Service",
-                NotificationManager.IMPORTANCE_MIN
+                NotificationManager.IMPORTANCE_LOW  // LOW (not MIN) so XOS does not silently kill it
             ).apply {
                 description = "Keeps alarm service active"
                 setShowBadge(false)
@@ -62,11 +63,17 @@ class AlarmForegroundService : Service() {
             .setContentTitle("Daily Planner")
             .setContentText("Alarm service active in background")
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setPriority(NotificationCompat.PRIORITY_LOW)  // LOW keeps it alive without being intrusive
             .setOngoing(true)
+            .setSilent(true)  // No sound/vibration for the persistent service notification
             .build()
 
-        startForeground(NOTIF_ID, notification)
+        // Android 14+ (API 34) requires type to be passed when foregroundServiceType="specialUse"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIF_ID, notification)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -124,7 +124,7 @@ async function sendFcmNotification(params: {
       priority: 'high',
       notification: {
         sound: 'default',
-        channelId: 'daily_planner_channel',
+        channelId: 'daily_planner_urgent_reminders',
         clickAction: 'FLUTTER_NOTIFICATION_CLICK',
       },
     },

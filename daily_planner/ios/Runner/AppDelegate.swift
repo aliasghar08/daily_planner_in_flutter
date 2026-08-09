@@ -52,14 +52,14 @@ import Network
   private func setupNotificationCategories() {
     let stopAction = UNNotificationAction(
       identifier: "stop_action",
-      title: "Stop",
-      options: [.destructive, .authenticationRequired]
+      title: "Dismiss",
+      options: [.destructive]
     )
 
     let snoozeAction = UNNotificationAction(
       identifier: "snooze_action",
       title: "Snooze 5m",
-      options: [.foreground]
+      options: []  // No .foreground: snooze happens in background, doesn't force-open the app
     )
 
     let alarmCategory = UNNotificationCategory(

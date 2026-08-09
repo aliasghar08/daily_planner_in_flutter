@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
@@ -16,6 +17,13 @@ class MedicationProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   String? _userId;
+
+  StreamSubscription<QuerySnapshot>? _medicationsSubscription;
+  StreamSubscription<QuerySnapshot>? _schedulesSubscription;
+  final Map<String, StreamSubscription<QuerySnapshot>> _intakesSubscriptions = {};
+  
+  List<QueryDocumentSnapshot> _rawSchedulesDocs = [];
+  final Map<String, MedicationIntake> _rawRecordedIntakes = {};
 
   // Getters
   List<Medication> get medications => List.unmodifiable(_medications);
@@ -117,41 +125,33 @@ class MedicationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Fetch medications
-      final medsSnapshot = await _firestore
+      _medicationsSubscription?.cancel();
+      _schedulesSubscription?.cancel();
+
+      // 1. Fetch medications via stream
+      _medicationsSubscription = _firestore
           .collection('users')
           .doc(userId)
           .collection('medications')
-          .get();
+          .snapshots()
+          .listen((snapshot) {
+        _medications = snapshot.docs.map((doc) {
+          return Medication.fromMap(doc.data(), doc.id);
+        }).toList();
+        _rebuildSchedulesAndIntakes();
+      });
 
-      _medications = medsSnapshot.docs.map((doc) {
-        return Medication.fromMap(doc.data(), doc.id);
-      }).toList();
-
-      // 2. Fetch schedules
-      final schedulesSnapshot = await _firestore
+      // 2. Fetch schedules via stream
+      _schedulesSubscription = _firestore
           .collection('users')
           .doc(userId)
           .collection('schedules')
-          .get();
+          .snapshots()
+          .listen((snapshot) {
+        _rawSchedulesDocs = snapshot.docs;
+        _rebuildSchedulesAndIntakes();
+      });
 
-      _schedules = schedulesSnapshot.docs.map((doc) {
-        final data = doc.data();
-        final medId = data['medicationId'];
-        Medication? matchedMed;
-        try {
-          matchedMed = _medications.firstWhere((m) => m.medicationId == medId);
-        } catch (_) {
-          matchedMed = null;
-        }
-        return MedicationSchedule.fromMap(data, doc.id, matchedMed);
-      }).toList();
-
-      // 3. Generate & hydrate intakes for currently selected logical date
-      await _loadIntakesForDateInternal(_selectedDate);
-
-      // 4. Schedule notifications for upcoming intakes
-      _scheduleMedicationNotifications();
     } catch (e) {
       debugPrint('❌ Error loading medications: $e');
       _errorMessage = 'Failed to load medications: $e';
@@ -161,42 +161,45 @@ class MedicationProvider extends ChangeNotifier {
     }
   }
 
+  void _rebuildSchedulesAndIntakes() {
+    _schedules = _rawSchedulesDocs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final medId = data['medicationId'];
+      Medication? matchedMed;
+      try {
+        matchedMed = _medications.firstWhere((m) => m.medicationId == medId);
+      } catch (_) {
+        matchedMed = null;
+      }
+      return MedicationSchedule.fromMap(data, doc.id, matchedMed);
+    }).toList();
+
+    _setupIntakeListeners(_selectedDate);
+    _scheduleMedicationNotifications();
+  }
+
   /// Change selected date (Apple Health calendar strip)
   Future<void> selectDate(DateTime date) async {
     _selectedDate = MedicationIntake.getLogicalDate(date);
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      await _loadIntakesForDateInternal(_selectedDate);
-    } catch (e) {
-      debugPrint('❌ Error changing medication date: $e');
-      _errorMessage = 'Failed to load intakes for date: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    _setupIntakeListeners(_selectedDate);
   }
 
-  /// Generate candidate intakes for logical date and overlay saved intake documents from Firestore
-  Future<void> _loadIntakesForDateInternal(DateTime date) async {
+  /// Setup listeners for candidate intakes for logical date
+  void _setupIntakeListeners(DateTime date) {
     if (_userId == null) return;
 
     final logicalDate = MedicationIntake.getLogicalDate(date);
     final startOfLogicalWindow = DateTime(logicalDate.year, logicalDate.month, logicalDate.day, 0, 0);
-    // Cover full logical day up to 5:00 AM next day
     final endOfLogicalWindow = DateTime(logicalDate.year, logicalDate.month, logicalDate.day + 1, 5, 0);
 
-    // 1. Generate scheduled intakes for this logical date
-    final List<MedicationIntake> generatedIntakes = [];
-    for (final schedule in _schedules) {
-      generatedIntakes.addAll(schedule.generateIntakesForDate(logicalDate));
+    for (var sub in _intakesSubscriptions.values) {
+      sub.cancel();
     }
+    _intakesSubscriptions.clear();
+    _rawRecordedIntakes.clear();
 
-    // 2. Fetch all recorded intakes for this window across user medications
-    final Map<String, MedicationIntake> recordedIntakes = {};
     for (final medication in _medications) {
-      final snapshot = await _firestore
+      _intakesSubscriptions[medication.medicationId] = _firestore
           .collection('users')
           .doc(_userId)
           .collection('medications')
@@ -205,34 +208,50 @@ class MedicationProvider extends ChangeNotifier {
           .where('scheduledTime',
               isGreaterThanOrEqualTo: startOfLogicalWindow.millisecondsSinceEpoch)
           .where('scheduledTime', isLessThanOrEqualTo: endOfLogicalWindow.millisecondsSinceEpoch)
-          .get();
-
-      for (final doc in snapshot.docs) {
-        try {
-          final data = doc.data();
-          final scheduleId = data['scheduleId'];
-          MedicationSchedule? sched;
-          try {
-            sched = _schedules.firstWhere((s) => s.scheduleId == scheduleId);
-          } catch (_) {
-            sched = null;
+          .snapshots()
+          .listen((snapshot) {
+        for (var change in snapshot.docChanges) {
+          final doc = change.doc;
+          if (change.type == DocumentChangeType.removed) {
+            _rawRecordedIntakes.remove(doc.id);
+          } else {
+            try {
+              final data = doc.data() as Map<String, dynamic>;
+              final scheduleId = data['scheduleId'];
+              MedicationSchedule? sched;
+              try {
+                sched = _schedules.firstWhere((s) => s.scheduleId == scheduleId);
+              } catch (_) {
+                sched = null;
+              }
+              final intake = MedicationIntake.fromMap(data, doc.id, sched);
+              _rawRecordedIntakes[intake.intakeId] = intake;
+            } catch (e) {
+              debugPrint('Error parsing recorded intake ${doc.id}: $e');
+            }
           }
-          final intake =
-              MedicationIntake.fromMap(data, doc.id, sched);
-          recordedIntakes[intake.intakeId] = intake;
-        } catch (e) {
-          debugPrint('Error parsing recorded intake ${doc.id}: $e');
         }
-      }
+        _computeFinalIntakes(logicalDate);
+      });
     }
 
-    // 3. Merge: If a recorded intake exists in Firestore, use its status & actual time
+    _computeFinalIntakes(logicalDate);
+  }
+
+  void _computeFinalIntakes(DateTime logicalDate) {
+    // 1. Generate scheduled intakes for this logical date
+    final List<MedicationIntake> generatedIntakes = [];
+    for (final schedule in _schedules) {
+      generatedIntakes.addAll(schedule.generateIntakesForDate(logicalDate));
+    }
+
+    // 2. Merge: If a recorded intake exists in Firestore, use its status & actual time
     final List<MedicationIntake> resolvedIntakes = [];
     final now = DateTime.now();
 
     for (final candidate in generatedIntakes) {
-      if (recordedIntakes.containsKey(candidate.intakeId)) {
-        resolvedIntakes.add(recordedIntakes[candidate.intakeId]!);
+      if (_rawRecordedIntakes.containsKey(candidate.intakeId)) {
+        resolvedIntakes.add(_rawRecordedIntakes[candidate.intakeId]!);
       } else {
         // If not recorded yet and grace period has ended in the past, mark missed
         if (candidate.isOverdue(now) && logicalDate.isBefore(currentLogicalDate)) {
@@ -244,7 +263,7 @@ class MedicationProvider extends ChangeNotifier {
     }
 
     // Also include any extra as-needed or ad-hoc recorded intakes for this logical date
-    for (final recorded in recordedIntakes.values) {
+    for (final recorded in _rawRecordedIntakes.values) {
       if (recorded.isForLogicalDate(logicalDate) &&
           !resolvedIntakes.any((i) => i.intakeId == recorded.intakeId)) {
         resolvedIntakes.add(recorded);
@@ -253,6 +272,7 @@ class MedicationProvider extends ChangeNotifier {
 
     resolvedIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     _selectedDateIntakes = resolvedIntakes;
+    notifyListeners();
   }
 
   /// Mark an intake (taken, skipped, pending, etc.) and persist to Firestore
@@ -349,8 +369,8 @@ class MedicationProvider extends ChangeNotifier {
         _schedules.insert(0, schedule);
       }
 
-      // 4. Refresh intakes for selected date
-      await _loadIntakesForDateInternal(_selectedDate);
+      // 4. Refresh intakes for selected date via stream listener
+      _setupIntakeListeners(_selectedDate);
 
       // 5. Schedule notification alarms
       _scheduleMedicationNotifications();
@@ -467,5 +487,15 @@ class MedicationProvider extends ChangeNotifier {
   /// Deterministic integer ID for notifications
   int _getNotificationId(String key) {
     return (key.hashCode.abs() % 100000000);
+  }
+
+  @override
+  void dispose() {
+    _medicationsSubscription?.cancel();
+    _schedulesSubscription?.cancel();
+    for (var sub in _intakesSubscriptions.values) {
+      sub.cancel();
+    }
+    super.dispose();
   }
 }

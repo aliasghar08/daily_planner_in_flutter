@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/screens/home.dart';
 import 'package:daily_planner/utils/catalog.dart';
@@ -226,58 +227,44 @@ class TaskProvider extends ChangeNotifier {
     };
   }
 
+  StreamSubscription<QuerySnapshot>? _taskSubscription;
+
   Future<void> fetchTasks(User user, {bool showLoading = false}) async {
     if (showLoading || _tasks.isEmpty) {
       _isLoading = true;
       notifyListeners();
     }
 
-    try {
-      // 1. Try cache first for immediate UI response
-      final cachedSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .orderBy('createdAt', descending: true)
-          .get(const GetOptions(source: Source.cache));
-
-      if (cachedSnapshot.docs.isNotEmpty) {
-        final cachedTasks = cachedSnapshot.docs
-            .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-            .toList();
-
-        final updatedCached = await _updateTasksCompletionStatus(cachedTasks, user);
-        _tasks = cachedTasks;
-        _displayTasks = updatedCached;
-        _isLoading = false;
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint("Cache fetch note: $e");
-    }
-
-    try {
-      // 2. Fetch fresh server data
-      final serverSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .orderBy('createdAt', descending: true)
-          .get(const GetOptions(source: Source.server));
-
-      final serverTasks = serverSnapshot.docs
+    _taskSubscription?.cancel();
+    
+    _taskSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('tasks')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .listen((snapshot) async {
+      final tasks = snapshot.docs
           .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
           .toList();
 
-      final updatedServer = await _updateTasksCompletionStatus(serverTasks, user);
-      _tasks = serverTasks;
-      _displayTasks = updatedServer;
-    } catch (e) {
-      debugPrint("Server fetch note: $e");
-    } finally {
+      final updatedTasks = await _updateTasksCompletionStatus(tasks, user);
+      
+      _tasks = tasks;
+      _displayTasks = updatedTasks;
       _isLoading = false;
       notifyListeners();
-    }
+    }, onError: (error) {
+      debugPrint("Error listening to tasks: $error");
+      _isLoading = false;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _taskSubscription?.cancel();
+    super.dispose();
   }
 
   // Optimistic UI state updater
