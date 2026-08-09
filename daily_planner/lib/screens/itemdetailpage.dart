@@ -897,8 +897,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                 const SizedBox(height: 16),
                 _buildNotificationTimesExpansion(),
                 const SizedBox(height: 16),
-                _buildAlarmTestButtons(),
-                const SizedBox(height: 16),
                 _buildEditHistory(),
               ],
             ),

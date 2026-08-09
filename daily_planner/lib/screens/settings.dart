@@ -6,6 +6,7 @@ import 'package:daily_planner/utils/passkey_auth_service.dart';
 import 'package:daily_planner/screens/sync_integrations_page.dart';
 import 'package:flutter/material.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
+import 'dart:io' show Platform;
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -235,21 +236,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: settingsProvider.notificationsEnabled,
                 onChanged: (val) => settingsProvider.toggleNotifications(val),
               ),
-              const Divider(indent: 56),
-              ListTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.language_outlined, color: Color(0xFF3B82F6), size: 20),
-                ),
-                title: const Text('Language', style: TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(settingsProvider.selectedLanguage),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () => _showLanguageDialog(context),
-              ),
             ],
           ),
 
@@ -377,12 +363,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
 
-          // 3. Alarm & Background Reliability
-          _buildSectionHeader('ALARM & BACKGROUND RELIABILITY'),
-          _buildSettingsCard(
-            isDark: isDark,
-            children: [
-              ListTile(
+          if (Platform.isAndroid) ...[
+            // 3. Alarm & Background Reliability
+            _buildSectionHeader('ALARM & BACKGROUND RELIABILITY'),
+            _buildSettingsCard(
+              isDark: isDark,
+              children: [
+                ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -440,6 +427,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ],
           ),
+          ],
 
           // 4. Account
           _buildSectionHeader('ACCOUNT'),
