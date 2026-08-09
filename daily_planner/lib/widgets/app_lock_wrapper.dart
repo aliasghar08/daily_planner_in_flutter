@@ -15,6 +15,8 @@ class AppLockWrapper extends StatefulWidget {
 class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObserver {
   bool _isLocked = false;
   bool _isChecking = true;
+  bool _isAuthenticating = false; // Guard against concurrent auth calls
+  bool _wasActuallyPaused = false; // Only lock/auth if app was truly backgrounded
 
   @override
   void initState() {
@@ -53,21 +55,27 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
-      // Lock when the app goes to background
+      // Mark that the app was truly backgrounded
+      _wasActuallyPaused = true;
       _lockAppIfNeeded();
     } else if (state == AppLifecycleState.resumed) {
-      // When resuming, check if we are locked, or if we need to lock
+      // Only trigger auth if the app was genuinely paused (backgrounded),
+      // not from transient interruptions like permission dialogs or keyboard.
+      if (!_wasActuallyPaused) return;
+      _wasActuallyPaused = false;
+
       if (_isLocked) {
         _authenticate();
       } else {
         _lockAppIfNeeded().then((locked) {
-           if (locked) _authenticate();
+          if (locked) _authenticate();
         });
       }
     }
   }
 
   Future<bool> _lockAppIfNeeded() async {
+    if (!mounted) return false;
     final authProvider = context.read<app_auth.AuthProvider>();
     final isEnabled = await PasskeyAuthService().isPasskeyEnabled();
     
@@ -81,15 +89,20 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
   }
 
   Future<void> _authenticate() async {
-    // Only attempt to authenticate if we are locked
-    if (!_isLocked) return;
+    // Prevent duplicate/concurrent authentication calls
+    if (!_isLocked || _isAuthenticating) return;
     
-    final success = await PasskeyAuthService().verifyWithPasskey(
-      reason: 'Please authenticate to unlock the app',
-    );
-    
-    if (success && mounted) {
-      setState(() => _isLocked = false);
+    _isAuthenticating = true;
+    try {
+      final success = await PasskeyAuthService().verifyWithPasskey(
+        reason: 'Please authenticate to unlock the app',
+      );
+      
+      if (success && mounted) {
+        setState(() => _isLocked = false);
+      }
+    } finally {
+      _isAuthenticating = false;
     }
   }
 
