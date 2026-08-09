@@ -19,6 +19,7 @@ import 'package:daily_planner/screens/forgotPass.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
 import 'package:daily_planner/utils/app_theme.dart';
 import 'package:daily_planner/utils/reset_task.dart';
+import 'package:daily_planner/widgets/app_lock_wrapper.dart';
 import 'firebase_options.dart';
 
 // Global navigator key for notifications
@@ -263,6 +264,9 @@ class MyApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             navigatorKey: navigatorKey,
+            builder: (context, child) {
+              return AppLockWrapper(child: child!);
+            },
             home: const AuthWrapper(),
             routes: {
               "/home": (_) => const MyHome(),
