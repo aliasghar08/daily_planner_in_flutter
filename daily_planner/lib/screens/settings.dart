@@ -296,6 +296,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         reason: 'Authenticate to enable Passkey login',
                       );
                       if (verified) {
+                        await PasskeyAuthService().setPasskeyEnabled(true);
                         setState(() => _passkeyEnabled = true);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

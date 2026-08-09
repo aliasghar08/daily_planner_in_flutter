@@ -7,6 +7,7 @@ import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
 import 'package:daily_planner/utils/performance_page/total_tasks.dart';
 import 'package:flutter/material.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
+import 'dart:io' show Platform;
 
 class MyDrawer extends StatefulWidget {
   const MyDrawer({super.key});
@@ -122,15 +123,16 @@ class _MyDrawerState extends State<MyDrawer> {
                       );
                     },
                   ),
-                  _buildDrawerTile(
-                    icon: Icons.battery_charging_full_rounded,
-                    title: 'Alarm Reliability & OEM Guide',
-                    color: const Color(0xFFF59E0B),
-                    onTap: () {
-                      Navigator.pop(context);
-                      NativeAlarmHelper.showOemOptimizationGuide(context);
-                    },
-                  ),
+                  if (Platform.isAndroid)
+                    _buildDrawerTile(
+                      icon: Icons.battery_charging_full_rounded,
+                      title: 'Alarm Reliability & OEM Guide',
+                      color: const Color(0xFFF59E0B),
+                      onTap: () {
+                        Navigator.pop(context);
+                        NativeAlarmHelper.showOemOptimizationGuide(context);
+                      },
+                    ),
 
                   const SizedBox(height: 4),
 
