@@ -73,10 +73,12 @@ class GoogleTasksSyncService {
     }
 
     if (accessToken == null || accessToken.isEmpty) {
-      debugPrint('Google Tasks Sync: Running in offline local cache mode (no access token)');
-      return SyncResult.success(
-        tasks.length,
-        'Exported ${tasks.length} tasks ready for Google Tasks sync',
+      debugPrint('Google Tasks Sync: No access token — ${tasks.length} tasks queued for next online sync');
+      return SyncResult(
+        itemsSynced: 0,
+        isSuccess: false,
+        message: 'Offline — ${tasks.length} task(s) will sync to Google Tasks when connected',
+        errors: [],
       );
     }
 

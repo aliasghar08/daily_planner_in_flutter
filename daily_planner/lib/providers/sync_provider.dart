@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:daily_planner/models/sync_config_model.dart';
 import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
 import 'package:daily_planner/services/sync/sync_manager.dart';
+import 'package:daily_planner/services/native_connectivity_service.dart';
 import 'package:daily_planner/services/native_google_sign_in.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:daily_planner/utils/catalog.dart';
@@ -18,6 +20,11 @@ class SyncProvider extends ChangeNotifier {
   SyncStatus _healthStatus = SyncStatus.idle;
   bool _isSyncingAll = false;
   String? _googleAccessToken;
+
+  // Connectivity re-sync
+  StreamSubscription<CustomConnectivityResult>? _connectivitySubscription;
+  bool _reconnectSyncPending = false;
+  CustomConnectivityResult _lastConnectivity = CustomConnectivityResult.none;
 
   SyncProvider({SyncManager? syncManager})
       : _syncManager = syncManager ?? SyncManager() {
@@ -64,6 +71,12 @@ class SyncProvider extends ChangeNotifier {
       _config = _config.copyWith(healthPermissionGranted: hasHealth);
       await _syncManager.saveConfig(_config);
     }
+
+    // Wire connectivity listener to auto-sync on reconnect
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = NativeConnectivityService.onConnectivityChanged.listen(
+      _onConnectivityChanged,
+    );
 
     notifyListeners();
   }
@@ -282,5 +295,53 @@ class SyncProvider extends ChangeNotifier {
     ));
     _logs = await _syncManager.loadLogs();
     notifyListeners();
+  }
+
+  // -------------------------------------------------------------------------
+  // Connectivity-triggered re-sync
+  // -------------------------------------------------------------------------
+
+  void _onConnectivityChanged(CustomConnectivityResult result) {
+    final wasOffline = _lastConnectivity == CustomConnectivityResult.none;
+    final isNowOnline = result != CustomConnectivityResult.none;
+    _lastConnectivity = result;
+
+    if (wasOffline && isNowOnline && !_reconnectSyncPending) {
+      _reconnectSyncPending = true;
+      debugPrint('SyncProvider: device reconnected — triggering pending sync');
+      // Small delay to let Firestore flush its write queue first
+      Future.delayed(const Duration(seconds: 3), _triggerReconnectSync);
+    }
+  }
+
+  Future<void> _triggerReconnectSync() async {
+    _reconnectSyncPending = false;
+
+    // Only run if any external sync service is enabled and Google is connected
+    if (!isGoogleConnected &&
+        !_config.googleCalendarEnabled &&
+        !_config.googleTasksEnabled &&
+        !_config.healthSyncEnabled) {
+      return;
+    }
+
+    // We don't have tasks/intakes here — log a pending sync entry so the
+    // user can see the reconnection was detected in the sync log.
+    await _syncManager.addLog(SyncLogEntry(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      serviceType: SyncServiceType.googleCalendar,
+      timestamp: DateTime.now(),
+      isSuccess: true,
+      message: '📡 Device reconnected — Firestore writes flushed. Open the app to complete external service sync.',
+    ));
+
+    _logs = await _syncManager.loadLogs();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
   }
 }

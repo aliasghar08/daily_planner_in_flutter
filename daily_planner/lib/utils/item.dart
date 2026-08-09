@@ -108,8 +108,17 @@ class _ItemWidgetState extends State<ItemWidget> {
           .collection('tasks')
           .doc(docId);
 
-      final snapshot = await taskRef.get();
-      final currentData = snapshot.data();
+      // Use cache-first read so this works offline.
+      // Falls back gracefully if the document isn't cached yet.
+      Map<String, dynamic>? currentData;
+      try {
+        final snapshot = await taskRef.get(const GetOptions(source: Source.cache));
+        currentData = snapshot.data();
+      } catch (_) {
+        // Cache miss (first install or cache cleared) — proceed without stamps.
+        debugPrint('item.dart: cache miss for task $docId, proceeding without stamps');
+      }
+
       List<Timestamp> updatedStamps = [];
 
       if (currentData != null && currentData['completionStamps'] != null) {
