@@ -490,8 +490,29 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   title: const Text('Mark as Taken'),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.taken);
-                    _loadIntakeHistory();
+                    final TimeOfDay? pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.fromDateTime(intake.scheduledTime),
+                      helpText: 'Select time taken',
+                    );
+                    
+                    if (pickedTime != null) {
+                      final actualTime = DateTime(
+                        intake.scheduledTime.year,
+                        intake.scheduledTime.month,
+                        intake.scheduledTime.day,
+                        pickedTime.hour,
+                        pickedTime.minute,
+                      );
+                      if (context.mounted) {
+                        await context.read<MedicationProvider>().markIntake(
+                          intake: intake, 
+                          status: IntakeStatus.taken,
+                          actualTime: actualTime,
+                        );
+                        _loadIntakeHistory();
+                      }
+                    }
                   },
                 ),
               if (intake.status != IntakeStatus.skipped)

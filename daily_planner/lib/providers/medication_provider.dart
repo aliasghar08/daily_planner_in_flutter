@@ -171,9 +171,6 @@ class MedicationProvider extends ChangeNotifier {
             _rebuildSchedulesAndIntakes();
           });
 
-      // Temporary one-off function to fix the data (runs only once per user)
-      _temporarilyRevertMissedToSkipped();
-
       // 3. Start periodic timers for automatic intake lifecycle management
       _startPeriodicTimers();
     } catch (e) {
@@ -289,21 +286,16 @@ class MedicationProvider extends ChangeNotifier {
           .collection('medications')
           .doc(medication.medicationId)
           .collection('intakes')
-          .where(
-            'scheduledTime',
-            isGreaterThanOrEqualTo: startOfLogicalWindow.millisecondsSinceEpoch,
-          )
-          .where(
-            'scheduledTime',
-            isLessThan: endOfLogicalWindow.millisecondsSinceEpoch,
-          )
+          .where('scheduledTime',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfLogicalWindow))
+          .where('scheduledTime',
+              isLessThan: Timestamp.fromDate(endOfLogicalWindow))
           .snapshots()
           .listen((snapshot) {
             // Rebuild full recorded intakes map from the snapshot docs (not just docChanges)
             // to avoid stale data after re-subscribe or on the initial snapshot.
             final Set<String> currentDocIds = {};
             for (final doc in snapshot.docs) {
-              currentDocIds.add(doc.id);
               try {
                 final data = doc.data();
                 final scheduleId = data['scheduleId'];
@@ -316,6 +308,14 @@ class MedicationProvider extends ChangeNotifier {
                   sched = null;
                 }
                 final intake = MedicationIntake.fromMap(data, doc.id, sched);
+                
+                // Local filtering: only include intakes inside the current logical day window
+                if (intake.scheduledTime.isBefore(startOfLogicalWindow) || 
+                    !intake.scheduledTime.isBefore(endOfLogicalWindow)) {
+                  continue;
+                }
+
+                currentDocIds.add(doc.id);
                 _rawRecordedIntakes[intake.intakeId] = intake;
               } catch (e) {
                 debugPrint('Error parsing recorded intake ${doc.id}: $e');
@@ -330,9 +330,8 @@ class MedicationProvider extends ChangeNotifier {
                   !currentDocIds.contains(key),
             );
 
-            // Only auto-mark missed if this isn't a local pending write AND we have actual server data
-            final bool shouldAutoMark = !snapshot.metadata.hasPendingWrites && !snapshot.metadata.isFromCache;
-            _computeFinalIntakes(logicalDate, autoMarkMissed: shouldAutoMark);
+            // Always auto-mark missed since _rawRecordedIntakes prevents infinite loops
+            _computeFinalIntakes(logicalDate, autoMarkMissed: true);
           });
     }
 
@@ -697,44 +696,5 @@ class MedicationProvider extends ChangeNotifier {
     }
     _stopPeriodicTimers();
     super.dispose();
-  }
-
-  Future<void> _temporarilyRevertMissedToSkipped() async {
-    if (_userId == null) return;
-    
-    try {
-      final flagRef = _firestore.collection('users').doc(_userId).collection('flags').doc('revert_missed_done');
-      final flagDoc = await flagRef.get();
-      if (flagDoc.exists) {
-        return; // Already ran
-      }
-
-      final medsSnapshot = await _firestore
-          .collection('users')
-          .doc(_userId)
-          .collection('medications')
-          .get();
-          
-      int count = 0;
-      final batch = _firestore.batch();
-      
-      for (var medDoc in medsSnapshot.docs) {
-        final intakesSnapshot = await medDoc.reference
-            .collection('intakes')
-            .where('status', isEqualTo: IntakeStatus.missed.name)
-            .get();
-            
-        for (var intakeDoc in intakesSnapshot.docs) {
-          batch.update(intakeDoc.reference, {'status': IntakeStatus.skipped.name});
-          count++;
-        }
-      }
-      
-      batch.set(flagRef, {'done': true});
-      await batch.commit();
-      debugPrint('✅ Temporarily reverted $count missed intakes to skipped!');
-    } catch (e) {
-      debugPrint('Error reverting missed intakes to skipped: $e');
-    }
   }
 }
