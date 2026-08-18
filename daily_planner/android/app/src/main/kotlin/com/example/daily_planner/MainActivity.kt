@@ -46,6 +46,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingPermissionResult: MethodChannel.Result? = null
     private val googleAuthHandler by lazy { NativeGoogleAuthHandler(this) }
     private val preferencesHandler by lazy { NativePreferencesHandler(this) }
+    private var alarmChannel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,7 +73,11 @@ class MainActivity : FlutterFragmentActivity() {
 
         // Register handlers for all channel names used in Dart code
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_EXACT_ALARM).setMethodCallHandler(handler)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_MAIN_ALARM).setMethodCallHandler(handler)
+        
+        val mainAlarmChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_MAIN_ALARM)
+        mainAlarmChannel.setMethodCallHandler(handler)
+        this.alarmChannel = mainAlarmChannel
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_SERVICE).setMethodCallHandler(handler)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_PERMISSION).setMethodCallHandler(handler)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_CONNECTIVITY).setMethodCallHandler(handler)
@@ -84,6 +89,31 @@ class MainActivity : FlutterFragmentActivity() {
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_PREFERENCES).setMethodCallHandler { call, result ->
             preferencesHandler.handleMethodCall(call, result)
+        }
+        
+        // Process intent if started from notification
+        processIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        processIntent(intent)
+    }
+
+    private fun processIntent(intent: Intent?) {
+        intent?.let {
+            val payload = it.getStringExtra("payload")
+            val id = it.getIntExtra("id", -1)
+            if (payload != null) {
+                Log.d(TAG, "Processing tap intent with payload: $payload")
+                alarmChannel?.invokeMethod("onNotificationAction", mapOf(
+                    "action" to "tap",
+                    "id" to id,
+                    "payload" to payload
+                ))
+                // Clear the extra so it's not processed again on rotation
+                it.removeExtra("payload")
+            }
         }
     }
 

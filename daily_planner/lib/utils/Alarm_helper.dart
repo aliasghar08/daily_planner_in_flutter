@@ -70,9 +70,10 @@ class NativeAlarmHelper {
           final int id = (args['id'] as num?)?.toInt() ?? 0;
           final String? title = args['title']?.toString();
           final String? body = args['body']?.toString();
+          final String? payload = args['payload']?.toString();
 
           debugPrint(
-            '🎯 Received notification action from Kotlin: $action for ID: $id',
+            '🎯 Received notification action from Kotlin: $action for ID: $id with payload: $payload',
           );
 
           _actionStreamController.add({
@@ -80,6 +81,7 @@ class NativeAlarmHelper {
             'id': id,
             'title': title,
             'body': body,
+            'payload': payload,
             'source': 'kotlin',
           });
 

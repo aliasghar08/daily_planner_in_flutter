@@ -433,6 +433,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           margin: const EdgeInsets.only(bottom: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: ListTile(
+            onTap: () => _showModifyIntakeBottomSheet(context, intake),
             leading: Icon(
               isTaken
                   ? Icons.check_circle_rounded
@@ -440,7 +441,7 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
               color: badgeColor,
             ),
             title: Text(
-              DateFormat('EEEE, MMM d, yyyy').format(intake.scheduledTime),
+              DateFormat('EEEE, MMM d, yyyy').format(intake.logicalDate),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             subtitle: Text(
@@ -462,6 +463,67 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 ),
               ),
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showModifyIntakeBottomSheet(BuildContext context, MedicationIntake intake) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('Modify Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              if (intake.status != IntakeStatus.taken)
+                ListTile(
+                  leading: const Icon(Icons.check_circle, color: Colors.green),
+                  title: const Text('Mark as Taken'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.taken);
+                    _loadIntakeHistory();
+                  },
+                ),
+              if (intake.status != IntakeStatus.skipped)
+                ListTile(
+                  leading: const Icon(Icons.remove_circle, color: Colors.orange),
+                  title: const Text('Mark as Skipped'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.skipped);
+                    _loadIntakeHistory();
+                  },
+                ),
+              if (intake.status != IntakeStatus.missed)
+                ListTile(
+                  leading: const Icon(Icons.cancel, color: Colors.red),
+                  title: const Text('Mark as Missed'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.missed);
+                    _loadIntakeHistory();
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.pending_actions, color: Colors.grey),
+                title: const Text('Reset to Pending'),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.pending);
+                  _loadIntakeHistory();
+                },
+              ),
+            ],
           ),
         );
       },

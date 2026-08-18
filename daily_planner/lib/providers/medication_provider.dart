@@ -29,6 +29,7 @@ class MedicationProvider extends ChangeNotifier {
   
   List<QueryDocumentSnapshot> _rawSchedulesDocs = [];
   final Map<String, MedicationIntake> _rawRecordedIntakes = {};
+  bool _hasBackfilled = false;
 
   // Getters
   List<Medication> get medications => List.unmodifiable(_medications);
@@ -184,6 +185,43 @@ class MedicationProvider extends ChangeNotifier {
 
     _setupIntakeListeners(_selectedDate);
     _scheduleMedicationNotifications();
+    
+    if (!_hasBackfilled && _schedules.isNotEmpty) {
+      _hasBackfilled = true;
+      _backfillMissedIntakes();
+    }
+  }
+
+  Future<void> _backfillMissedIntakes() async {
+    if (_userId == null) return;
+    final now = DateTime.now();
+
+    // Backfill up to 3 days in the past to catch any missed days the user didn't open the app
+    for (int i = 1; i <= 3; i++) {
+      final pastLogicalDate = MedicationIntake.getLogicalDate(now.subtract(Duration(days: i)));
+      
+      for (final schedule in _schedules) {
+        final generated = schedule.generateIntakesForDate(pastLogicalDate);
+        for (final intake in generated) {
+          if (intake.isOverdue(now)) {
+            final docRef = _firestore
+                .collection('users')
+                .doc(_userId)
+                .collection('medications')
+                .doc(schedule.medication.medicationId)
+                .collection('intakes')
+                .doc(intake.intakeId);
+
+            // Using get() to ensure we don't overwrite if it was already marked
+            final doc = await docRef.get();
+            if (!doc.exists) {
+              final missed = intake.copyWith(status: IntakeStatus.missed);
+              await docRef.set(missed.toMap(), SetOptions(merge: true));
+            }
+          }
+        }
+      }
+    }
   }
 
   /// Change selected date (Apple Health calendar strip)
@@ -282,7 +320,9 @@ class MedicationProvider extends ChangeNotifier {
         // only marked past-day intakes as missed, leaving today's overdue
         // intakes stuck as "pending" forever.
         if (candidate.isOverdue(now)) {
-          resolvedIntakes.add(candidate.copyWith(status: IntakeStatus.missed));
+          final missed = candidate.copyWith(status: IntakeStatus.missed);
+          resolvedIntakes.add(missed);
+          _autoMarkMissedInFirestore(missed);
         } else {
           resolvedIntakes.add(candidate);
         }
@@ -300,6 +340,21 @@ class MedicationProvider extends ChangeNotifier {
     resolvedIntakes.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
     _selectedDateIntakes = resolvedIntakes;
     notifyListeners();
+  }
+
+  void _autoMarkMissedInFirestore(MedicationIntake intake) {
+    if (_userId == null) return;
+    final docRef = _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('medications')
+        .doc(intake.schedule.medication.medicationId)
+        .collection('intakes')
+        .doc(intake.intakeId);
+        
+    docRef.set(intake.toMap(), SetOptions(merge: true)).catchError((e) {
+      debugPrint('Error auto-marking missed intake: $e');
+    });
   }
 
   /// Mark an intake (taken, skipped, pending, etc.) and persist to Firestore

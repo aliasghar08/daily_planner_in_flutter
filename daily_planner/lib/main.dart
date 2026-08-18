@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:daily_planner/screens/medication_detail_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
 import 'package:daily_planner/providers/medication_provider.dart';
@@ -229,6 +231,30 @@ Future<void> _initializePlatformServices() async {
       debugPrint('Notification action received: $actionData');
       final action = actionData['action'];
       if (action == 'tap') {
+        final payloadStr = actionData['payload']?.toString();
+        if (payloadStr != null && payloadStr.isNotEmpty) {
+          try {
+            final payload = jsonDecode(payloadStr);
+            if (payload['type'] == 'medication') {
+              final medicationId = payload['medicationId'];
+              final context = navigatorKey.currentContext;
+              if (context != null) {
+                final medProvider = Provider.of<MedicationProvider>(context, listen: false);
+                try {
+                  final med = medProvider.medications.firstWhere((m) => m.medicationId == medicationId);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => MedicationDetailPage(medication: med),
+                  ));
+                  return; // Don't navigate to home
+                } catch (e) {
+                  debugPrint('Medication not found for tap action: $medicationId');
+                }
+              }
+            }
+          } catch (e) {
+            debugPrint('Failed to parse payload: $e');
+          }
+        }
         navigatorKey.currentState?.pushNamed('/home');
       }
     });
