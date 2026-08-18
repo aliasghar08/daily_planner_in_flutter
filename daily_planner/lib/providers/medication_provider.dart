@@ -20,13 +20,15 @@ class MedicationProvider extends ChangeNotifier {
 
   StreamSubscription<QuerySnapshot>? _medicationsSubscription;
   StreamSubscription<QuerySnapshot>? _schedulesSubscription;
-  final Map<String, StreamSubscription<QuerySnapshot>> _intakesSubscriptions = {};
+  final Map<String, StreamSubscription<QuerySnapshot>> _intakesSubscriptions =
+      {};
 
   /// Periodic timer to re-compute intakes (catches pending → missed transitions)
   Timer? _periodicRefreshTimer;
+
   /// Timer that fires at the next 4:00 AM circadian boundary to regenerate intakes
   Timer? _circadianResetTimer;
-  
+
   List<QueryDocumentSnapshot> _rawSchedulesDocs = [];
   final Map<String, MedicationIntake> _rawRecordedIntakes = {};
   bool _hasBackfilled = false;
@@ -42,7 +44,8 @@ class MedicationProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   /// Current circadian logical date (runs 4 AM to 3:59 AM next day)
-  DateTime get currentLogicalDate => MedicationIntake.getLogicalDate(DateTime.now());
+  DateTime get currentLogicalDate =>
+      MedicationIntake.getLogicalDate(DateTime.now());
 
   /// Whether the currently viewed date is the active logical day
   bool get isSelectedDateToday {
@@ -66,9 +69,14 @@ class MedicationProvider extends ChangeNotifier {
   /// Returns the next upcoming intake scheduled in the future for today or tomorrow
   MedicationIntake? get nextUpcomingIntake {
     final now = DateTime.now();
-    final upcoming = _selectedDateIntakes
-        .where((i) => i.status == IntakeStatus.pending && i.scheduledTime.isAfter(now))
-        .toList();
+    final upcoming =
+        _selectedDateIntakes
+            .where(
+              (i) =>
+                  i.status == IntakeStatus.pending &&
+                  i.scheduledTime.isAfter(now),
+            )
+            .toList();
     if (upcoming.isNotEmpty) {
       upcoming.sort((a, b) => a.scheduledTime.compareTo(b.scheduledTime));
       return upcoming.first;
@@ -81,9 +89,13 @@ class MedicationProvider extends ChangeNotifier {
   int get takenIntakesCount =>
       _selectedDateIntakes.where((i) => i.status == IntakeStatus.taken).length;
   int get skippedIntakesCount =>
-      _selectedDateIntakes.where((i) => i.status == IntakeStatus.skipped).length;
+      _selectedDateIntakes
+          .where((i) => i.status == IntakeStatus.skipped)
+          .length;
   int get pendingIntakesCount =>
-      _selectedDateIntakes.where((i) => i.status == IntakeStatus.pending).length;
+      _selectedDateIntakes
+          .where((i) => i.status == IntakeStatus.pending)
+          .length;
   int get missedIntakesCount =>
       _selectedDateIntakes.where((i) => i.status == IntakeStatus.missed).length;
 
@@ -141,11 +153,12 @@ class MedicationProvider extends ChangeNotifier {
           .collection('medications')
           .snapshots()
           .listen((snapshot) {
-        _medications = snapshot.docs.map((doc) {
-          return Medication.fromMap(doc.data(), doc.id);
-        }).toList();
-        _rebuildSchedulesAndIntakes();
-      });
+            _medications =
+                snapshot.docs.map((doc) {
+                  return Medication.fromMap(doc.data(), doc.id);
+                }).toList();
+            _rebuildSchedulesAndIntakes();
+          });
 
       // 2. Fetch schedules via stream
       _schedulesSubscription = _firestore
@@ -154,13 +167,12 @@ class MedicationProvider extends ChangeNotifier {
           .collection('schedules')
           .snapshots()
           .listen((snapshot) {
-        _rawSchedulesDocs = snapshot.docs;
-        _rebuildSchedulesAndIntakes();
-      });
+            _rawSchedulesDocs = snapshot.docs;
+            _rebuildSchedulesAndIntakes();
+          });
 
       // 3. Start periodic timers for automatic intake lifecycle management
       _startPeriodicTimers();
-
     } catch (e) {
       debugPrint('❌ Error loading medications: $e');
       _errorMessage = 'Failed to load medications: $e';
@@ -171,21 +183,24 @@ class MedicationProvider extends ChangeNotifier {
   }
 
   void _rebuildSchedulesAndIntakes() {
-    _schedules = _rawSchedulesDocs.map((doc) {
-      final data = doc.data() as Map<String, dynamic>;
-      final medId = data['medicationId'];
-      Medication? matchedMed;
-      try {
-        matchedMed = _medications.firstWhere((m) => m.medicationId == medId);
-      } catch (_) {
-        matchedMed = null;
-      }
-      return MedicationSchedule.fromMap(data, doc.id, matchedMed);
-    }).toList();
+    _schedules =
+        _rawSchedulesDocs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final medId = data['medicationId'];
+          Medication? matchedMed;
+          try {
+            matchedMed = _medications.firstWhere(
+              (m) => m.medicationId == medId,
+            );
+          } catch (_) {
+            matchedMed = null;
+          }
+          return MedicationSchedule.fromMap(data, doc.id, matchedMed);
+        }).toList();
 
     _setupIntakeListeners(_selectedDate);
     _scheduleMedicationNotifications();
-    
+
     if (!_hasBackfilled && _schedules.isNotEmpty) {
       _hasBackfilled = true;
       _backfillMissedIntakes();
@@ -198,8 +213,10 @@ class MedicationProvider extends ChangeNotifier {
 
     // Backfill up to 3 days in the past to catch any missed days the user didn't open the app
     for (int i = 1; i <= 3; i++) {
-      final pastLogicalDate = MedicationIntake.getLogicalDate(now.subtract(Duration(days: i)));
-      
+      final pastLogicalDate = MedicationIntake.getLogicalDate(
+        now.subtract(Duration(days: i)),
+      );
+
       for (final schedule in _schedules) {
         final generated = schedule.generateIntakesForDate(pastLogicalDate);
         for (final intake in generated) {
@@ -241,11 +258,19 @@ class MedicationProvider extends ChangeNotifier {
     // Night/bedtime doses (e.g. 1 AM) are shifted to logicalDate+1 by generateIntakesForDate.
     const cutoff = MedicationIntake.defaultCircadianCutoffHour;
     final startOfLogicalWindow = DateTime(
-      logicalDate.year, logicalDate.month, logicalDate.day, cutoff, 0,
+      logicalDate.year,
+      logicalDate.month,
+      logicalDate.day,
+      cutoff,
+      0,
     );
     final nextDay = logicalDate.add(const Duration(days: 1));
     final endOfLogicalWindow = DateTime(
-      nextDay.year, nextDay.month, nextDay.day, cutoff, 0,
+      nextDay.year,
+      nextDay.month,
+      nextDay.day,
+      cutoff,
+      0,
     );
 
     for (var sub in _intakesSubscriptions.values) {
@@ -261,46 +286,61 @@ class MedicationProvider extends ChangeNotifier {
           .collection('medications')
           .doc(medication.medicationId)
           .collection('intakes')
-          .where('scheduledTime',
-              isGreaterThanOrEqualTo: startOfLogicalWindow.millisecondsSinceEpoch)
-          .where('scheduledTime', isLessThan: endOfLogicalWindow.millisecondsSinceEpoch)
+          .where(
+            'scheduledTime',
+            isGreaterThanOrEqualTo: startOfLogicalWindow.millisecondsSinceEpoch,
+          )
+          .where(
+            'scheduledTime',
+            isLessThan: endOfLogicalWindow.millisecondsSinceEpoch,
+          )
           .snapshots()
           .listen((snapshot) {
-        // Rebuild full recorded intakes map from the snapshot docs (not just docChanges)
-        // to avoid stale data after re-subscribe or on the initial snapshot.
-        final Set<String> currentDocIds = {};
-        for (final doc in snapshot.docs) {
-          currentDocIds.add(doc.id);
-          try {
-            final data = doc.data();
-            final scheduleId = data['scheduleId'];
-            MedicationSchedule? sched;
-            try {
-              sched = _schedules.firstWhere((s) => s.scheduleId == scheduleId);
-            } catch (_) {
-              sched = null;
+            // Rebuild full recorded intakes map from the snapshot docs (not just docChanges)
+            // to avoid stale data after re-subscribe or on the initial snapshot.
+            final Set<String> currentDocIds = {};
+            for (final doc in snapshot.docs) {
+              currentDocIds.add(doc.id);
+              try {
+                final data = doc.data();
+                final scheduleId = data['scheduleId'];
+                MedicationSchedule? sched;
+                try {
+                  sched = _schedules.firstWhere(
+                    (s) => s.scheduleId == scheduleId,
+                  );
+                } catch (_) {
+                  sched = null;
+                }
+                final intake = MedicationIntake.fromMap(data, doc.id, sched);
+                _rawRecordedIntakes[intake.intakeId] = intake;
+              } catch (e) {
+                debugPrint('Error parsing recorded intake ${doc.id}: $e');
+              }
             }
-            final intake = MedicationIntake.fromMap(data, doc.id, sched);
-            _rawRecordedIntakes[intake.intakeId] = intake;
-          } catch (e) {
-            debugPrint('Error parsing recorded intake ${doc.id}: $e');
-          }
-        }
 
-        // Remove any intakes from this medication that are no longer in the snapshot
-        _rawRecordedIntakes.removeWhere((key, intake) =>
-            intake.schedule.medication.medicationId == medication.medicationId &&
-            !currentDocIds.contains(key));
+            // Remove any intakes from this medication that are no longer in the snapshot
+            _rawRecordedIntakes.removeWhere(
+              (key, intake) =>
+                  intake.schedule.medication.medicationId ==
+                      medication.medicationId &&
+                  !currentDocIds.contains(key),
+            );
 
-        _computeFinalIntakes(logicalDate);
-      });
+            // Only auto-mark missed if this isn't a local pending write that we just triggered
+            final bool shouldAutoMark = !snapshot.metadata.hasPendingWrites;
+            _computeFinalIntakes(logicalDate, autoMarkMissed: shouldAutoMark);
+          });
     }
 
     // Generate intakes from schedules immediately (Firestore data will merge in via listener)
-    _computeFinalIntakes(logicalDate);
+    _computeFinalIntakes(logicalDate, autoMarkMissed: false);
   }
 
-  void _computeFinalIntakes(DateTime logicalDate) {
+  void _computeFinalIntakes(
+    DateTime logicalDate, {
+    bool autoMarkMissed = false,
+  }) {
     // 1. Generate scheduled intakes for this logical date
     final List<MedicationIntake> generatedIntakes = [];
     for (final schedule in _schedules) {
@@ -322,7 +362,9 @@ class MedicationProvider extends ChangeNotifier {
         if (candidate.isOverdue(now)) {
           final missed = candidate.copyWith(status: IntakeStatus.missed);
           resolvedIntakes.add(missed);
-          _autoMarkMissedInFirestore(missed);
+          if (autoMarkMissed) {
+            _autoMarkMissedInFirestore(missed);
+          }
         } else {
           resolvedIntakes.add(candidate);
         }
@@ -351,7 +393,7 @@ class MedicationProvider extends ChangeNotifier {
         .doc(intake.schedule.medication.medicationId)
         .collection('intakes')
         .doc(intake.intakeId);
-        
+
     docRef.set(intake.toMap(), SetOptions(merge: true)).catchError((e) {
       debugPrint('Error auto-marking missed intake: $e');
     });
@@ -385,7 +427,9 @@ class MedicationProvider extends ChangeNotifier {
     }
 
     // Update local state immediately for instant responsive UI
-    final index = _selectedDateIntakes.indexWhere((i) => i.intakeId == intake.intakeId);
+    final index = _selectedDateIntakes.indexWhere(
+      (i) => i.intakeId == intake.intakeId,
+    );
     if (index >= 0) {
       _selectedDateIntakes[index] = updated;
     } else {
@@ -429,7 +473,9 @@ class MedicationProvider extends ChangeNotifier {
       final userDoc = _firestore.collection('users').doc(_userId);
 
       // 1. Save medication document
-      final medRef = userDoc.collection('medications').doc(medication.medicationId);
+      final medRef = userDoc
+          .collection('medications')
+          .doc(medication.medicationId);
       await medRef.set(medication.toMap(), SetOptions(merge: true));
 
       // 2. Save schedule document
@@ -437,14 +483,18 @@ class MedicationProvider extends ChangeNotifier {
       await schedRef.set(schedule.toMap(), SetOptions(merge: true));
 
       // 3. Update local collections
-      final medIdx = _medications.indexWhere((m) => m.medicationId == medication.medicationId);
+      final medIdx = _medications.indexWhere(
+        (m) => m.medicationId == medication.medicationId,
+      );
       if (medIdx >= 0) {
         _medications[medIdx] = medication;
       } else {
         _medications.insert(0, medication);
       }
 
-      final schedIdx = _schedules.indexWhere((s) => s.scheduleId == schedule.scheduleId);
+      final schedIdx = _schedules.indexWhere(
+        (s) => s.scheduleId == schedule.scheduleId,
+      );
       if (schedIdx >= 0) {
         _schedules[schedIdx] = schedule;
       } else {
@@ -478,7 +528,9 @@ class MedicationProvider extends ChangeNotifier {
 
       // 1. Cancel alarms for all intakes belonging to this medication
       final schedulesToDelete =
-          _schedules.where((s) => s.medication.medicationId == medicationId).toList();
+          _schedules
+              .where((s) => s.medication.medicationId == medicationId)
+              .toList();
       for (final s in schedulesToDelete) {
         for (final time in s.timesPerDay) {
           final dummyId = 'intake_${s.scheduleId}_${time.hour}_${time.minute}';
@@ -488,11 +540,12 @@ class MedicationProvider extends ChangeNotifier {
       }
 
       // 2. Delete medication intakes subcollection
-      final intakesSnapshot = await userDoc
-          .collection('medications')
-          .doc(medicationId)
-          .collection('intakes')
-          .get();
+      final intakesSnapshot =
+          await userDoc
+              .collection('medications')
+              .doc(medicationId)
+              .collection('intakes')
+              .get();
 
       for (final doc in intakesSnapshot.docs) {
         await doc.reference.delete();
@@ -583,14 +636,11 @@ class MedicationProvider extends ChangeNotifier {
 
     // Re-compute intakes every 10 minutes so overdue pending intakes
     // transition to "missed" even if the user doesn't interact with the app.
-    _periodicRefreshTimer = Timer.periodic(
-      const Duration(minutes: 10),
-      (_) {
-        debugPrint('MedicationProvider: Periodic refresh — recomputing intakes');
-        final logicalDate = MedicationIntake.getLogicalDate(_selectedDate);
-        _computeFinalIntakes(logicalDate);
-      },
-    );
+    _periodicRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      debugPrint('MedicationProvider: Periodic refresh — recomputing intakes');
+      final logicalDate = MedicationIntake.getLogicalDate(_selectedDate);
+      _computeFinalIntakes(logicalDate);
+    });
 
     // Schedule a one-shot timer for the next 4:00 AM circadian boundary.
     _scheduleCircadianResetTimer();
@@ -609,10 +659,14 @@ class MedicationProvider extends ChangeNotifier {
     }
     final durationUntilReset = nextReset.difference(now);
 
-    debugPrint('MedicationProvider: Next circadian reset (4 AM) in $durationUntilReset');
+    debugPrint(
+      'MedicationProvider: Next circadian reset (4 AM) in $durationUntilReset',
+    );
 
     _circadianResetTimer = Timer(durationUntilReset, () {
-      debugPrint('MedicationProvider: 4 AM circadian reset — regenerating intakes');
+      debugPrint(
+        'MedicationProvider: 4 AM circadian reset — regenerating intakes',
+      );
 
       // Move selected date to the new logical today
       _selectedDate = MedicationIntake.getLogicalDate(DateTime.now());
