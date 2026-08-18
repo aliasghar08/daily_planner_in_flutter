@@ -56,7 +56,7 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Check and update ALL tasks' completion status when fetched
-  Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks, User user) async {
+  Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks, User user, bool isFromCache) async {
     final List<Task> updatedTasks = [];
     final List<Task> tasksToReset = [];
     final now = DateTime.now();
@@ -120,8 +120,9 @@ class TaskProvider extends ChangeNotifier {
       updatedTasks.add(updatedTask);
     }
 
-    // Update Firestore for tasks that need reset in background
-    if (tasksToReset.isNotEmpty) {
+    // Update Firestore for tasks that need reset in background (only if we have true server data)
+    // We don't want to overwrite the server based on stale offline cache!
+    if (tasksToReset.isNotEmpty && !isFromCache) {
       _resetTasksInFirestore(tasksToReset, user);
     }
 
@@ -248,7 +249,7 @@ class TaskProvider extends ChangeNotifier {
           .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
           .toList();
 
-      final updatedTasks = await _updateTasksCompletionStatus(tasks, user);
+      final updatedTasks = await _updateTasksCompletionStatus(tasks, user, snapshot.metadata.isFromCache);
       
       _tasks = tasks;
       _displayTasks = updatedTasks;

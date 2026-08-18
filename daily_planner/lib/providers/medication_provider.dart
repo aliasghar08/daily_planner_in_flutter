@@ -171,6 +171,9 @@ class MedicationProvider extends ChangeNotifier {
             _rebuildSchedulesAndIntakes();
           });
 
+      // Temporary one-off function to fix the data (runs only once per user)
+      _temporarilyRevertMissedToSkipped();
+
       // 3. Start periodic timers for automatic intake lifecycle management
       _startPeriodicTimers();
     } catch (e) {
@@ -327,8 +330,8 @@ class MedicationProvider extends ChangeNotifier {
                   !currentDocIds.contains(key),
             );
 
-            // Only auto-mark missed if this isn't a local pending write that we just triggered
-            final bool shouldAutoMark = !snapshot.metadata.hasPendingWrites;
+            // Only auto-mark missed if this isn't a local pending write AND we have actual server data
+            final bool shouldAutoMark = !snapshot.metadata.hasPendingWrites && !snapshot.metadata.isFromCache;
             _computeFinalIntakes(logicalDate, autoMarkMissed: shouldAutoMark);
           });
     }
@@ -694,5 +697,44 @@ class MedicationProvider extends ChangeNotifier {
     }
     _stopPeriodicTimers();
     super.dispose();
+  }
+
+  Future<void> _temporarilyRevertMissedToSkipped() async {
+    if (_userId == null) return;
+    
+    try {
+      final flagRef = _firestore.collection('users').doc(_userId).collection('flags').doc('revert_missed_done');
+      final flagDoc = await flagRef.get();
+      if (flagDoc.exists) {
+        return; // Already ran
+      }
+
+      final medsSnapshot = await _firestore
+          .collection('users')
+          .doc(_userId)
+          .collection('medications')
+          .get();
+          
+      int count = 0;
+      final batch = _firestore.batch();
+      
+      for (var medDoc in medsSnapshot.docs) {
+        final intakesSnapshot = await medDoc.reference
+            .collection('intakes')
+            .where('status', isEqualTo: IntakeStatus.missed.name)
+            .get();
+            
+        for (var intakeDoc in intakesSnapshot.docs) {
+          batch.update(intakeDoc.reference, {'status': IntakeStatus.skipped.name});
+          count++;
+        }
+      }
+      
+      batch.set(flagRef, {'done': true});
+      await batch.commit();
+      debugPrint('✅ Temporarily reverted $count missed intakes to skipped!');
+    } catch (e) {
+      debugPrint('Error reverting missed intakes to skipped: $e');
+    }
   }
 }
