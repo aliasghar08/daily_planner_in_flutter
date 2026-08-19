@@ -387,14 +387,12 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     try {
       if (_nativeAlarmInitialized) {
         // Cancel all potential alarms for this task
-        final now = DateTime.now();
-
-        // Generate possible alarm IDs for the near future and cancel them
-        for (int i = 0; i < 100; i++) {
-          final testTime = now.add(Duration(hours: i));
-          final alarmId = _generateAlarmId(widget.task.docId!, testTime);
-          await NativeAlarmHelper.cancelAlarmById(alarmId);
-        }
+        await NativeAlarmHelper.cancelAlarmsForTask(widget.task.docId!);
+        
+        // Also cancel legacy single-alarm ID
+        await NativeAlarmHelper.cancelAlarmById(
+          (widget.task.docId.hashCode & 0x7FFFFFFF)
+        );
 
         scaffoldMessengerKey.currentState?.showSnackBar(
           const SnackBar(

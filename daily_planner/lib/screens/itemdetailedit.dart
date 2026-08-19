@@ -94,8 +94,6 @@ class _EditTaskPageState extends State<EditTaskPage> {
   final ValueNotifier<bool> _showCustomDaysNotifier = ValueNotifier(false);
 
   bool _isSaving = false;
-  late List<DateTime> _oldNotificationTimes;
-
   @override
   void initState() {
     super.initState();
@@ -105,8 +103,6 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     _selectedDateNotifier.value = widget.task.date;
     _isCompletedNotifier.value = widget.task.isCompleted;
-    _oldNotificationTimes = widget.task.notificationTimes ?? [];
-
     _hasEndDateNotifier.value = widget.task.date != null;
 
     // Load notification recurrence info from task
@@ -204,6 +200,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
     );
     if (pickedDate == null) return;
 
+    if (!mounted) return;
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initialDate),
@@ -242,6 +239,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
     );
     if (pickedDate == null) return;
 
+    if (!mounted) return;
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(now),
@@ -492,15 +490,8 @@ class _EditTaskPageState extends State<EditTaskPage> {
     final now = DateTime.now();
 
     // Cancel all existing notifications for this task
-    for (final oldTime in _oldNotificationTimes) {
-      try {
-        await NativeAlarmHelper.cancelAlarmById(
-          generateNotificationId(taskId, oldTime),
-        );
-      } catch (e) {
-        debugPrint("Error cancelling old notification: $e");
-      }
-    }
+    await NativeAlarmHelper.cancelAlarmsForTask(taskId);
+    await NativeAlarmHelper.cancelAlarmById(widget.task.docId.hashCode & 0x7FFFFFFF);
 
     // Schedule new notifications based on type
     if (_notificationRecurrenceNotifier.value != NotificationRecurrence.none) {
@@ -638,7 +629,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
       }
 
       // Completion Stamps
-      final currentStamps = widget.task.completionStamps ?? [];
+      final currentStamps = widget.task.completionStamps;
       final nowStamp = Timestamp.fromDate(now.toUtc());
 
       if (widget.task.taskType == 'oneTime') {

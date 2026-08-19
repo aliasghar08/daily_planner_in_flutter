@@ -566,13 +566,7 @@ class MedicationProvider extends ChangeNotifier {
           _schedules
               .where((s) => s.medication.medicationId == medicationId)
               .toList();
-      for (final s in schedulesToDelete) {
-        for (final time in s.timesPerDay) {
-          final dummyId = 'intake_${s.scheduleId}_${time.hour}_${time.minute}';
-          final alarmId = _getNotificationId(dummyId);
-          await NativeAlarmHelper.cancelHybridAlarm(alarmId);
-        }
-      }
+      await NativeAlarmHelper.cancelAlarmsForMedication(medicationId);
 
       // 2. Delete medication intakes subcollection
       final intakesSnapshot =

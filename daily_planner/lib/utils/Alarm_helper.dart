@@ -268,6 +268,64 @@ class NativeAlarmHelper {
     }
   }
 
+  /// Cancel all alarms associated with a specific task
+  static Future<void> cancelAlarmsForTask(String taskId) async {
+    try {
+      final List<dynamic> alarms = await getScheduledAlarms();
+      int cancelledCount = 0;
+      
+      for (final alarm in alarms) {
+        if (alarm is Map) {
+          final String payloadStr = alarm['payload']?.toString() ?? '';
+          if (payloadStr.isNotEmpty) {
+            try {
+              final Map<String, dynamic> payload = json.decode(payloadStr);
+              if (payload['taskId'] == taskId) {
+                final int alarmId = alarm['id'] as int;
+                await cancelHybridAlarm(alarmId);
+                cancelledCount++;
+              }
+            } catch (e) {
+              debugPrint('Error decoding alarm payload: $e');
+            }
+          }
+        }
+      }
+      debugPrint('✅ Cancelled $cancelledCount alarms for task: $taskId');
+    } catch (e) {
+      debugPrint('Error cancelling alarms for task $taskId: $e');
+    }
+  }
+
+  /// Cancel all alarms associated with a specific medication
+  static Future<void> cancelAlarmsForMedication(String medicationId) async {
+    try {
+      final List<dynamic> alarms = await getScheduledAlarms();
+      int cancelledCount = 0;
+      
+      for (final alarm in alarms) {
+        if (alarm is Map) {
+          final String payloadStr = alarm['payload']?.toString() ?? '';
+          if (payloadStr.isNotEmpty) {
+            try {
+              final Map<String, dynamic> payload = json.decode(payloadStr);
+              if (payload['medicationId'] == medicationId) {
+                final int alarmId = alarm['id'] as int;
+                await cancelHybridAlarm(alarmId);
+                cancelledCount++;
+              }
+            } catch (e) {
+              debugPrint('Error decoding alarm payload: $e');
+            }
+          }
+        }
+      }
+      debugPrint('✅ Cancelled $cancelledCount alarms for medication: $medicationId');
+    } catch (e) {
+      debugPrint('Error cancelling alarms for medication $medicationId: $e');
+    }
+  }
+
   /// Check if the app has exact alarm permission (Android 12+)
   static Future<bool> checkExactAlarmPermission() async {
     return await NativePermissionService.isExactAlarmPermissionGranted();

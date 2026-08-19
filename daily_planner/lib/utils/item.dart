@@ -242,6 +242,7 @@ class _ItemWidgetState extends State<ItemWidget> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null || task.docId == null) return;
 
+      await NativeAlarmHelper.cancelAlarmsForTask(task.docId!);
       await NativeAlarmHelper.cancelAlarmById(notificationId);
 
       await FirebaseFirestore.instance
