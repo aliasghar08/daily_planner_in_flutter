@@ -61,7 +61,7 @@ class Medication {
       'description': description,
       'color': color,
       'icon': icon,
-      'createdAt': createdAt.millisecondsSinceEpoch,
+      'createdAt': Timestamp.fromDate(createdAt.toUtc()),
       'isActive': isActive,
     };
   }

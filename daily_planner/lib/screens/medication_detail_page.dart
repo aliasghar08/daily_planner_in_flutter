@@ -497,20 +497,36 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                     );
                     
                     if (pickedTime != null) {
+                      final logical = intake.logicalDate;
+                      final targetDate = (pickedTime.hour < MedicationIntake.defaultCircadianCutoffHour)
+                          ? logical.add(const Duration(days: 1))
+                          : logical;
+                          
                       final actualTime = DateTime(
-                        intake.scheduledTime.year,
-                        intake.scheduledTime.month,
-                        intake.scheduledTime.day,
+                        targetDate.year,
+                        targetDate.month,
+                        targetDate.day,
                         pickedTime.hour,
                         pickedTime.minute,
                       );
                       if (context.mounted) {
-                        await context.read<MedicationProvider>().markIntake(
-                          intake: intake, 
-                          status: IntakeStatus.taken,
-                          actualTime: actualTime,
-                        );
-                        _loadIntakeHistory();
+                        try {
+                          await context.read<MedicationProvider>().markIntake(
+                            intake: intake,
+                            status: IntakeStatus.taken,
+                            actualTime: actualTime,
+                          );
+                          _loadIntakeHistory();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
                       }
                     }
                   },
@@ -521,8 +537,19 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   title: const Text('Mark as Skipped'),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.skipped);
-                    _loadIntakeHistory();
+                    try {
+                      await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.skipped);
+                      _loadIntakeHistory();
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to save: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
               if (intake.status != IntakeStatus.missed)
@@ -531,8 +558,19 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   title: const Text('Mark as Missed'),
                   onTap: () async {
                     Navigator.pop(ctx);
-                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.missed);
-                    _loadIntakeHistory();
+                    try {
+                      await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.missed);
+                      _loadIntakeHistory();
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Failed to save: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   },
                 ),
               ListTile(
@@ -540,8 +578,19 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 title: const Text('Reset to Pending'),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.pending);
-                  _loadIntakeHistory();
+                  try {
+                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.pending);
+                    _loadIntakeHistory();
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to save: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
             ],

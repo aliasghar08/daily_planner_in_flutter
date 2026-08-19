@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -183,11 +184,16 @@ class MedicationIntake {
       'scheduleId': schedule.scheduleId,
       'medicationId': schedule.medication.medicationId,
       'schedule': schedule.toMap(),
+      'medicationName': schedule.medication.name,
+      'dosage': schedule.medication.dosage,
+      'unit': schedule.medication.unit.name,
       'scheduledTime': Timestamp.fromDate(scheduledTime.toUtc()),
       'actualTime': actualTime != null ? Timestamp.fromDate(actualTime!.toUtc()) : null,
+      'intakeDate': Timestamp.fromDate(logicalDate.toUtc()),
       'status': status.name,
       'notes': notes,
       'dosageTaken': dosageTaken,
+      'updatedAt': Timestamp.now(),
     };
   }
 
@@ -197,10 +203,10 @@ class MedicationIntake {
     MedicationSchedule? fallbackSchedule,
   ]) {
     DateTime parseDate(dynamic value, [DateTime? defaultVal]) {
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-      if (value is Timestamp) return value.toDate();
-      if (value is String) return DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now());
-      return defaultVal ?? DateTime.now();
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+      if (value is Timestamp) return value.toDate().toLocal();
+      if (value is String) return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now())).toLocal();
+      return (defaultVal ?? DateTime.now()).toLocal();
     }
 
     MedicationSchedule sched;
@@ -209,7 +215,26 @@ class MedicationIntake {
     } else if (fallbackSchedule != null) {
       sched = fallbackSchedule;
     } else {
-      throw Exception('Schedule missing in MedicationIntake.fromMap');
+      // Reconstruct a temporary schedule from root fields
+      final String medId = map['medicationId'] ?? 'unknown_med';
+      final String medName = map['medicationName'] ?? 'Unknown Medication';
+      final double dosage = (map['dosage'] as num?)?.toDouble() ?? 0.0;
+      final String unitStr = map['unit'] ?? 'tablet';
+      
+      final med = Medication(
+        medicationId: medId,
+        name: medName,
+        dosage: dosage,
+        unit: DosageUnit.values.firstWhere((e) => e.name == unitStr, orElse: () => DosageUnit.tablet),
+      );
+      
+      sched = MedicationSchedule(
+        scheduleId: map['scheduleId'] ?? 'unknown_sched',
+        medication: med,
+        startDate: parseDate(map['scheduledTime']),
+        frequency: MedicationFrequency.daily,
+        timesPerDay: [],
+      );
     }
 
     return MedicationIntake(

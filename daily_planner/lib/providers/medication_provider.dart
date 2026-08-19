@@ -234,6 +234,12 @@ class MedicationProvider extends ChangeNotifier {
             if (!doc.exists) {
               final missed = intake.copyWith(status: IntakeStatus.missed);
               await docRef.set(missed.toMap(), SetOptions(merge: true));
+            } else {
+              final data = doc.data();
+              if (data != null && data['status'] == 'pending') {
+                final missed = intake.copyWith(status: IntakeStatus.missed);
+                await docRef.set(missed.toMap(), SetOptions(merge: true));
+              }
             }
           }
         }
@@ -355,7 +361,16 @@ class MedicationProvider extends ChangeNotifier {
 
     for (final candidate in generatedIntakes) {
       if (_rawRecordedIntakes.containsKey(candidate.intakeId)) {
-        resolvedIntakes.add(_rawRecordedIntakes[candidate.intakeId]!);
+        final recorded = _rawRecordedIntakes[candidate.intakeId]!;
+        if (recorded.status == IntakeStatus.pending && recorded.isOverdue(now)) {
+          final missed = recorded.copyWith(status: IntakeStatus.missed);
+          resolvedIntakes.add(missed);
+          if (autoMarkMissed) {
+            _autoMarkMissedInFirestore(missed);
+          }
+        } else {
+          resolvedIntakes.add(recorded);
+        }
       } else {
         // Mark as missed if the grace period has ended (overdue), regardless of
         // whether this is today's logical date or a past one. Previously this
@@ -386,7 +401,7 @@ class MedicationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _autoMarkMissedInFirestore(MedicationIntake intake) {
+  Future<void> _autoMarkMissedInFirestore(MedicationIntake intake) async {
     if (_userId == null) return;
     final docRef = _firestore
         .collection('users')
@@ -396,9 +411,18 @@ class MedicationProvider extends ChangeNotifier {
         .collection('intakes')
         .doc(intake.intakeId);
 
-    docRef.set(intake.toMap(), SetOptions(merge: true)).catchError((e) {
+    try {
+      final doc = await docRef.get();
+      if (doc.exists) {
+        final data = doc.data();
+        if (data != null && data['status'] != 'pending') {
+          return;
+        }
+      }
+      await docRef.set(intake.toMap(), SetOptions(merge: true));
+    } catch (e) {
       debugPrint('Error auto-marking missed intake: $e');
-    });
+    }
   }
 
   /// Mark an intake (taken, skipped, pending, etc.) and persist to Firestore
@@ -457,7 +481,16 @@ class MedicationProvider extends ChangeNotifier {
         await NativeAlarmHelper.cancelHybridAlarm(alarmId);
       }
     } catch (e) {
-      debugPrint('❌ Error persisting intake: $e');
+      debugPrint('ERROR saving intake to Firestore: $e');
+      // Revert the optimistic local update so UI reflects the actual state
+      final idx = _selectedDateIntakes.indexWhere(
+        (i) => i.intakeId == intake.intakeId,
+      );
+      if (idx >= 0) {
+        _selectedDateIntakes[idx] = intake; // restore original
+      }
+      notifyListeners();
+      rethrow;
     }
   }
 

@@ -166,26 +166,26 @@ class MedicationSchedule {
       'scheduleId': scheduleId,
       'medicationId': medication.medicationId,
       'medication': medication.toMap(),
-      'startDate': startDate.millisecondsSinceEpoch,
-      'endDate': endDate?.millisecondsSinceEpoch,
+      'startDate': Timestamp.fromDate(startDate.toUtc()),
+      'endDate': endDate != null ? Timestamp.fromDate(endDate!.toUtc()) : null,
       'frequency': frequency.name,
       'timesPerDay':
           timesPerDay.map((time) => {'hour': time.hour, 'minute': time.minute}).toList(),
       'daysOfWeek': daysOfWeek,
       'specificDates':
-          specificDates.map((date) => date.millisecondsSinceEpoch).toList(),
+          specificDates.map((date) => Timestamp.fromDate(date.toUtc())).toList(),
       'instructions': instructions,
       'reminderMinutesBefore': reminderMinutesBefore,
-      'createdAt': createdAt.millisecondsSinceEpoch,
+      'createdAt': Timestamp.fromDate(createdAt.toUtc()),
     };
   }
 
   factory MedicationSchedule.fromMap(Map<String, dynamic> map, [String? docId, Medication? fallbackMedication]) {
     DateTime parseDate(dynamic value, [DateTime? defaultVal]) {
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
-      if (value is Timestamp) return value.toDate();
-      if (value is String) return DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now());
-      return defaultVal ?? DateTime.now();
+      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+      if (value is Timestamp) return value.toDate().toLocal();
+      if (value is String) return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now())).toLocal();
+      return (defaultVal ?? DateTime.now()).toLocal();
     }
 
     List<TimeOfDay> parseTimes(dynamic rawList) {
@@ -257,7 +257,7 @@ class MedicationSchedule {
       daysOfWeek: parseDays(map['daysOfWeek']),
       specificDates: parseSpecificDates(map['specificDates']),
       instructions: map['instructions'],
-      reminderMinutesBefore: (map['reminderMinutesBefore'] as num?)?.toInt() ?? 15,
+      reminderMinutesBefore: map['reminderMinutesBefore'] ?? 15,
       createdAt: parseDate(map['createdAt']),
     );
   }
