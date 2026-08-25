@@ -309,8 +309,8 @@ class DailyTask extends Task {
   bool shouldResetToday() {
     if (completedAt == null) return true;
 
-    final lastCompleted = completedAt!.toUtc();
-    final now = DateTime.now().toUtc();
+    final lastCompleted = completedAt!.toLocal();
+    final now = DateTime.now().toLocal();
 
     return !(lastCompleted.year == now.year &&
         lastCompleted.month == now.month &&
@@ -423,10 +423,10 @@ class WeeklyTask extends Task {
   bool shouldResetThisWeek() {
   if (completedAt == null) return true;
 
-  final now = DateTime.now().toUtc();
-  final last = completedAt!.toUtc();
+  final now = DateTime.now().toLocal();
+  final last = completedAt!.toLocal();
   
-  // Calculate the difference in days using UTC times
+  // Calculate the difference in days using local times
   final daysDifference = now.difference(last).inDays;
   
   return !(daysDifference < 7 && now.weekday != last.weekday);
@@ -543,8 +543,8 @@ class MonthlyTask extends Task {
   bool shouldResetThisMonth() {
     if (completedAt == null) return true;
 
-    final now = DateTime.now().toUtc();
-    final last = completedAt!.toUtc();
+    final now = DateTime.now().toLocal();
+    final last = completedAt!.toLocal();
 
     return !(now.year == last.year &&
         now.month == last.month &&

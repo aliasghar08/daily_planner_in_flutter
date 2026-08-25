@@ -588,6 +588,7 @@ class _EditTaskPageState extends State<EditTaskPage> {
         'title': newTitle,
         'detail': _detailController.text.trim(),
         'isCompleted': isCompleted,
+        'completedAt': isCompleted ? Timestamp.fromDate(now.toUtc()) : null,
         'notificationTimes':
             _notificationTimesNotifier.value
                 .map((dt) => Timestamp.fromDate(dt.toUtc()))

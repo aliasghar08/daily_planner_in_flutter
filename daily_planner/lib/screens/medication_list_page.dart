@@ -821,11 +821,33 @@ class _MedicationListPageState extends State<MedicationListPage>
                 IconButton(
                   icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
                   tooltip: 'Mark as Pending',
-                  onPressed: () {
-                    medProvider.markIntake(
-                      intake: intake,
-                      status: IntakeStatus.pending,
+                  onPressed: () async {
+                    final bool? confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (BuildContext context) {
+                        return AlertDialog(
+                          title: const Text('Undo Taken Dose?'),
+                          content: const Text('Are you sure you want to mark this dose as pending?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              child: const Text('Confirm', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        );
+                      },
                     );
+
+                    if (confirm == true) {
+                      medProvider.markIntake(
+                        intake: intake,
+                        status: IntakeStatus.pending,
+                      );
+                    }
                   },
                 )
               else if (isSkipped)

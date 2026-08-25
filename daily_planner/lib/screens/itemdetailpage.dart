@@ -446,6 +446,32 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   }
 
   Future<void> _toggleCompletion(bool value) async {
+    if (!value) {
+      final bool? confirm = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Undo Completed Task?'),
+            content: const Text('Are you sure you want to mark this task as incomplete?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Confirm', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) {
+        return;
+      }
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || widget.task.docId == null) return;
 
@@ -487,6 +513,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
     final updateData = <String, dynamic>{
       'isCompleted': value,
+      'completedAt': value ? nowStamp : null,
       'completionStamps': currentStamps,
     };
 
