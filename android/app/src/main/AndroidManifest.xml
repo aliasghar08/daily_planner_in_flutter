@@ -29,6 +29,7 @@
     <application
         android:label="MedDayFlow"
         android:icon="@mipmap/ic_launcher"
+        android:appCategory="productivity"
         android:name="${applicationName}">
 
         <!-- FCM Default Notification Channel -->
