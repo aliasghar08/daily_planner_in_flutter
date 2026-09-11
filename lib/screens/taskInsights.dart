@@ -490,10 +490,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
     ];
 
-    return CustomPieChart(
-      sections: sections,
-      centerSpaceRadius: 30,
-    );
+    return CustomPieChart(sections: sections, centerSpaceRadius: 30);
   }
 
   Widget _buildMonthlyTrendChart(List<DateTime> stamps) {
@@ -620,177 +617,181 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   //   );
   // }
 
-//  Widget _buildOneTimeTaskAnalytics(
-//   BuildContext context,
-//   Map<String, dynamic> taskData,
-// ) {
-//   final createdAt = (taskData['createdAt'] as Timestamp).toDate();
-//   final completedAt =
-//       taskData['completedAt'] != null
-//           ? (taskData['completedAt'] as Timestamp).toDate()
-//           : null;
+  //  Widget _buildOneTimeTaskAnalytics(
+  //   BuildContext context,
+  //   Map<String, dynamic> taskData,
+  // ) {
+  //   final createdAt = (taskData['createdAt'] as Timestamp).toDate();
+  //   final completedAt =
+  //       taskData['completedAt'] != null
+  //           ? (taskData['completedAt'] as Timestamp).toDate()
+  //           : null;
 
-//   final daysToComplete =
-//       completedAt != null ? completedAt.difference(createdAt).inDays : null;
+  //   final daysToComplete =
+  //       completedAt != null ? completedAt.difference(createdAt).inDays : null;
 
-//   return Column(
-//     crossAxisAlignment: CrossAxisAlignment.start,
-//     children: [
-//       _buildAnalyticsCard(
-//         title: "Task Overview",
-//         children: [
-//           _buildInfoRow("Type", "One-time"),
-//           _buildInfoRow("Created", DateFormat.yMMMd().format(createdAt)),
-//           _buildInfoRow(
-//             "Status",
-//             completedAt != null ? "Completed" : "Pending",
-//           ),
-//           if (completedAt != null) ...[
-//             _buildInfoRow(
-//               "Completed",
-//               DateFormat.yMMMd().format(completedAt),
-//             ),
-//             _buildInfoRow(
-//               "Time to Complete",
-//               daysToComplete == 0 ? "Same day" : "$daysToComplete days",
-//             ),
-//           ],
-//         ],
-//       ),
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       _buildAnalyticsCard(
+  //         title: "Task Overview",
+  //         children: [
+  //           _buildInfoRow("Type", "One-time"),
+  //           _buildInfoRow("Created", DateFormat.yMMMd().format(createdAt)),
+  //           _buildInfoRow(
+  //             "Status",
+  //             completedAt != null ? "Completed" : "Pending",
+  //           ),
+  //           if (completedAt != null) ...[
+  //             _buildInfoRow(
+  //               "Completed",
+  //               DateFormat.yMMMd().format(completedAt),
+  //             ),
+  //             _buildInfoRow(
+  //               "Time to Complete",
+  //               daysToComplete == 0 ? "Same day" : "$daysToComplete days",
+  //             ),
+  //           ],
+  //         ],
+  //       ),
 
-//       if (taskData['notificationTimes'] != null)
-//         _buildAnalyticsCard(
-//           title: "Schedule",
-//           children: [
-//             Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text(
-//                   "Notification Times",
-//                   style: TextStyle(
-//                     fontWeight: FontWeight.bold,
-//                     fontSize: 16, // Match your existing style
-//                   ),
-//                 ),
-//                 SizedBox(height: 8),
-//                 // Safe parsing with error handling
-//                 ..._buildNotificationTimesListforOneTimeTask(context, taskData['notificationTimes']),
-//               ],
-//             ),
-//           ],
-//         ),
-//     ],
-//   );
-// }
+  //       if (taskData['notificationTimes'] != null)
+  //         _buildAnalyticsCard(
+  //           title: "Schedule",
+  //           children: [
+  //             Column(
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: [
+  //                 Text(
+  //                   "Notification Times",
+  //                   style: TextStyle(
+  //                     fontWeight: FontWeight.bold,
+  //                     fontSize: 16, // Match your existing style
+  //                   ),
+  //                 ),
+  //                 SizedBox(height: 8),
+  //                 // Safe parsing with error handling
+  //                 ..._buildNotificationTimesListforOneTimeTask(context, taskData['notificationTimes']),
+  //               ],
+  //             ),
+  //           ],
+  //         ),
+  //     ],
+  //   );
+  // }
 
-Widget _buildOneTimeTaskAnalytics(
-  BuildContext context,
-  Map<String, dynamic> taskData,
-) {
-  final createdAt = (taskData['createdAt'] as Timestamp).toDate();
-  final completedAt =
-      taskData['completedAt'] != null
-          ? (taskData['completedAt'] as Timestamp).toDate()
-          : null;
+  Widget _buildOneTimeTaskAnalytics(
+    BuildContext context,
+    Map<String, dynamic> taskData,
+  ) {
+    final createdAt = (taskData['createdAt'] as Timestamp).toDate();
+    final completedAt =
+        taskData['completedAt'] != null
+            ? (taskData['completedAt'] as Timestamp).toDate()
+            : null;
 
-  final daysToComplete =
-      completedAt?.difference(createdAt).inDays;
+    final daysToComplete = completedAt?.difference(createdAt).inDays;
 
-       final notificationTimes =
+    final notificationTimes =
         taskData['notificationTimes'] != null
             ? _parseNotificationTimes(taskData['notificationTimes'])
             : null;
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _buildAnalyticsCard(
-        title: "Task Overview",
-        children: [
-          _buildInfoRow("Type", "One-time"),
-          _buildInfoRow("Created", DateFormat.yMMMd().format(createdAt)),
-          _buildInfoRow(
-            "Status",
-            completedAt != null ? "Completed" : "Pending",
-          ),
-          if (completedAt != null) ...[
-            _buildInfoRow(
-              "Completed",
-              DateFormat.yMMMd().format(completedAt),
-            ),
-            _buildInfoRow(
-              "Time to Complete",
-              daysToComplete == 0 ? "Same day" : "$daysToComplete days",
-            ),
-          ],
-        ],
-      ),
-
-      if (taskData['notificationTimes'] != null)
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         _buildAnalyticsCard(
-          title: "Schedule",
+          title: "Task Overview",
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Notification Times",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Use the function that handles DateTime objects
-                _buildNotificationTimesList(context, notificationTimes!),
-              ],
+            _buildInfoRow("Type", "One-time"),
+            _buildInfoRow("Created", DateFormat.yMMMd().format(createdAt)),
+            _buildInfoRow(
+              "Status",
+              completedAt != null ? "Completed" : "Pending",
             ),
+            if (completedAt != null) ...[
+              _buildInfoRow(
+                "Completed",
+                DateFormat.yMMMd().format(completedAt),
+              ),
+              _buildInfoRow(
+                "Time to Complete",
+                daysToComplete == 0 ? "Same day" : "$daysToComplete days",
+              ),
+            ],
           ],
         ),
-    ],
-  );
-}
 
-// Helper method to safely build notification times list
-List<Widget> _buildNotificationTimesListforOneTimeTask(BuildContext context, dynamic notificationTimes) {
-  try {
-    final times = _parseNotificationTimes(notificationTimes);
-    if (times.isEmpty) {
-      return [const Text("No notification times", style: TextStyle(color: Colors.grey))];
-    }
-    
-    return times.map((time) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          _formatTimeOfDay(context, time as TimeOfDay),
-          style: const TextStyle(
-            fontSize: 14, // Match your existing style
+        if (taskData['notificationTimes'] != null)
+          _buildAnalyticsCard(
+            title: "Schedule",
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Notification Times",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                  // Use the function that handles DateTime objects
+                  _buildNotificationTimesList(context, notificationTimes!),
+                ],
+              ),
+            ],
           ),
-        ),
-      );
-    }).toList();
-  } catch (e) {
-    // Fallback if there's any parsing error
-    return [
-      const Text(
-        "Error displaying times",
-        style: TextStyle(color: Colors.red),
-      )
-    ];
+      ],
+    );
   }
-}
 
-// Safe time formatting method
-String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
-  try {
-    final materialLocalizations = MaterialLocalizations.of(context);
-    return materialLocalizations.formatTimeOfDay(time);
-  } catch (e) {
-    // Fallback format
-    return "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+  // Helper method to safely build notification times list
+  List<Widget> _buildNotificationTimesListforOneTimeTask(
+    BuildContext context,
+    dynamic notificationTimes,
+  ) {
+    try {
+      final times = _parseNotificationTimes(notificationTimes);
+      if (times.isEmpty) {
+        return [
+          const Text(
+            "No notification times",
+            style: TextStyle(color: Colors.grey),
+          ),
+        ];
+      }
+
+      return times.map((time) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            _formatTimeOfDay(context, time as TimeOfDay),
+            style: const TextStyle(
+              fontSize: 14, // Match your existing style
+            ),
+          ),
+        );
+      }).toList();
+    } catch (e) {
+      // Fallback if there's any parsing error
+      return [
+        const Text(
+          "Error displaying times",
+          style: TextStyle(color: Colors.red),
+        ),
+      ];
+    }
   }
-}
+
+  // Safe time formatting method
+  String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
+    try {
+      final materialLocalizations = MaterialLocalizations.of(context);
+      return materialLocalizations.formatTimeOfDay(time);
+    } catch (e) {
+      // Fallback format
+      return "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+    }
+  }
 
   Widget _buildDailyTaskAnalytics(
     BuildContext context,
@@ -1234,11 +1235,12 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
         currentStreak++;
         checkDate = checkDate.subtract(recurrence);
       }
-    }
-    else {
+    } else {
       // Task NOT completed today
-      final yesterdayNormalized = todayNormalized.subtract(const Duration(days: 1));
-      
+      final yesterdayNormalized = todayNormalized.subtract(
+        const Duration(days: 1),
+      );
+
       if (normalizedStamps.contains(yesterdayNormalized)) {
         // Task completed yesterday but not today - count backwards from yesterday
         currentStreak = 1;
@@ -1583,10 +1585,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
           );
         }).toList();
 
-    return CustomBarChart(
-      barGroups: bars,
-      showGrid: false,
-    );
+    return CustomBarChart(barGroups: bars, showGrid: false);
   }
 
   Widget _buildLegendItem(Color color, String label) {

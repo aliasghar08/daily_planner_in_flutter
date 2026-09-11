@@ -86,7 +86,8 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     if (widget.existingMedication != null) {
       _nameController.text = widget.existingMedication!.name;
       _dosageController.text = widget.existingMedication!.dosage.toString();
-      _descriptionController.text = widget.existingMedication!.description ?? '';
+      _descriptionController.text =
+          widget.existingMedication!.description ?? '';
       _selectedColor = widget.existingMedication!.color;
       _selectedIcon = widget.existingMedication!.icon;
       _selectedUnit = widget.existingMedication!.unit;
@@ -101,7 +102,8 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
       _selectedTimes.addAll(widget.existingSchedule!.timesPerDay);
       _selectedDays.addAll(widget.existingSchedule!.daysOfWeek);
       _selectedCustomDates.addAll(widget.existingSchedule!.specificDates);
-      _instructionsController.text = widget.existingSchedule!.instructions ?? '';
+      _instructionsController.text =
+          widget.existingSchedule!.instructions ?? '';
       _reminderMinutesBefore = widget.existingSchedule!.reminderMinutesBefore;
     } else {
       // Default initial time
@@ -130,25 +132,31 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
       return;
     }
 
-    if (_selectedFrequency == MedicationFrequency.weekly && _selectedDays.isEmpty) {
+    if (_selectedFrequency == MedicationFrequency.weekly &&
+        _selectedDays.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one day for weekly schedule')),
+        const SnackBar(
+          content: Text('Please select at least one day for weekly schedule'),
+        ),
       );
       return;
     }
 
-    if (_selectedFrequency == MedicationFrequency.custom && _selectedCustomDates.isEmpty) {
+    if (_selectedFrequency == MedicationFrequency.custom &&
+        _selectedCustomDates.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one date for custom schedule')),
+        const SnackBar(
+          content: Text('Please select at least one date for custom schedule'),
+        ),
       );
       return;
     }
 
     final authProvider = context.read<app_auth.AuthProvider>();
     if (authProvider.user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not authenticated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not authenticated')));
       return;
     }
 
@@ -159,9 +167,11 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     try {
       final medProvider = context.read<MedicationProvider>();
 
-      final medicationId = widget.existingMedication?.medicationId ??
+      final medicationId =
+          widget.existingMedication?.medicationId ??
           'med_${DateTime.now().millisecondsSinceEpoch}';
-      final scheduleId = widget.existingSchedule?.scheduleId ??
+      final scheduleId =
+          widget.existingSchedule?.scheduleId ??
           'sched_${DateTime.now().millisecondsSinceEpoch}';
 
       final medication = Medication(
@@ -169,9 +179,10 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         name: _nameController.text.trim(),
         dosage: _dosage,
         unit: _selectedUnit,
-        description: _descriptionController.text.trim().isEmpty
-            ? null
-            : _descriptionController.text.trim(),
+        description:
+            _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
         color: _selectedColor,
         icon: _selectedIcon,
         createdAt: widget.existingMedication?.createdAt ?? DateTime.now(),
@@ -187,9 +198,10 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         timesPerDay: _selectedTimes,
         daysOfWeek: _selectedDays,
         specificDates: _selectedCustomDates,
-        instructions: _instructionsController.text.trim().isEmpty
-            ? null
-            : _instructionsController.text.trim(),
+        instructions:
+            _instructionsController.text.trim().isEmpty
+                ? null
+                : _instructionsController.text.trim(),
         reminderMinutesBefore: _reminderMinutesBefore,
         createdAt: widget.existingSchedule?.createdAt ?? DateTime.now(),
       );
@@ -230,97 +242,103 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   void _showColorPicker() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose Color'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: GridView.builder(
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemCount: _colorOptions.length,
-            itemBuilder: (context, index) {
-              final colorOption = _colorOptions[index];
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedColor = colorOption['color'];
-                  });
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _parseColor(colorOption['color']),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _selectedColor == colorOption['color']
-                          ? Colors.black
-                          : Colors.transparent,
-                      width: 3,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      colorOption['name'],
-                      style: TextStyle(
-                        color: _getTextColor(_parseColor(colorOption['color'])),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Choose Color'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: GridView.builder(
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: _colorOptions.length,
+                itemBuilder: (context, index) {
+                  final colorOption = _colorOptions[index];
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedColor = colorOption['color'];
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: _parseColor(colorOption['color']),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color:
+                              _selectedColor == colorOption['color']
+                                  ? Colors.black
+                                  : Colors.transparent,
+                          width: 3,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          colorOption['name'],
+                          style: TextStyle(
+                            color: _getTextColor(
+                              _parseColor(colorOption['color']),
+                            ),
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            },
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
   void _showIconPicker() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose Icon'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: GridView.builder(
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemCount: _iconOptions.length,
-            itemBuilder: (context, index) {
-              final icon = _iconOptions[index];
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedIcon = icon;
-                  });
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: _selectedIcon == icon
-                        ? Colors.blue.withValues(alpha: 0.2)
-                        : Colors.grey.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(icon, style: const TextStyle(fontSize: 24)),
-                  ),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Choose Icon'),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: GridView.builder(
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
-              );
-            },
+                itemCount: _iconOptions.length,
+                itemBuilder: (context, index) {
+                  final icon = _iconOptions[index];
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedIcon = icon;
+                      });
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color:
+                            _selectedIcon == icon
+                                ? Colors.blue.withValues(alpha: 0.2)
+                                : Colors.grey.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(icon, style: const TextStyle(fontSize: 24)),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -437,12 +455,13 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             labelText: 'Frequency',
             border: OutlineInputBorder(),
           ),
-          items: MedicationFrequency.values.map((frequency) {
-            return DropdownMenuItem<MedicationFrequency>(
-              value: frequency,
-              child: Text(_getFrequencyDisplayName(frequency)),
-            );
-          }).toList(),
+          items:
+              MedicationFrequency.values.map((frequency) {
+                return DropdownMenuItem<MedicationFrequency>(
+                  value: frequency,
+                  child: Text(_getFrequencyDisplayName(frequency)),
+                );
+              }).toList(),
           onChanged: (value) {
             if (value != null) {
               setState(() {
@@ -456,7 +475,8 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   }
 
   Widget _buildDaysSection() {
-    if (_selectedFrequency != MedicationFrequency.weekly) return const SizedBox();
+    if (_selectedFrequency != MedicationFrequency.weekly)
+      return const SizedBox();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,16 +490,17 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _dayOptions.map((day) {
-            final isSelected = _selectedDays.contains(day['index']);
-            return FilterChip(
-              label: Text(day['short']),
-              selected: isSelected,
-              onSelected: (selected) => _toggleDay(day['index']),
-              selectedColor: Colors.blue.withValues(alpha: 0.2),
-              checkmarkColor: Colors.blue,
-            );
-          }).toList(),
+          children:
+              _dayOptions.map((day) {
+                final isSelected = _selectedDays.contains(day['index']);
+                return FilterChip(
+                  label: Text(day['short']),
+                  selected: isSelected,
+                  onSelected: (selected) => _toggleDay(day['index']),
+                  selectedColor: Colors.blue.withValues(alpha: 0.2),
+                  checkmarkColor: Colors.blue,
+                );
+              }).toList(),
         ),
       ],
     );
@@ -514,20 +535,22 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _selectedTimes.map((time) {
-              return Chip(
-                label: Text(_formatTime(time)),
-                onDeleted: () => _removeTime(time),
-                deleteIconColor: Colors.red,
-              );
-            }).toList(),
+            children:
+                _selectedTimes.map((time) {
+                  return Chip(
+                    label: Text(_formatTime(time)),
+                    onDeleted: () => _removeTime(time),
+                    deleteIconColor: Colors.red,
+                  );
+                }).toList(),
           ),
       ],
     );
   }
 
   Widget _buildCustomDatesSection() {
-    if (_selectedFrequency != MedicationFrequency.custom) return const SizedBox();
+    if (_selectedFrequency != MedicationFrequency.custom)
+      return const SizedBox();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,13 +580,14 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _selectedCustomDates.map((date) {
-              return Chip(
-                label: Text(_formatDate(date)),
-                onDeleted: () => _removeCustomDate(date),
-                deleteIconColor: Colors.red,
-              );
-            }).toList(),
+            children:
+                _selectedCustomDates.map((date) {
+                  return Chip(
+                    label: Text(_formatDate(date)),
+                    onDeleted: () => _removeCustomDate(date),
+                    deleteIconColor: Colors.red,
+                  );
+                }).toList(),
           ),
       ],
     );
@@ -623,12 +647,15 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
             labelText: 'Remind Before',
             border: OutlineInputBorder(),
           ),
-          items: [0, 5, 10, 15, 30, 60].map((minutes) {
-            return DropdownMenuItem<int>(
-              value: minutes,
-              child: Text(minutes == 0 ? 'At exact time' : '$minutes minutes before'),
-            );
-          }).toList(),
+          items:
+              [0, 5, 10, 15, 30, 60].map((minutes) {
+                return DropdownMenuItem<int>(
+                  value: minutes,
+                  child: Text(
+                    minutes == 0 ? 'At exact time' : '$minutes minutes before',
+                  ),
+                );
+              }).toList(),
           onChanged: (value) {
             if (value != null) {
               setState(() {
@@ -693,18 +720,21 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.existingMedication != null ? 'Edit Medication' : 'Add New Medication',
+          widget.existingMedication != null
+              ? 'Edit Medication'
+              : 'Add New Medication',
         ),
         actions: [
           IconButton(
             onPressed: _isSaving ? null : _saveMedication,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save),
+            icon:
+                _isSaving
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Icon(Icons.save),
           ),
         ],
       ),
@@ -860,12 +890,13 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                                 labelText: 'Unit',
                                 border: OutlineInputBorder(),
                               ),
-                              items: DosageUnit.values.map((unit) {
-                                return DropdownMenuItem<DosageUnit>(
-                                  value: unit,
-                                  child: Text(_getUnitDisplayName(unit)),
-                                );
-                              }).toList(),
+                              items:
+                                  DosageUnit.values.map((unit) {
+                                    return DropdownMenuItem<DosageUnit>(
+                                      value: unit,
+                                      child: Text(_getUnitDisplayName(unit)),
+                                    );
+                                  }).toList(),
                               onChanged: (value) {
                                 if (value != null) {
                                   setState(() {
@@ -935,14 +966,15 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
-                child: _isSaving
-                    ? const CircularProgressIndicator()
-                    : Text(
-                        widget.existingMedication != null
-                            ? 'Update Medication'
-                            : 'Save Medication',
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                child:
+                    _isSaving
+                        ? const CircularProgressIndicator()
+                        : Text(
+                          widget.existingMedication != null
+                              ? 'Update Medication'
+                              : 'Save Medication',
+                          style: const TextStyle(fontSize: 16),
+                        ),
               ),
             ],
           ),

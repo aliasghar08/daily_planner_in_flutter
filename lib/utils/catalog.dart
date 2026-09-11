@@ -470,16 +470,16 @@ class WeeklyTask extends Task {
   }
 
   bool shouldResetThisWeek() {
-  if (completedAt == null) return true;
+    if (completedAt == null) return true;
 
-  final now = DateTime.now().toLocal();
-  final last = completedAt!.toLocal();
-  
-  // Calculate the difference in days using local times
-  final daysDifference = now.difference(last).inDays;
-  
-  return !(daysDifference < 7 && now.weekday != last.weekday);
-}
+    final now = DateTime.now().toLocal();
+    final last = completedAt!.toLocal();
+
+    // Calculate the difference in days using local times
+    final daysDifference = now.difference(last).inDays;
+
+    return !(daysDifference < 7 && now.weekday != last.weekday);
+  }
 }
 
 class MonthlyTask extends Task {

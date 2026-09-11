@@ -61,7 +61,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Password changed successfully. Stored passwords updated."),
+            content: Text(
+              "Password changed successfully. Stored passwords updated.",
+            ),
           ),
         );
 
@@ -70,13 +72,21 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
       }
     } on FirebaseAuthException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.message}")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
       }
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _currentPassController.dispose();
+    _newPassController.dispose();
+    _confirmPassController.dispose();
+    super.dispose();
   }
 
   @override
@@ -98,7 +108,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureCurrent ? Icons.visibility : Icons.visibility_off,
+                        _obscureCurrent
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() => _obscureCurrent = !_obscureCurrent);
@@ -107,8 +119,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   ),
                   autofillHints: const [AutofillHints.password],
                   textInputAction: TextInputAction.next,
-                  validator: (value) =>
-                      value == null || value.isEmpty ? "Enter current password" : null,
+                  validator:
+                      (value) =>
+                          value == null || value.isEmpty
+                              ? "Enter current password"
+                              : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -128,10 +143,11 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   ),
                   autofillHints: const [AutofillHints.newPassword],
                   textInputAction: TextInputAction.next,
-                  validator: (value) =>
-                      value != null && value.length >= 6
-                          ? null
-                          : "Password must be at least 6 characters",
+                  validator:
+                      (value) =>
+                          value != null && value.length >= 6
+                              ? null
+                              : "Password must be at least 6 characters",
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -142,7 +158,9 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirm ? Icons.visibility : Icons.visibility_off,
+                        _obscureConfirm
+                            ? Icons.visibility
+                            : Icons.visibility_off,
                       ),
                       onPressed: () {
                         setState(() => _obscureConfirm = !_obscureConfirm);
@@ -152,25 +170,26 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
                   autofillHints: const [AutofillHints.newPassword],
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) => _changePassword(),
-                  validator: (value) =>
-                      value == _newPassController.text
-                          ? null
-                          : "Passwords do not match",
+                  validator:
+                      (value) =>
+                          value == _newPassController.text
+                              ? null
+                              : "Passwords do not match",
                 ),
                 const SizedBox(height: 24),
                 isLoading
                     ? const CircularProgressIndicator()
                     : ElevatedButton.icon(
-                        onPressed: _changePassword,
-                        icon: const Icon(Icons.lock_reset),
-                        label: const Text("Change Password"),
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                      onPressed: _changePassword,
+                      icon: const Icon(Icons.lock_reset),
+                      label: const Text("Change Password"),
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
+                    ),
               ],
             ),
           ),

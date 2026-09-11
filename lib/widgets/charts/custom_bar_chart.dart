@@ -106,20 +106,23 @@ class _CustomBarChartState extends State<CustomBarChart>
       builder: (context, constraints) {
         const bottomTitleReservedHeight = 32.0;
         final totalWidth = constraints.maxWidth;
-        final totalHeight = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 220.0;
-        final chartDrawHeight = math.max(10.0, totalHeight - bottomTitleReservedHeight);
+        final totalHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 220.0;
+        final chartDrawHeight = math.max(
+          10.0,
+          totalHeight - bottomTitleReservedHeight,
+        );
 
         return Column(
           children: [
             Expanded(
               child: GestureDetector(
-                onTapDown: (details) => _handleTap(
-                  details.localPosition,
-                  totalWidth,
-                  chartDrawHeight,
-                ),
+                onTapDown:
+                    (details) => _handleTap(
+                      details.localPosition,
+                      totalWidth,
+                      chartDrawHeight,
+                    ),
                 child: AnimatedBuilder(
                   animation: _animation,
                   builder: (context, child) {
@@ -146,17 +149,18 @@ class _CustomBarChartState extends State<CustomBarChart>
                   final group = widget.barGroups[index];
                   final label = group.label ?? index.toString();
                   return Expanded(
-                    child: widget.bottomTitleBuilder != null
-                        ? widget.bottomTitleBuilder!(index, label)
-                        : Center(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 6.0),
-                              child: Text(
-                                label,
-                                style: Theme.of(context).textTheme.bodySmall,
+                    child:
+                        widget.bottomTitleBuilder != null
+                            ? widget.bottomTitleBuilder!(index, label)
+                            : Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 6.0),
+                                child: Text(
+                                  label,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
                               ),
                             ),
-                          ),
                   );
                 }),
               ),
@@ -193,10 +197,11 @@ class _BarChartPainter extends CustomPainter {
 
     // Draw background grid lines if enabled
     if (showGrid) {
-      final gridPaint = Paint()
-        ..color = gridColor
-        ..strokeWidth = 1.0
-        ..style = PaintingStyle.stroke;
+      final gridPaint =
+          Paint()
+            ..color = gridColor
+            ..strokeWidth = 1.0
+            ..style = PaintingStyle.stroke;
 
       const gridLines = 4;
       for (int i = 0; i <= gridLines; i++) {
@@ -218,10 +223,12 @@ class _BarChartPainter extends CustomPainter {
       if (rodCount == 0) continue;
 
       const interRodSpacing = 2.0;
-      final totalRodsWidth = group.barRods.fold<double>(
-        0.0,
-        (sum, r) => sum + math.min(r.width, (slotWidth / rodCount) - 1),
-      ) + (interRodSpacing * (rodCount - 1));
+      final totalRodsWidth =
+          group.barRods.fold<double>(
+            0.0,
+            (sum, r) => sum + math.min(r.width, (slotWidth / rodCount) - 1),
+          ) +
+          (interRodSpacing * (rodCount - 1));
 
       double currentRodLeft = groupCenterX - (totalRodsWidth / 2);
 
@@ -251,9 +258,8 @@ class _BarChartPainter extends CustomPainter {
         if (rod.gradient != null) {
           paint.shader = rod.gradient!.createShader(rect);
         } else {
-          paint.color = isGroupTouched
-              ? rod.color.withValues(alpha: 0.85)
-              : rod.color;
+          paint.color =
+              isGroupTouched ? rod.color.withValues(alpha: 0.85) : rod.color;
         }
 
         canvas.drawRRect(rrect, paint);
@@ -289,10 +295,7 @@ class _BarChartPainter extends CustomPainter {
           final bubblePaint = Paint()..color = Colors.black87;
           canvas.drawRRect(bubbleRRect, bubblePaint);
 
-          textPainter.paint(
-            canvas,
-            Offset(bubbleLeft + 4, bubbleTop + 2),
-          );
+          textPainter.paint(canvas, Offset(bubbleLeft + 4, bubbleTop + 2));
         }
 
         currentRodLeft += rodWidth + interRodSpacing;

@@ -25,12 +25,14 @@ class _MyDrawerState extends State<MyDrawer> {
     final user = authProvider.user;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final displayName = user?.displayName?.isNotEmpty == true
-        ? user!.displayName!
-        : (user?.email?.split('@').first ?? 'User');
-    final initials = displayName.isNotEmpty
-        ? displayName.substring(0, 1).toUpperCase()
-        : 'U';
+    final displayName =
+        user?.displayName?.isNotEmpty == true
+            ? user!.displayName!
+            : (user?.email?.split('@').first ?? 'User');
+    final initials =
+        displayName.isNotEmpty
+            ? displayName.substring(0, 1).toUpperCase()
+            : 'U';
 
     return Drawer(
       backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
@@ -45,9 +47,10 @@ class _MyDrawerState extends State<MyDrawer> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: isDark
-                      ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-                      : [const Color(0xFF2563EB), const Color(0xFF1D4ED8)],
+                  colors:
+                      isDark
+                          ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                          : [const Color(0xFF2563EB), const Color(0xFF1D4ED8)],
                 ),
               ),
               child: Column(
@@ -91,7 +94,10 @@ class _MyDrawerState extends State<MyDrawer> {
             // Drawer Items List
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 8,
+                ),
                 children: [
                   _buildDrawerTile(
                     icon: Icons.home_rounded,
@@ -107,7 +113,9 @@ class _MyDrawerState extends State<MyDrawer> {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const MedicationListPage()),
+                        MaterialPageRoute(
+                          builder: (_) => const MedicationListPage(),
+                        ),
                       );
                     },
                   ),
@@ -204,7 +212,9 @@ class _MyDrawerState extends State<MyDrawer> {
       child: Column(
         children: [
           ListTile(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             leading: Container(
               width: 38,
               height: 38,
@@ -212,7 +222,11 @@ class _MyDrawerState extends State<MyDrawer> {
                 color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.insights_rounded, color: Color(0xFF8B5CF6), size: 20),
+              child: const Icon(
+                Icons.insights_rounded,
+                color: Color(0xFF8B5CF6),
+                size: 20,
+              ),
             ),
             title: Text(
               "Analytics & Stats",
@@ -240,21 +254,33 @@ class _MyDrawerState extends State<MyDrawer> {
                 children: [
                   ListTile(
                     dense: true,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    title: const Text("Daily Tasks Stats", style: TextStyle(fontSize: 13)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    title: const Text(
+                      "Daily Tasks Stats",
+                      style: TextStyle(fontSize: 13),
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 12),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const DailyTasksStats()),
+                        MaterialPageRoute(
+                          builder: (_) => const DailyTasksStats(),
+                        ),
                       );
                     },
                   ),
                   ListTile(
                     dense: true,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    title: const Text("Total Tasks History", style: TextStyle(fontSize: 13)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    title: const Text(
+                      "Total Tasks History",
+                      style: TextStyle(fontSize: 13),
+                    ),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 12),
                     onTap: () {
                       Navigator.pop(context);
@@ -275,21 +301,24 @@ class _MyDrawerState extends State<MyDrawer> {
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Log Out Confirmation"),
-        content: const Text("Are you sure you want to sign out of your account?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text("Cancel"),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text("Log Out Confirmation"),
+            content: const Text(
+              "Are you sure you want to sign out of your account?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text("Cancel"),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text("Sign Out"),
+              ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text("Sign Out"),
-          ),
-        ],
-      ),
     );
 
     if (shouldLogout == true && mounted) {

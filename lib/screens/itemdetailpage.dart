@@ -198,27 +198,24 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     if (oldWidget.task.docId != widget.task.docId) _loadTaskData();
   }
 
-
-
   // ✅ NEW: Format recurrence information for display
   String _getRecurrenceDescription() {
-    if (_notificationRecurrence == null || 
+    if (_notificationRecurrence == null ||
         _notificationRecurrence == NotificationRecurrence.none) {
       return "No recurring notifications";
     }
 
-    final timeStr = _recurrenceTime != null
-        ? " at ${_formatTimeOfDay(_recurrenceTime!)}"
-        : "";
+    final timeStr =
+        _recurrenceTime != null
+            ? " at ${_formatTimeOfDay(_recurrenceTime!)}"
+            : "";
 
     switch (_notificationRecurrence!) {
       case NotificationRecurrence.daily:
         return "Daily$timeStr";
       case NotificationRecurrence.weekly:
         final dayOfWeek = widget.task.date?.weekday ?? DateTime.now().weekday;
-        final dayName = DateFormat('EEEE').format(
-          DateTime(2024, 1, dayOfWeek)
-        );
+        final dayName = DateFormat('EEEE').format(DateTime(2024, 1, dayOfWeek));
         return "Every $dayName$timeStr";
       case NotificationRecurrence.monthly:
         final dayOfMonth = widget.task.date?.day ?? DateTime.now().day;
@@ -237,22 +234,25 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   // ✅ NEW: Get selected day names
   List<String> _getSelectedDayNames() {
     if (_selectedDays == null) return [];
-    
+
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return _selectedDays!.entries
-        .where((entry) => entry.value)
-        .map((entry) {
-          final index = int.tryParse(entry.key);
-          return index != null && index >= 1 && index <= 7 
-              ? days[index - 1] 
-              : 'Day $entry.key';
-        })
-        .toList();
+    return _selectedDays!.entries.where((entry) => entry.value).map((entry) {
+      final index = int.tryParse(entry.key);
+      return index != null && index >= 1 && index <= 7
+          ? days[index - 1]
+          : 'Day $entry.key';
+    }).toList();
   }
 
   String _formatTimeOfDay(TimeOfDay time) {
     final now = DateTime.now();
-    final dateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    final dateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
     return DateFormat.jm().format(dateTime);
   }
 
@@ -322,10 +322,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       if (_notificationRecurrence != NotificationRecurrence.none) {
         payload['recurrence'] = _notificationRecurrence!.name;
         if (_recurrenceTime != null) {
-          payload['recurrenceTime'] = {
-            'hour': _recurrenceTime!.hour,
-            'minute': _recurrenceTime!.minute,
-          } as String?;
+          payload['recurrenceTime'] =
+              {'hour': _recurrenceTime!.hour, 'minute': _recurrenceTime!.minute}
+                  as String?;
         }
         if (_selectedDays != null && _selectedDays!.isNotEmpty) {
           payload['selectedDays'] = _selectedDays as String?;
@@ -341,10 +340,11 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       );
 
       // Show specific feedback based on notification type
-      final notificationTypeText = _notificationRecurrence != NotificationRecurrence.none
-          ? "Recurring (${_notificationRecurrence!.name})"
-          : "Single";
-      
+      final notificationTypeText =
+          _notificationRecurrence != NotificationRecurrence.none
+              ? "Recurring (${_notificationRecurrence!.name})"
+              : "Single";
+
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text(
@@ -388,10 +388,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       if (_nativeAlarmInitialized) {
         // Cancel all potential alarms for this task
         await NativeAlarmHelper.cancelAlarmsForTask(widget.task.docId!);
-        
+
         // Also cancel legacy single-alarm ID
         await NativeAlarmHelper.cancelAlarmById(
-          (widget.task.docId.hashCode & 0x7FFFFFFF)
+          (widget.task.docId.hashCode & 0x7FFFFFFF),
         );
 
         scaffoldMessengerKey.currentState?.showSnackBar(
@@ -430,7 +430,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
 
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          content: Text("✅ Test notification shown for ${_getRecurrenceDescription()}"),
+          content: Text(
+            "✅ Test notification shown for ${_getRecurrenceDescription()}",
+          ),
           backgroundColor: Colors.green,
         ),
       );
@@ -452,7 +454,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
         builder: (BuildContext context) {
           return AlertDialog(
             title: const Text('Undo Completed Task?'),
-            content: const Text('Are you sure you want to mark this task as incomplete?'),
+            content: const Text(
+              'Are you sure you want to mark this task as incomplete?',
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
@@ -460,7 +464,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Confirm', style: TextStyle(color: Colors.red)),
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(color: Colors.red),
+                ),
               ),
             ],
           );
@@ -808,7 +815,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                             color: _getRecurrenceColor().withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: _getRecurrenceColor().withValues(alpha: 0.3),
+                              color: _getRecurrenceColor().withValues(
+                                alpha: 0.3,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -822,22 +831,23 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                                   color: _getRecurrenceColor(),
                                 ),
                               ),
-                              if (_notificationRecurrence != NotificationRecurrence.none)
-                                ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _getNotificationDetails(),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey,
-                                    ),
+                              if (_notificationRecurrence !=
+                                  NotificationRecurrence.none) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _getNotificationDetails(),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
                                   ),
-                                ],
+                                ),
+                              ],
                             ],
                           ),
                         ),
                         const SizedBox(height: 12),
-                        if (_notificationRecurrence == NotificationRecurrence.none && 
+                        if (_notificationRecurrence ==
+                                NotificationRecurrence.none &&
                             notificationTimes.isNotEmpty)
                           Text(
                             "${notificationTimes.length} single notification(s) scheduled",
@@ -1008,9 +1018,10 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                         color: _getRecurrenceColor(),
                       ),
                       title: Text(_formatShortDateTime(date)),
-                      subtitle: _notificationRecurrence != NotificationRecurrence.none
-                          ? Text(_getRecurrenceDescription())
-                          : const Text("Single notification"),
+                      subtitle:
+                          _notificationRecurrence != NotificationRecurrence.none
+                              ? Text(_getRecurrenceDescription())
+                              : const Text("Single notification"),
                     ),
                   )
                   .toList(),
@@ -1236,4 +1247,3 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     ),
   );
 }
-

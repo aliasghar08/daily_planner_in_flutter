@@ -31,9 +31,9 @@ class _MedicationListPageState extends State<MedicationListPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<app_auth.AuthProvider>();
       if (authProvider.user != null) {
-        context
-            .read<MedicationProvider>()
-            .loadMedications(authProvider.user!.uid);
+        context.read<MedicationProvider>().loadMedications(
+          authProvider.user!.uid,
+        );
       }
     });
   }
@@ -61,7 +61,8 @@ class _MedicationListPageState extends State<MedicationListPage>
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FA),
+      backgroundColor:
+          isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FA),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
@@ -83,9 +84,7 @@ class _MedicationListPageState extends State<MedicationListPage>
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AddMedicationPage(),
-                ),
+                MaterialPageRoute(builder: (_) => const AddMedicationPage()),
               );
             },
           ),
@@ -95,32 +94,43 @@ class _MedicationListPageState extends State<MedicationListPage>
           indicatorColor: Colors.blueAccent,
           indicatorWeight: 3,
           labelColor: Colors.blueAccent,
-          unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          unselectedLabelColor:
+              isDark ? Colors.grey.shade400 : Colors.grey.shade600,
           labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: const [
-            Tab(text: 'Daily Schedule', icon: Icon(Icons.calendar_today_rounded, size: 20)),
-            Tab(text: 'My Medications', icon: Icon(Icons.medication_rounded, size: 20)),
+            Tab(
+              text: 'Daily Schedule',
+              icon: Icon(Icons.calendar_today_rounded, size: 20),
+            ),
+            Tab(
+              text: 'My Medications',
+              icon: Icon(Icons.medication_rounded, size: 20),
+            ),
           ],
         ),
       ),
-      body: medProvider.isLoading
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+      body:
+          medProvider.isLoading
+              ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text(
+                      'Loading medications...',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              )
+              : TabBarView(
+                controller: _tabController,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Loading medications...', style: TextStyle(color: Colors.grey)),
+                  _buildDailyScheduleTab(medProvider, isDark),
+                  _buildMedicationsListTab(medProvider, isDark),
                 ],
               ),
-            )
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildDailyScheduleTab(medProvider, isDark),
-                _buildMedicationsListTab(medProvider, isDark),
-              ],
-            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.push(
@@ -130,7 +140,10 @@ class _MedicationListPageState extends State<MedicationListPage>
         },
         backgroundColor: Colors.blueAccent,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add Medication', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'Add Medication',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -260,7 +273,11 @@ class _MedicationListPageState extends State<MedicationListPage>
                   color: Colors.purple.shade600,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.access_alarm_rounded, color: Colors.white, size: 16),
+                child: const Icon(
+                  Icons.access_alarm_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -268,7 +285,8 @@ class _MedicationListPageState extends State<MedicationListPage>
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.purple.shade200 : Colors.purple.shade900,
+                  color:
+                      isDark ? Colors.purple.shade200 : Colors.purple.shade900,
                 ),
               ),
               const Spacer(),
@@ -277,7 +295,8 @@ class _MedicationListPageState extends State<MedicationListPage>
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.purple.shade300 : Colors.purple.shade700,
+                  color:
+                      isDark ? Colors.purple.shade300 : Colors.purple.shade700,
                 ),
               ),
             ],
@@ -313,7 +332,10 @@ class _MedicationListPageState extends State<MedicationListPage>
                           '${med.dosage} ${med.unit.name} • Scheduled $timeStr',
                           style: TextStyle(
                             fontSize: 12,
-                            color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            color:
+                                isDark
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade600,
                           ),
                         ),
                       ],
@@ -323,8 +345,13 @@ class _MedicationListPageState extends State<MedicationListPage>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       elevation: 0,
                     ),
                     onPressed: () {
@@ -334,7 +361,10 @@ class _MedicationListPageState extends State<MedicationListPage>
                         actualTime: DateTime.now(),
                       );
                     },
-                    child: const Text('Take', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Take',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -350,7 +380,9 @@ class _MedicationListPageState extends State<MedicationListPage>
   // ----------------------------------------------------
   Widget _buildUpNextBanner(MedicationProvider medProvider, bool isDark) {
     final next = medProvider.nextUpcomingIntake;
-    final allDone = medProvider.pendingIntakesCount == 0 && medProvider.totalIntakesCount > 0;
+    final allDone =
+        medProvider.pendingIntakesCount == 0 &&
+        medProvider.totalIntakesCount > 0;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -365,7 +397,9 @@ class _MedicationListPageState extends State<MedicationListPage>
       child: Row(
         children: [
           Icon(
-            allDone ? Icons.celebration_rounded : Icons.check_circle_outline_rounded,
+            allDone
+                ? Icons.celebration_rounded
+                : Icons.check_circle_outline_rounded,
             color: Colors.green,
             size: 20,
           ),
@@ -392,7 +426,10 @@ class _MedicationListPageState extends State<MedicationListPage>
   // ----------------------------------------------------
   // Apple Health Style Horizontal Date Strip (14 days)
   // ----------------------------------------------------
-  Widget _buildAppleHealthDateStrip(MedicationProvider medProvider, bool isDark) {
+  Widget _buildAppleHealthDateStrip(
+    MedicationProvider medProvider,
+    bool isDark,
+  ) {
     final today = medProvider.currentLogicalDate;
     // Generate dates: 6 days before logical today to 7 days after
     final dates = List.generate(
@@ -439,10 +476,12 @@ class _MedicationListPageState extends State<MedicationListPage>
               itemCount: dates.length,
               itemBuilder: (context, index) {
                 final date = dates[index];
-                final isSelected = date.year == medProvider.selectedDate.year &&
+                final isSelected =
+                    date.year == medProvider.selectedDate.year &&
                     date.month == medProvider.selectedDate.month &&
                     date.day == medProvider.selectedDate.day;
-                final isCurrentToday = date.year == today.year &&
+                final isCurrentToday =
+                    date.year == today.year &&
                     date.month == today.month &&
                     date.day == today.day;
 
@@ -455,22 +494,24 @@ class _MedicationListPageState extends State<MedicationListPage>
                     width: 52,
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.blueAccent
-                          : (isCurrentToday
-                              ? (isDark
-                                  ? Colors.blueAccent.withValues(alpha: 0.2)
-                                  : Colors.blue.shade50)
-                              : (isDark
-                                  ? const Color(0xFF2A2A2A)
-                                  : Colors.grey.shade100)),
+                      color:
+                          isSelected
+                              ? Colors.blueAccent
+                              : (isCurrentToday
+                                  ? (isDark
+                                      ? Colors.blueAccent.withValues(alpha: 0.2)
+                                      : Colors.blue.shade50)
+                                  : (isDark
+                                      ? const Color(0xFF2A2A2A)
+                                      : Colors.grey.shade100)),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isSelected
-                            ? Colors.blueAccent
-                            : (isCurrentToday
-                                ? Colors.blueAccent.withValues(alpha: 0.5)
-                                : Colors.transparent),
+                        color:
+                            isSelected
+                                ? Colors.blueAccent
+                                : (isCurrentToday
+                                    ? Colors.blueAccent.withValues(alpha: 0.5)
+                                    : Colors.transparent),
                         width: 1.5,
                       ),
                     ),
@@ -482,11 +523,12 @@ class _MedicationListPageState extends State<MedicationListPage>
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark
-                                    ? Colors.grey.shade400
-                                    : Colors.grey.shade600),
+                            color:
+                                isSelected
+                                    ? Colors.white
+                                    : (isDark
+                                        ? Colors.grey.shade400
+                                        : Colors.grey.shade600),
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -495,9 +537,10 @@ class _MedicationListPageState extends State<MedicationListPage>
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: isSelected
-                                ? Colors.white
-                                : (isDark ? Colors.white : Colors.black87),
+                            color:
+                                isSelected
+                                    ? Colors.white
+                                    : (isDark ? Colors.white : Colors.black87),
                           ),
                         ),
                         if (isCurrentToday)
@@ -506,7 +549,8 @@ class _MedicationListPageState extends State<MedicationListPage>
                             width: 4,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: isSelected ? Colors.white : Colors.blueAccent,
+                              color:
+                                  isSelected ? Colors.white : Colors.blueAccent,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -537,9 +581,10 @@ class _MedicationListPageState extends State<MedicationListPage>
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: isDark
-              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-              : [Colors.blue.shade700, Colors.indigo.shade800],
+          colors:
+              isDark
+                  ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                  : [Colors.blue.shade700, Colors.indigo.shade800],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -565,7 +610,9 @@ class _MedicationListPageState extends State<MedicationListPage>
                   value: total == 0 ? 0.0 : pct,
                   strokeWidth: 7,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Colors.greenAccent,
+                  ),
                 ),
                 Center(
                   child: Text(
@@ -608,10 +655,22 @@ class _MedicationListPageState extends State<MedicationListPage>
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    _buildStatPill('Taken: $taken', Colors.greenAccent.shade400, Colors.green.shade900),
-                    _buildStatPill('Pending: $pending', Colors.blue.shade100, Colors.blue.shade900),
+                    _buildStatPill(
+                      'Taken: $taken',
+                      Colors.greenAccent.shade400,
+                      Colors.green.shade900,
+                    ),
+                    _buildStatPill(
+                      'Pending: $pending',
+                      Colors.blue.shade100,
+                      Colors.blue.shade900,
+                    ),
                     if (skipped > 0)
-                      _buildStatPill('Skipped: $skipped', Colors.amber.shade200, Colors.brown.shade800),
+                      _buildStatPill(
+                        'Skipped: $skipped',
+                        Colors.amber.shade200,
+                        Colors.brown.shade800,
+                      ),
                   ],
                 ),
               ],
@@ -712,9 +771,10 @@ class _MedicationListPageState extends State<MedicationListPage>
         color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isTaken
-              ? Colors.green.withValues(alpha: 0.3)
-              : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+          color:
+              isTaken
+                  ? Colors.green.withValues(alpha: 0.3)
+                  : (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
         ),
         boxShadow: [
           BoxShadow(
@@ -747,10 +807,7 @@ class _MedicationListPageState extends State<MedicationListPage>
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: Text(
-                    med.icon,
-                    style: const TextStyle(fontSize: 22),
-                  ),
+                  child: Text(med.icon, style: const TextStyle(fontSize: 22)),
                 ),
               ),
               const SizedBox(width: 14),
@@ -768,9 +825,8 @@ class _MedicationListPageState extends State<MedicationListPage>
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              decoration: isSkipped
-                                  ? TextDecoration.lineThrough
-                                  : null,
+                              decoration:
+                                  isSkipped ? TextDecoration.lineThrough : null,
                               color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
@@ -790,14 +846,21 @@ class _MedicationListPageState extends State<MedicationListPage>
                       '${med.dosage} ${med.unit.name}${intake.schedule.instructions != null && intake.schedule.instructions!.isNotEmpty ? ' • ${intake.schedule.instructions}' : ''}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                        color:
+                            isDark
+                                ? Colors.grey.shade400
+                                : Colors.grey.shade600,
                       ),
                     ),
                     if (isTaken && intake.actualTime != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                          const Icon(
+                            Icons.check_circle,
+                            size: 14,
+                            color: Colors.green,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             'Taken at ${DateFormat('h:mm a').format(intake.actualTime!)}',
@@ -819,7 +882,11 @@ class _MedicationListPageState extends State<MedicationListPage>
               // Action Buttons: Taken / Skipped / Toggle
               if (isTaken)
                 IconButton(
-                  icon: const Icon(Icons.check_circle_rounded, color: Colors.green, size: 28),
+                  icon: const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.green,
+                    size: 28,
+                  ),
                   tooltip: 'Mark as Pending',
                   onPressed: () async {
                     final bool? confirm = await showDialog<bool>(
@@ -827,7 +894,9 @@ class _MedicationListPageState extends State<MedicationListPage>
                       builder: (BuildContext context) {
                         return AlertDialog(
                           title: const Text('Undo Taken Dose?'),
-                          content: const Text('Are you sure you want to mark this dose as pending?'),
+                          content: const Text(
+                            'Are you sure you want to mark this dose as pending?',
+                          ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.of(context).pop(false),
@@ -835,7 +904,10 @@ class _MedicationListPageState extends State<MedicationListPage>
                             ),
                             TextButton(
                               onPressed: () => Navigator.of(context).pop(true),
-                              child: const Text('Confirm', style: TextStyle(color: Colors.red)),
+                              child: const Text(
+                                'Confirm',
+                                style: TextStyle(color: Colors.red),
+                              ),
                             ),
                           ],
                         );
@@ -852,7 +924,11 @@ class _MedicationListPageState extends State<MedicationListPage>
                 )
               else if (isSkipped)
                 IconButton(
-                  icon: const Icon(Icons.remove_circle_outline_rounded, color: Colors.orange, size: 28),
+                  icon: const Icon(
+                    Icons.remove_circle_outline_rounded,
+                    color: Colors.orange,
+                    size: 28,
+                  ),
                   tooltip: 'Mark as Pending',
                   onPressed: () {
                     medProvider.markIntake(
@@ -867,7 +943,11 @@ class _MedicationListPageState extends State<MedicationListPage>
                   children: [
                     // Skip Button
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, color: Colors.grey, size: 22),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.grey,
+                        size: 22,
+                      ),
                       tooltip: 'Skip dose',
                       onPressed: () {
                         medProvider.markIntake(
@@ -881,7 +961,10 @@ class _MedicationListPageState extends State<MedicationListPage>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -899,7 +982,13 @@ class _MedicationListPageState extends State<MedicationListPage>
                         children: [
                           Icon(Icons.check, size: 16),
                           SizedBox(width: 4),
-                          Text('Take', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(
+                            'Take',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -922,7 +1011,11 @@ class _MedicationListPageState extends State<MedicationListPage>
       ),
       child: Column(
         children: [
-          Icon(Icons.event_available_rounded, size: 64, color: Colors.blueAccent.withValues(alpha: 0.5)),
+          Icon(
+            Icons.event_available_rounded,
+            size: 64,
+            color: Colors.blueAccent.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 16),
           const Text(
             'No Intakes Scheduled',
@@ -963,7 +1056,11 @@ class _MedicationListPageState extends State<MedicationListPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.medication_outlined, size: 70, color: Colors.grey.shade400),
+              Icon(
+                Icons.medication_outlined,
+                size: 70,
+                color: Colors.grey.shade400,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'No Medications Added Yet',
@@ -980,7 +1077,9 @@ class _MedicationListPageState extends State<MedicationListPage>
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AddMedicationPage()),
+                    MaterialPageRoute(
+                      builder: (_) => const AddMedicationPage(),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.add),
@@ -1000,16 +1099,22 @@ class _MedicationListPageState extends State<MedicationListPage>
         final medColor = _parseColor(med.color);
 
         // Find schedules for this med
-        final schedules = medProvider.schedules
-            .where((s) => s.medication.medicationId == med.medicationId)
-            .toList();
+        final schedules =
+            medProvider.schedules
+                .where((s) => s.medication.medicationId == med.medicationId)
+                .toList();
 
         return Card(
           elevation: 1,
           margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
             leading: Container(
               width: 48,
               height: 48,
@@ -1033,49 +1138,55 @@ class _MedicationListPageState extends State<MedicationListPage>
                 if (schedules.isNotEmpty)
                   Text(
                     '${schedules.first.frequency.name.toUpperCase()} • ${schedules.first.timesPerDay.length}x daily',
-                    style: const TextStyle(fontSize: 12, color: Colors.blueAccent),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueAccent,
+                    ),
                   ),
               ],
             ),
             trailing: PopupMenuButton<String>(
               onSelected: (value) async {
                 if (value == 'edit') {
-                  final schedule = schedules.isNotEmpty ? schedules.first : null;
+                  final schedule =
+                      schedules.isNotEmpty ? schedules.first : null;
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddMedicationPage(
-                        existingMedication: med,
-                        existingSchedule: schedule,
-                      ),
+                      builder:
+                          (_) => AddMedicationPage(
+                            existingMedication: med,
+                            existingSchedule: schedule,
+                          ),
                     ),
                   );
                 } else if (value == 'delete') {
                   _showDeleteConfirmDialog(med, medProvider);
                 }
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 20),
-                      SizedBox(width: 8),
-                      Text('Edit'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, size: 20, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Delete', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
+              itemBuilder:
+                  (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 20),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, size: 20, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete', style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
             ),
             onTap: () {
               Navigator.push(
@@ -1091,34 +1202,41 @@ class _MedicationListPageState extends State<MedicationListPage>
     );
   }
 
-  void _showDeleteConfirmDialog(Medication med, MedicationProvider medProvider) {
+  void _showDeleteConfirmDialog(
+    Medication med,
+    MedicationProvider medProvider,
+  ) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete ${med.name}?'),
-        content: const Text(
-          'This will permanently delete this medication, its schedules, and all recorded intake logs.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text('Delete ${med.name}?'),
+            content: const Text(
+              'This will permanently delete this medication, its schedules, and all recorded intake logs.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await medProvider.deleteMedication(med.medicationId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('${med.name} deleted')),
+                    );
+                  }
+                },
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await medProvider.deleteMedication(med.medicationId);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${med.name} deleted')),
-                );
-              }
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
     );
   }
 }

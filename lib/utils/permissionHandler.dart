@@ -6,10 +6,12 @@ Future<void> requestPermission() async {
     debugPrint("🌐 Web platform: no notification permission required.");
     return;
   }
-  
-  final isGranted = await NativePermissionService.isNotificationPermissionGranted();
+
+  final isGranted =
+      await NativePermissionService.isNotificationPermissionGranted();
   if (!isGranted) {
-    final result = await NativePermissionService.requestNotificationPermission();
+    final result =
+        await NativePermissionService.requestNotificationPermission();
     if (result) {
       debugPrint("✅ Android notification permission granted");
     } else {
@@ -20,9 +22,9 @@ Future<void> requestPermission() async {
   }
 
   // Also check exact alarm permission
-  final exactAlarm = await NativePermissionService.isExactAlarmPermissionGranted();
+  final exactAlarm =
+      await NativePermissionService.isExactAlarmPermissionGranted();
   if (!exactAlarm) {
     await NativePermissionService.requestExactAlarmPermission();
   }
 }
-

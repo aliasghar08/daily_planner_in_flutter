@@ -51,7 +51,8 @@ class ThemeProvider extends ChangeNotifier {
       }
     } else {
       // Legacy check if stored as bool previously
-      final bool? legacyBool = prefs.getBool(_themeKey) ?? prefs.getBool('isDarkMode');
+      final bool? legacyBool =
+          prefs.getBool(_themeKey) ?? prefs.getBool('isDarkMode');
       if (legacyBool != null) {
         _themeMode = legacyBool ? ThemeMode.dark : ThemeMode.light;
       } else {
@@ -69,9 +70,10 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
 
     final prefs = await SharedPreferences.getInstance();
-    final String value = mode == ThemeMode.system
-        ? 'system'
-        : (mode == ThemeMode.dark ? 'dark' : 'light');
+    final String value =
+        mode == ThemeMode.system
+            ? 'system'
+            : (mode == ThemeMode.dark ? 'dark' : 'light');
     await prefs.setString(_themeKey, value);
     debugPrint('💾 Saved theme preference: $value');
   }

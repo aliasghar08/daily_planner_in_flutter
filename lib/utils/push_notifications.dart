@@ -231,11 +231,7 @@ class PushNotifications {
         return false;
       }
 
-      await NativeAlarmHelper.showNow(
-        id: id,
-        title: title,
-        body: body,
-      );
+      await NativeAlarmHelper.showNow(id: id, title: title, body: body);
 
       debugPrint('Shown notification with ID: $id');
       return true;
@@ -290,7 +286,9 @@ class PushNotifications {
         return false;
       });
     } catch (e) {
-      debugPrint('Error checking notification schedule for ID $notificationId: $e');
+      debugPrint(
+        'Error checking notification schedule for ID $notificationId: $e',
+      );
       return false;
     }
   }

@@ -18,15 +18,19 @@ class TaskProvider extends ChangeNotifier {
 
   // Analytics & Dashboard Summary Getters
   int get totalTasksCount => _displayTasks.length;
-  
+
   int get completedTasksCount =>
       _displayTasks.where((t) => getEffectiveCompletionStatus(t)).length;
 
   int get incompleteTasksCount =>
-      _displayTasks.where((t) => !getEffectiveCompletionStatus(t) && !isTaskOverdue(t)).length;
+      _displayTasks
+          .where((t) => !getEffectiveCompletionStatus(t) && !isTaskOverdue(t))
+          .length;
 
   int get overdueTasksCount =>
-      _displayTasks.where((t) => !getEffectiveCompletionStatus(t) && isTaskOverdue(t)).length;
+      _displayTasks
+          .where((t) => !getEffectiveCompletionStatus(t) && isTaskOverdue(t))
+          .length;
 
   double get completionRate {
     if (_displayTasks.isEmpty) return 0.0;
@@ -56,7 +60,11 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Check and update ALL tasks' completion status when fetched
-  Future<List<Task>> _updateTasksCompletionStatus(List<Task> fetchedTasks, User user, bool isFromCache) async {
+  Future<List<Task>> _updateTasksCompletionStatus(
+    List<Task> fetchedTasks,
+    User user,
+    bool isFromCache,
+  ) async {
     final List<Task> updatedTasks = [];
     final List<Task> tasksToReset = [];
     final now = DateTime.now();
@@ -103,7 +111,10 @@ class TaskProvider extends ChangeNotifier {
             break;
 
           case 'MonthlyTask':
-            final completedMonth = DateTime(completedDate.year, completedDate.month);
+            final completedMonth = DateTime(
+              completedDate.year,
+              completedDate.month,
+            );
             needsReset = completedMonth.isBefore(currentMonth);
             break;
         }
@@ -130,7 +141,10 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Reset tasks in Firestore
-  Future<void> _resetTasksInFirestore(List<Task> tasksToReset, User user) async {
+  Future<void> _resetTasksInFirestore(
+    List<Task> tasksToReset,
+    User user,
+  ) async {
     try {
       final batch = FirebaseFirestore.instance.batch();
 
@@ -237,29 +251,37 @@ class TaskProvider extends ChangeNotifier {
     }
 
     _taskSubscription?.cancel();
-    
+
     _taskSubscription = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
         .collection('tasks')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .listen((snapshot) async {
-      final tasks = snapshot.docs
-          .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
-          .toList();
+        .listen(
+          (snapshot) async {
+            final tasks =
+                snapshot.docs
+                    .map((doc) => Task.fromMap(doc.data(), docId: doc.id))
+                    .toList();
 
-      final updatedTasks = await _updateTasksCompletionStatus(tasks, user, snapshot.metadata.isFromCache);
-      
-      _tasks = tasks;
-      _displayTasks = updatedTasks;
-      _isLoading = false;
-      notifyListeners();
-    }, onError: (error) {
-      debugPrint("Error listening to tasks: $error");
-      _isLoading = false;
-      notifyListeners();
-    });
+            final updatedTasks = await _updateTasksCompletionStatus(
+              tasks,
+              user,
+              snapshot.metadata.isFromCache,
+            );
+
+            _tasks = tasks;
+            _displayTasks = updatedTasks;
+            _isLoading = false;
+            notifyListeners();
+          },
+          onError: (error) {
+            debugPrint("Error listening to tasks: $error");
+            _isLoading = false;
+            notifyListeners();
+          },
+        );
   }
 
   @override
@@ -269,7 +291,11 @@ class TaskProvider extends ChangeNotifier {
   }
 
   // Optimistic UI state updater
-  void updateTaskOptimistically(String docId, bool isCompleted, DateTime? completedAt) {
+  void updateTaskOptimistically(
+    String docId,
+    bool isCompleted,
+    DateTime? completedAt,
+  ) {
     final index = _displayTasks.indexWhere((t) => t.docId == docId);
     if (index != -1) {
       _displayTasks[index] = _displayTasks[index].copyWith(

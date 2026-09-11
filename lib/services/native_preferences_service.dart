@@ -5,8 +5,9 @@ import 'package:flutter/services.dart';
 /// In-house native implementation of persistent key-value preferences.
 /// Replaces third-party package:shared_preferences with zero external dependencies.
 class NativePreferencesService {
-  static const MethodChannel _channel =
-      MethodChannel('daily_planner/native_preferences');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_preferences',
+  );
 
   static NativePreferencesService? _instance;
   final Map<String, Object?> _preferenceCache;
@@ -27,7 +28,9 @@ class NativePreferencesService {
           });
         }
       } catch (e) {
-        debugPrint('NativePreferencesService: Error fetching initial prefs: $e');
+        debugPrint(
+          'NativePreferencesService: Error fetching initial prefs: $e',
+        );
       }
       _instance = NativePreferencesService._(cache);
     }

@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 
 /// Custom in-house share service replacing package:share_plus.
 class NativeShareService {
-  static const MethodChannel _channel =
-      MethodChannel('daily_planner/native_share');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_share',
+  );
 
   /// Shares plain text with optional subject header via native Android Share sheet.
   static Future<void> share(String text, {String? subject}) async {

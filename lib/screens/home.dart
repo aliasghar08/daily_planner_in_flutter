@@ -44,7 +44,9 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
       if (!mounted) return;
       if (authProvider.user != null) {
         context.read<TaskProvider>().fetchTasks(authProvider.user!);
-        context.read<MedicationProvider>().loadMedications(authProvider.user!.uid);
+        context.read<MedicationProvider>().loadMedications(
+          authProvider.user!.uid,
+        );
       }
     });
 
@@ -123,7 +125,8 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                      color:
+                          isDark ? Colors.grey.shade700 : Colors.grey.shade300,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -135,17 +138,28 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                 ),
                 const SizedBox(height: 16),
                 ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.check_circle_outline, color: Color(0xFF2563EB)),
+                    child: const Icon(
+                      Icons.check_circle_outline,
+                      color: Color(0xFF2563EB),
+                    ),
                   ),
-                  title: const Text('Add Task', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Schedule one-time or recurring reminders'),
+                  title: const Text(
+                    'Add Task',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Schedule one-time or recurring reminders',
+                  ),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -154,16 +168,25 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                 ),
                 const SizedBox(height: 8),
                 ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   leading: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.medication_outlined, color: Color(0xFF10B981)),
+                    child: const Icon(
+                      Icons.medication_outlined,
+                      color: Color(0xFF10B981),
+                    ),
                   ),
-                  title: const Text('Add Medication', style: TextStyle(fontWeight: FontWeight.w600)),
+                  title: const Text(
+                    'Add Medication',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   subtitle: const Text('Log doses, frequencies and inventory'),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () {
@@ -197,9 +220,10 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
-              : [const Color(0xFF2563EB), const Color(0xFF1D4ED8)],
+          colors:
+              isDark
+                  ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+                  : [const Color(0xFF2563EB), const Color(0xFF1D4ED8)],
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -248,7 +272,9 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                     child: CircularProgressIndicator(
                       value: total == 0 ? 0.0 : progress,
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        Colors.white,
+                      ),
                       strokeWidth: 4,
                     ),
                   ),
@@ -268,11 +294,26 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
           // Statistics Pills Row
           Row(
             children: [
-              _buildStatChip("Done", completed, const Color(0xFF10B981), Icons.check_circle),
+              _buildStatChip(
+                "Done",
+                completed,
+                const Color(0xFF10B981),
+                Icons.check_circle,
+              ),
               const SizedBox(width: 8),
-              _buildStatChip("Pending", incomplete, const Color(0xFFF59E0B), Icons.schedule),
+              _buildStatChip(
+                "Pending",
+                incomplete,
+                const Color(0xFFF59E0B),
+                Icons.schedule,
+              ),
               const SizedBox(width: 8),
-              _buildStatChip("Overdue", overdue, const Color(0xFFEF4444), Icons.error_outline),
+              _buildStatChip(
+                "Overdue",
+                overdue,
+                const Color(0xFFEF4444),
+                Icons.error_outline,
+              ),
             ],
           ),
         ],
@@ -323,15 +364,16 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
         decoration: InputDecoration(
           hintText: 'Search tasks by title or details...',
           prefixIcon: const Icon(Icons.search, size: 20),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    context.read<TaskProvider>().clearSearch();
-                  },
-                )
-              : null,
+          suffixIcon:
+              _searchController.text.isNotEmpty
+                  ? IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () {
+                      _searchController.clear();
+                      context.read<TaskProvider>().clearSearch();
+                    },
+                  )
+                  : null,
         ),
       ),
     );
@@ -354,19 +396,21 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
         indicator: BoxDecoration(
           color: isDark ? const Color(0xFF2563EB) : Colors.white,
           borderRadius: BorderRadius.circular(10),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+          boxShadow:
+              isDark
+                  ? []
+                  : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: isDark ? Colors.white : const Color(0xFF0F172A),
-        unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+        unselectedLabelColor:
+            isDark ? Colors.grey.shade400 : Colors.grey.shade600,
         tabs: [
           Tab(
             child: FittedBox(
@@ -377,19 +421,25 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
           Tab(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text("Done (${taskProvider.getTaskCount(TaskFilter.completed)})"),
+              child: Text(
+                "Done (${taskProvider.getTaskCount(TaskFilter.completed)})",
+              ),
             ),
           ),
           Tab(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text("Pending (${taskProvider.getTaskCount(TaskFilter.incomplete)})"),
+              child: Text(
+                "Pending (${taskProvider.getTaskCount(TaskFilter.incomplete)})",
+              ),
             ),
           ),
           Tab(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text("Overdue (${taskProvider.getTaskCount(TaskFilter.overdue)})"),
+              child: Text(
+                "Overdue (${taskProvider.getTaskCount(TaskFilter.overdue)})",
+              ),
             ),
           ),
         ],
@@ -519,10 +569,14 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
     }
 
     final groups = [
-      if (dailyTasks.isNotEmpty) ('Daily Tasks', dailyTasks, const Color(0xFF3B82F6)),
-      if (oneTimeTasks.isNotEmpty) ('One-Time Tasks', oneTimeTasks, const Color(0xFF64748B)),
-      if (weeklyTasks.isNotEmpty) ('Weekly Tasks', weeklyTasks, const Color(0xFF10B981)),
-      if (monthlyTasks.isNotEmpty) ('Monthly Tasks', monthlyTasks, const Color(0xFF8B5CF6)),
+      if (dailyTasks.isNotEmpty)
+        ('Daily Tasks', dailyTasks, const Color(0xFF3B82F6)),
+      if (oneTimeTasks.isNotEmpty)
+        ('One-Time Tasks', oneTimeTasks, const Color(0xFF64748B)),
+      if (weeklyTasks.isNotEmpty)
+        ('Weekly Tasks', weeklyTasks, const Color(0xFF10B981)),
+      if (monthlyTasks.isNotEmpty)
+        ('Monthly Tasks', monthlyTasks, const Color(0xFF8B5CF6)),
     ];
 
     return RefreshIndicator(
@@ -558,7 +612,10 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
@@ -587,7 +644,10 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
                 searchQuery: taskProvider.searchQuery,
                 onEditDone: () async {
                   if (authProvider.user != null) {
-                    await taskProvider.fetchTasks(authProvider.user!, showLoading: false);
+                    await taskProvider.fetchTasks(
+                      authProvider.user!,
+                      showLoading: false,
+                    );
                   }
                 },
               );
@@ -626,69 +686,77 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
             IconButton(
               icon: const Icon(Icons.alarm_on_outlined),
               tooltip: 'Background Setup Guide',
-              onPressed: () => NativeAlarmHelper.showOemOptimizationGuide(context),
+              onPressed:
+                  () => NativeAlarmHelper.showOemOptimizationGuide(context),
             ),
         ],
       ),
       drawer: const MyDrawer(),
-      body: authProvider.isLoading
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text("Loading tasks..."),
-                ],
-              ),
-            )
-          : user == null
+      body:
+          authProvider.isLoading
+              ? const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text("Loading tasks..."),
+                  ],
+                ),
+              )
+              : user == null
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.lock_outline, size: 54, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      const Text("Please log in to manage your daily tasks"),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: () {
-                          Navigator.pushReplacementNamed(context, '/login');
-                        },
-                        child: const Text("Go to Login"),
-                      ),
-                    ],
-                  ),
-                )
-              : NestedScrollView(
-                  headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                    SliverToBoxAdapter(
-                      child: Column(
-                        children: [
-                          _buildSummaryHeroCard(taskProvider),
-                          _buildSearchBar(),
-                          _buildTabBar(taskProvider),
-                        ],
-                      ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.lock_outline,
+                      size: 54,
+                      color: Colors.grey,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text("Please log in to manage your daily tasks"),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pushReplacementNamed(context, '/login');
+                      },
+                      child: const Text("Go to Login"),
                     ),
                   ],
-                  body: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildGroupedTaskList(TaskFilter.all),
-                      _buildGroupedTaskList(TaskFilter.completed),
-                      _buildGroupedTaskList(TaskFilter.incomplete),
-                      _buildGroupedTaskList(TaskFilter.overdue),
-                    ],
-                  ),
                 ),
-      floatingActionButton: user == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _showAddOptions,
-              icon: const Icon(Icons.add),
-              label: const Text("Add"),
-            ),
+              )
+              : NestedScrollView(
+                headerSliverBuilder:
+                    (context, innerBoxIsScrolled) => [
+                      SliverToBoxAdapter(
+                        child: Column(
+                          children: [
+                            _buildSummaryHeroCard(taskProvider),
+                            _buildSearchBar(),
+                            _buildTabBar(taskProvider),
+                          ],
+                        ),
+                      ),
+                    ],
+                body: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildGroupedTaskList(TaskFilter.all),
+                    _buildGroupedTaskList(TaskFilter.completed),
+                    _buildGroupedTaskList(TaskFilter.incomplete),
+                    _buildGroupedTaskList(TaskFilter.overdue),
+                  ],
+                ),
+              ),
+      floatingActionButton:
+          user == null
+              ? null
+              : FloatingActionButton.extended(
+                onPressed: _showAddOptions,
+                icon: const Icon(Icons.add),
+                label: const Text("Add"),
+              ),
     );
   }
 }

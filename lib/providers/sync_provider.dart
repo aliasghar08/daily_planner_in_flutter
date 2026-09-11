@@ -27,7 +27,7 @@ class SyncProvider extends ChangeNotifier {
   CustomConnectivityResult _lastConnectivity = CustomConnectivityResult.none;
 
   SyncProvider({SyncManager? syncManager})
-      : _syncManager = syncManager ?? SyncManager() {
+    : _syncManager = syncManager ?? SyncManager() {
     _initialize();
   }
 
@@ -45,7 +45,9 @@ class SyncProvider extends ChangeNotifier {
   bool get isHealthEnabled => _config.healthSyncEnabled;
 
   String? get googleEmail => _config.googleAccountEmail;
-  bool get isGoogleConnected => _config.googleAccountEmail != null && _config.googleAccountEmail!.isNotEmpty;
+  bool get isGoogleConnected =>
+      _config.googleAccountEmail != null &&
+      _config.googleAccountEmail!.isNotEmpty;
   bool get isHealthConnected => _config.healthPermissionGranted;
 
   DateTime? get lastCalendarSync => _config.lastCalendarSync;
@@ -66,7 +68,8 @@ class SyncProvider extends ChangeNotifier {
     }
 
     // Check health permissions
-    final hasHealth = await _syncManager.healthService.isHealthPermissionGranted();
+    final hasHealth =
+        await _syncManager.healthService.isHealthPermissionGranted();
     if (hasHealth != _config.healthPermissionGranted) {
       _config = _config.copyWith(healthPermissionGranted: hasHealth);
       await _syncManager.saveConfig(_config);
@@ -74,9 +77,8 @@ class SyncProvider extends ChangeNotifier {
 
     // Wire connectivity listener to auto-sync on reconnect
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = NativeConnectivityService.onConnectivityChanged.listen(
-      _onConnectivityChanged,
-    );
+    _connectivitySubscription = NativeConnectivityService.onConnectivityChanged
+        .listen(_onConnectivityChanged);
 
     notifyListeners();
   }
@@ -199,7 +201,8 @@ class SyncProvider extends ChangeNotifier {
         tasks,
         accessToken: _googleAccessToken,
       );
-      _calendarStatus = result.isSuccess ? SyncStatus.success : SyncStatus.error;
+      _calendarStatus =
+          result.isSuccess ? SyncStatus.success : SyncStatus.error;
       _config = await _syncManager.loadConfig();
       _logs = await _syncManager.loadLogs();
       notifyListeners();
@@ -255,18 +258,27 @@ class SyncProvider extends ChangeNotifier {
     required List<MedicationIntake> intakes,
   }) async {
     _isSyncingAll = true;
-    _calendarStatus = _config.googleCalendarEnabled ? SyncStatus.syncing : _calendarStatus;
-    _tasksStatus = _config.googleTasksEnabled ? SyncStatus.syncing : _tasksStatus;
-    _healthStatus = _config.healthSyncEnabled ? SyncStatus.syncing : _healthStatus;
+    _calendarStatus =
+        _config.googleCalendarEnabled ? SyncStatus.syncing : _calendarStatus;
+    _tasksStatus =
+        _config.googleTasksEnabled ? SyncStatus.syncing : _tasksStatus;
+    _healthStatus =
+        _config.healthSyncEnabled ? SyncStatus.syncing : _healthStatus;
     notifyListeners();
 
     try {
       if (_config.googleCalendarEnabled) {
-        await _syncManager.syncGoogleCalendar(tasks, accessToken: _googleAccessToken);
+        await _syncManager.syncGoogleCalendar(
+          tasks,
+          accessToken: _googleAccessToken,
+        );
         _calendarStatus = SyncStatus.success;
       }
       if (_config.googleTasksEnabled) {
-        await _syncManager.syncGoogleTasks(tasks, accessToken: _googleAccessToken);
+        await _syncManager.syncGoogleTasks(
+          tasks,
+          accessToken: _googleAccessToken,
+        );
         _tasksStatus = SyncStatus.success;
       }
       if (_config.healthSyncEnabled) {
@@ -286,13 +298,15 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> clearLogs() async {
     _logs = [];
-    await _syncManager.addLog(SyncLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      serviceType: SyncServiceType.googleCalendar,
-      timestamp: DateTime.now(),
-      isSuccess: true,
-      message: 'Sync logs reset',
-    ));
+    await _syncManager.addLog(
+      SyncLogEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        serviceType: SyncServiceType.googleCalendar,
+        timestamp: DateTime.now(),
+        isSuccess: true,
+        message: 'Sync logs reset',
+      ),
+    );
     _logs = await _syncManager.loadLogs();
     notifyListeners();
   }
@@ -327,13 +341,16 @@ class SyncProvider extends ChangeNotifier {
 
     // We don't have tasks/intakes here — log a pending sync entry so the
     // user can see the reconnection was detected in the sync log.
-    await _syncManager.addLog(SyncLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      serviceType: SyncServiceType.googleCalendar,
-      timestamp: DateTime.now(),
-      isSuccess: true,
-      message: '📡 Device reconnected — Firestore writes flushed. Open the app to complete external service sync.',
-    ));
+    await _syncManager.addLog(
+      SyncLogEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        serviceType: SyncServiceType.googleCalendar,
+        timestamp: DateTime.now(),
+        isSuccess: true,
+        message:
+            '📡 Device reconnected — Firestore writes flushed. Open the app to complete external service sync.',
+      ),
+    );
 
     _logs = await _syncManager.loadLogs();
     notifyListeners();

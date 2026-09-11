@@ -31,7 +31,9 @@ class AuthProvider extends ChangeNotifier {
 
       // Step 2: Read current authenticated user session
       _user = FirebaseAuth.instance.currentUser;
-      debugPrint('🔐 Current active user session: ${_user?.email ?? "No session"}');
+      debugPrint(
+        '🔐 Current active user session: ${_user?.email ?? "No session"}',
+      );
 
       // Step 3: Listen for auth state changes continuously
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
@@ -56,11 +58,15 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _syncUserDocument(User currentUser) async {
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid);
       final doc = await docRef.get();
       if (!doc.exists) {
         await docRef.set({
-          'fullName': currentUser.displayName ?? (currentUser.email?.split('@').first ?? 'User'),
+          'fullName':
+              currentUser.displayName ??
+              (currentUser.email?.split('@').first ?? 'User'),
           'email': currentUser.email ?? '',
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));

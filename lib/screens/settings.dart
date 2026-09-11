@@ -50,10 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await prefs.reload();
     } catch (_) {}
 
-    await Future.wait([
-      _checkPasskeySupport(),
-      _loadNotifPermissions(),
-    ]);
+    await Future.wait([_checkPasskeySupport(), _loadNotifPermissions()]);
 
     if (mounted) setState(() => _loadingPerms = false);
   }
@@ -71,8 +68,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadNotifPermissions() async {
     if (Platform.isAndroid) {
-      final notif = await NativePermissionService.isNotificationPermissionGranted();
-      final exact = await NativePermissionService.isExactAlarmPermissionGranted();
+      final notif =
+          await NativePermissionService.isNotificationPermissionGranted();
+      final exact =
+          await NativePermissionService.isExactAlarmPermissionGranted();
       final sdk = await NativePermissionService.getAndroidSdkVersion();
       if (mounted) {
         setState(() {
@@ -82,7 +81,8 @@ class _SettingsPageState extends State<SettingsPage> {
         });
       }
     } else if (Platform.isIOS) {
-      final granted = await NativePermissionService.isNotificationPermissionGranted();
+      final granted =
+          await NativePermissionService.isNotificationPermissionGranted();
       if (mounted) {
         setState(() => _iosNotifGranted = granted);
       }
@@ -93,71 +93,93 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _showThemeDialog(BuildContext context, ThemeProvider themeProvider) {
     final modes = [
-      {'title': 'System Default', 'mode': ThemeMode.system, 'icon': Icons.brightness_auto},
-      {'title': 'Light Mode', 'mode': ThemeMode.light, 'icon': Icons.light_mode_outlined},
-      {'title': 'Dark Mode', 'mode': ThemeMode.dark, 'icon': Icons.dark_mode_outlined},
+      {
+        'title': 'System Default',
+        'mode': ThemeMode.system,
+        'icon': Icons.brightness_auto,
+      },
+      {
+        'title': 'Light Mode',
+        'mode': ThemeMode.light,
+        'icon': Icons.light_mode_outlined,
+      },
+      {
+        'title': 'Dark Mode',
+        'mode': ThemeMode.dark,
+        'icon': Icons.dark_mode_outlined,
+      },
     ];
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Select Theme"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: modes.map((item) {
-            final mode = item['mode'] as ThemeMode;
-            final isSelected = themeProvider.themeMode == mode;
-            return ListTile(
-              leading: Icon(
-                item['icon'] as IconData,
-                color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
-              ),
-              title: Text(
-                item['title'] as String,
-                style: TextStyle(
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-              trailing: Icon(
-                isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: isSelected ? const Color(0xFF2563EB) : Colors.grey,
-              ),
-              onTap: () {
-                themeProvider.setThemeMode(mode);
-                Navigator.pop(ctx);
-              },
-            );
-          }).toList(),
-        ),
-      ),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text("Select Theme"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children:
+                  modes.map((item) {
+                    final mode = item['mode'] as ThemeMode;
+                    final isSelected = themeProvider.themeMode == mode;
+                    return ListTile(
+                      leading: Icon(
+                        item['icon'] as IconData,
+                        color:
+                            isSelected ? const Color(0xFF2563EB) : Colors.grey,
+                      ),
+                      title: Text(
+                        item['title'] as String,
+                        style: TextStyle(
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: Icon(
+                        isSelected
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color:
+                            isSelected ? const Color(0xFF2563EB) : Colors.grey,
+                      ),
+                      onTap: () {
+                        themeProvider.setThemeMode(mode);
+                        Navigator.pop(ctx);
+                      },
+                    );
+                  }).toList(),
+            ),
+          ),
     );
   }
 
   Future<void> _logout(BuildContext context) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Sign Out Confirmation"),
-        content: const Text("Are you sure you want to sign out?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text("Sign Out Confirmation"),
+            content: const Text("Are you sure you want to sign out?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("Cancel"),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("Sign Out"),
+              ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Sign Out"),
-          ),
-        ],
-      ),
     );
 
     if (shouldLogout == true && context.mounted) {
       try {
         await context.read<app_auth.AuthProvider>().signOut();
         if (context.mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil('/login', (route) => false);
         }
       } catch (e) {
         if (context.mounted) {
@@ -186,7 +208,10 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSettingsCard({required List<Widget> children, required bool isDark}) {
+  Widget _buildSettingsCard({
+    required List<Widget> children,
+    required bool isDark,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -196,17 +221,16 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : const Color(0xFF0F172A).withValues(alpha: 0.03),
+            color:
+                isDark
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : const Color(0xFF0F172A).withValues(alpha: 0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Column(
-        children: children,
-      ),
+      child: Column(children: children),
     );
   }
 
@@ -231,28 +255,53 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Icon(icon, color: iconColor, size: 20),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54)),
-      trailing: granted
-          ? const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
-                SizedBox(width: 4),
-                Text('Granted', style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
-              ],
-            )
-          : TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: const Color(0xFF2563EB),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          fontSize: 12,
+          color: isDark ? Colors.white54 : Colors.black54,
+        ),
+      ),
+      trailing:
+          granted
+              ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
+                  SizedBox(width: 4),
+                  Text(
+                    'Granted',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF10B981),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              )
+              : TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: const Color(0xFF2563EB),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: onAction,
+                child: Text(
+                  actionLabel,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-              onPressed: onAction,
-              child: Text(actionLabel, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-            ),
     );
   }
 
@@ -268,13 +317,15 @@ class _SettingsPageState extends State<SettingsPage> {
           icon: Icons.notifications_active_outlined,
           iconColor: const Color(0xFF10B981),
           title: 'Notifications',
-          subtitle: _androidSdk >= 33
-              ? 'Android 13+ runtime permission required'
-              : 'Post alerts, task reminders & alarms',
+          subtitle:
+              _androidSdk >= 33
+                  ? 'Android 13+ runtime permission required'
+                  : 'Post alerts, task reminders & alarms',
           granted: _notifPermGranted,
           actionLabel: 'Request',
           onAction: () async {
-            final granted = await NativePermissionService.requestNotificationPermission();
+            final granted =
+                await NativePermissionService.requestNotificationPermission();
             if (!granted && mounted) {
               // Permission denied — open system settings
               await NativePermissionService.openNotificationSettings();
@@ -310,10 +361,20 @@ class _SettingsPageState extends State<SettingsPage> {
               color: const Color(0xFF6366F1).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.tune_outlined, color: Color(0xFF6366F1), size: 20),
+            child: const Icon(
+              Icons.tune_outlined,
+              color: Color(0xFF6366F1),
+              size: 20,
+            ),
           ),
-          title: const Text('Notification Channels', style: TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: const Text('Manage per-channel sound, vibration & importance', style: TextStyle(fontSize: 12)),
+          title: const Text(
+            'Notification Channels',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Manage per-channel sound, vibration & importance',
+            style: TextStyle(fontSize: 12),
+          ),
           trailing: const Icon(Icons.open_in_new, size: 18),
           onTap: () => NativePermissionService.openNotificationSettings(),
         ),
@@ -335,36 +396,61 @@ class _SettingsPageState extends State<SettingsPage> {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              _iosNotifGranted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
+              _iosNotifGranted
+                  ? Icons.notifications_active_outlined
+                  : Icons.notifications_off_outlined,
               color: _iosNotifGranted ? const Color(0xFF10B981) : Colors.orange,
               size: 20,
             ),
           ),
-          title: const Text('Notification Status', style: TextStyle(fontWeight: FontWeight.w600)),
+          title: const Text(
+            'Notification Status',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
           subtitle: Text(
             _iosNotifGranted
                 ? 'Notifications are enabled — alerts, banners & sounds active'
                 : 'Notifications are disabled — tap to enable in iOS Settings',
-            style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black54),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
           ),
-          trailing: _iosNotifGranted
-              ? const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
-                    SizedBox(width: 4),
-                    Text('On', style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600)),
-                  ],
-                )
-              : const Icon(Icons.chevron_right, size: 20, color: Colors.orange),
-          onTap: _iosNotifGranted
-              ? null
-              : () async {
-                  await NativePermissionService.openNotificationSettings();
-                  // Re-check after returning from iOS Settings
-                  await Future.delayed(const Duration(milliseconds: 500));
-                  await _loadNotifPermissions();
-                },
+          trailing:
+              _iosNotifGranted
+                  ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF10B981),
+                        size: 20,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'On',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF10B981),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  )
+                  : const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: Colors.orange,
+                  ),
+          onTap:
+              _iosNotifGranted
+                  ? null
+                  : () async {
+                    await NativePermissionService.openNotificationSettings();
+                    // Re-check after returning from iOS Settings
+                    await Future.delayed(const Duration(milliseconds: 500));
+                    await _loadNotifPermissions();
+                  },
         ),
         const Divider(indent: 56),
         ListTile(
@@ -374,10 +460,20 @@ class _SettingsPageState extends State<SettingsPage> {
               color: const Color(0xFF6366F1).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.settings_outlined, color: Color(0xFF6366F1), size: 20),
+            child: const Icon(
+              Icons.settings_outlined,
+              color: Color(0xFF6366F1),
+              size: 20,
+            ),
           ),
-          title: const Text('Open iOS Settings', style: TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: const Text('Manage notifications, sounds & critical alerts', style: TextStyle(fontSize: 12)),
+          title: const Text(
+            'Open iOS Settings',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: const Text(
+            'Manage notifications, sounds & critical alerts',
+            style: TextStyle(fontSize: 12),
+          ),
           trailing: const Icon(Icons.open_in_new, size: 18),
           onTap: () => NativePermissionService.openNotificationSettings(),
         ),
@@ -405,176 +501,17 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
         ],
       ),
-      body: _loadingPerms
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              children: [
-                // ── 1. Preferences ──────────────────────────────────────────
-                _buildSectionHeader('PREFERENCES'),
-                _buildSettingsCard(
-                  isDark: isDark,
-                  children: [
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          themeProvider.themeMode == ThemeMode.dark
-                              ? Icons.dark_mode_outlined
-                              : (themeProvider.themeMode == ThemeMode.light
-                                  ? Icons.light_mode_outlined
-                                  : Icons.brightness_auto),
-                          color: const Color(0xFF6366F1),
-                          size: 20,
-                        ),
-                      ),
-                      title: const Text('Theme Mode', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(themeProvider.themeModeName),
-                      trailing: const Icon(Icons.chevron_right, size: 20),
-                      onTap: () => _showThemeDialog(context, themeProvider),
-                    ),
-                  ],
+      body:
+          _loadingPerms
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
                 ),
-
-                // ── 2. Notifications ────────────────────────────────────────
-                _buildSectionHeader('NOTIFICATIONS'),
-                if (Platform.isAndroid)
-                  _buildAndroidNotificationSection(isDark)
-                else if (Platform.isIOS)
-                  _buildIosNotificationSection(isDark),
-
-                // ── 3. Cloud Sync & Integrations ────────────────────────────
-                _buildSectionHeader('CLOUD SYNC & INTEGRATIONS'),
-                _buildSettingsCard(
-                  isDark: isDark,
-                  children: [
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.sync_outlined, color: Color(0xFF2563EB), size: 20),
-                      ),
-                      title: const Text('Google & Health Sync', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(
-                        'Google Calendar, Google Tasks & Health Connect / Apple Health',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDark ? Colors.white60 : Colors.black54,
-                        ),
-                      ),
-                      trailing: const Icon(Icons.chevron_right, size: 20),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const SyncIntegrationsPage()),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-
-                // ── 4. Security & Passkeys ──────────────────────────────────
-                _buildSectionHeader('SECURITY & PASSKEYS'),
-                _buildSettingsCard(
-                  isDark: isDark,
-                  children: [
-                    if (_passkeySupported) ...[
-                      SwitchListTile(
-                        secondary: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.fingerprint, color: Color(0xFF6366F1), size: 20),
-                        ),
-                        title: const Text('Passkey / Biometric Login', style: TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: const Text('Unlock and sign in instantly using fingerprint or face'),
-                        value: _passkeyEnabled,
-                        onChanged: (val) async {
-                          if (val) {
-                            final verified = await PasskeyAuthService().verifyPasskey(
-                              reason: 'Authenticate to enable Passkey login',
-                            );
-                            if (verified) {
-                              await PasskeyAuthService().setPasskeyEnabled(true);
-                              if (mounted) setState(() => _passkeyEnabled = true);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Passkey authentication enabled!')),
-                                );
-                              }
-                            }
-                          } else {
-                            await PasskeyAuthService().clearPasskey();
-                            if (mounted) setState(() => _passkeyEnabled = false);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Passkey credentials cleared.')),
-                              );
-                            }
-                          }
-                        },
-                      ),
-                      const Divider(indent: 56),
-                      ListTile(
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.verified_user_outlined, color: Color(0xFF10B981), size: 20),
-                        ),
-                        title: const Text('Test Passkey Sensor', style: TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: const Text('Verify biometric prompt responsiveness'),
-                        trailing: const Icon(Icons.play_circle_outline, size: 20),
-                        onTap: () async {
-                          final success = await PasskeyAuthService().verifyPasskey(
-                            reason: 'Testing biometric sensor',
-                          );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  success
-                                      ? '✅ Passkey sensor verified successfully!'
-                                      : '❌ Passkey verification cancelled or failed.',
-                                ),
-                                backgroundColor: success ? const Color(0xFF10B981) : Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      const Divider(indent: 56),
-                    ],
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.password, color: Color(0xFF0EA5E9), size: 20),
-                      ),
-                      title: const Text('Google & Apple Password Managers', style: TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: const Text('Active • Automatically prompts to save & autofill passwords'),
-                      trailing: const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 20),
-                    ),
-                  ],
-                ),
-
-                // ── 5. Alarm & Background Reliability (Android only) ────────
-                if (Platform.isAndroid) ...[
-                  _buildSectionHeader('ALARM & BACKGROUND RELIABILITY'),
+                children: [
+                  // ── 1. Preferences ──────────────────────────────────────────
+                  _buildSectionHeader('PREFERENCES'),
                   _buildSettingsCard(
                     isDark: isDark,
                     children: [
@@ -582,83 +519,373 @@ class _SettingsPageState extends State<SettingsPage> {
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                            color: const Color(
+                              0xFF6366F1,
+                            ).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.battery_charging_full, color: Color(0xFFF59E0B), size: 20),
+                          child: Icon(
+                            themeProvider.themeMode == ThemeMode.dark
+                                ? Icons.dark_mode_outlined
+                                : (themeProvider.themeMode == ThemeMode.light
+                                    ? Icons.light_mode_outlined
+                                    : Icons.brightness_auto),
+                            color: const Color(0xFF6366F1),
+                            size: 20,
+                          ),
                         ),
-                        title: const Text('Background & Auto-Start Setup', style: TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: const Text('Ensure alarms ring on Infinix, Tecno, Xiaomi, Oppo, Vivo, Samsung'),
+                        title: const Text(
+                          'Theme Mode',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(themeProvider.themeModeName),
                         trailing: const Icon(Icons.chevron_right, size: 20),
-                        onTap: () => NativeAlarmHelper.showOemOptimizationGuide(context),
+                        onTap: () => _showThemeDialog(context, themeProvider),
+                      ),
+                    ],
+                  ),
+
+                  // ── 2. Notifications ────────────────────────────────────────
+                  _buildSectionHeader('NOTIFICATIONS'),
+                  if (Platform.isAndroid)
+                    _buildAndroidNotificationSection(isDark)
+                  else if (Platform.isIOS)
+                    _buildIosNotificationSection(isDark),
+
+                  // ── 3. Cloud Sync & Integrations ────────────────────────────
+                  _buildSectionHeader('CLOUD SYNC & INTEGRATIONS'),
+                  _buildSettingsCard(
+                    isDark: isDark,
+                    children: [
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF2563EB,
+                            ).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.sync_outlined,
+                            color: Color(0xFF2563EB),
+                            size: 20,
+                          ),
+                        ),
+                        title: const Text(
+                          'Google & Health Sync',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          'Google Calendar, Google Tasks & Health Connect / Apple Health',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white60 : Colors.black54,
+                          ),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const SyncIntegrationsPage(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+
+                  // ── 4. Security & Passkeys ──────────────────────────────────
+                  _buildSectionHeader('SECURITY & PASSKEYS'),
+                  _buildSettingsCard(
+                    isDark: isDark,
+                    children: [
+                      if (_passkeySupported) ...[
+                        SwitchListTile(
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF6366F1,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.fingerprint,
+                              color: Color(0xFF6366F1),
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'Passkey / Biometric Login',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Unlock and sign in instantly using fingerprint or face',
+                          ),
+                          value: _passkeyEnabled,
+                          onChanged: (val) async {
+                            if (val) {
+                              final verified = await PasskeyAuthService()
+                                  .verifyPasskey(
+                                    reason:
+                                        'Authenticate to enable Passkey login',
+                                  );
+                              if (verified) {
+                                await PasskeyAuthService().setPasskeyEnabled(
+                                  true,
+                                );
+                                if (mounted)
+                                  setState(() => _passkeyEnabled = true);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Passkey authentication enabled!',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            } else {
+                              await PasskeyAuthService().clearPasskey();
+                              if (mounted)
+                                setState(() => _passkeyEnabled = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Passkey credentials cleared.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                        const Divider(indent: 56),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.verified_user_outlined,
+                              color: Color(0xFF10B981),
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'Test Passkey Sensor',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Verify biometric prompt responsiveness',
+                          ),
+                          trailing: const Icon(
+                            Icons.play_circle_outline,
+                            size: 20,
+                          ),
+                          onTap: () async {
+                            final success = await PasskeyAuthService()
+                                .verifyPasskey(
+                                  reason: 'Testing biometric sensor',
+                                );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    success
+                                        ? '✅ Passkey sensor verified successfully!'
+                                        : '❌ Passkey verification cancelled or failed.',
+                                  ),
+                                  backgroundColor:
+                                      success
+                                          ? const Color(0xFF10B981)
+                                          : Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                        const Divider(indent: 56),
+                      ],
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF0EA5E9,
+                            ).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.password,
+                            color: Color(0xFF0EA5E9),
+                            size: 20,
+                          ),
+                        ),
+                        title: const Text(
+                          'Google & Apple Password Managers',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Active • Automatically prompts to save & autofill passwords',
+                        ),
+                        trailing: const Icon(
+                          Icons.check_circle,
+                          color: Color(0xFF10B981),
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // ── 5. Alarm & Background Reliability (Android only) ────────
+                  if (Platform.isAndroid) ...[
+                    _buildSectionHeader('ALARM & BACKGROUND RELIABILITY'),
+                    _buildSettingsCard(
+                      isDark: isDark,
+                      children: [
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFF59E0B,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.battery_charging_full,
+                              color: Color(0xFFF59E0B),
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'Background & Auto-Start Setup',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Ensure alarms ring on Infinix, Tecno, Xiaomi, Oppo, Vivo, Samsung',
+                          ),
+                          trailing: const Icon(Icons.chevron_right, size: 20),
+                          onTap:
+                              () => NativeAlarmHelper.showOemOptimizationGuide(
+                                context,
+                              ),
+                        ),
+                        const Divider(indent: 56),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF10B981,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.alarm_on,
+                              color: Color(0xFF10B981),
+                              size: 20,
+                            ),
+                          ),
+                          title: const Text(
+                            'Test Native Alarm (10s)',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: const Text(
+                            'Test full-screen ringing and audio',
+                          ),
+                          trailing: const Icon(
+                            Icons.play_circle_outline,
+                            size: 20,
+                          ),
+                          onTap: () async {
+                            await NativeAlarmHelper.testAlarm();
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    '⏰ Test alarm scheduled for 10s from now. Lock phone to test!',
+                                  ),
+                                  backgroundColor: Color(0xFF10B981),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: Duration(seconds: 4),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  // ── 6. Account ──────────────────────────────────────────────
+                  _buildSectionHeader('ACCOUNT'),
+                  _buildSettingsCard(
+                    isDark: isDark,
+                    children: [
+                      ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF64748B,
+                            ).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.lock_reset_outlined,
+                            color: Color(0xFF64748B),
+                            size: 20,
+                          ),
+                        ),
+                        title: const Text(
+                          'Change Password',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
+                        onTap:
+                            () =>
+                                Navigator.pushNamed(context, "/changepassword"),
                       ),
                       const Divider(indent: 56),
                       ListTile(
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                            color: const Color(
+                              0xFFEF4444,
+                            ).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.alarm_on, color: Color(0xFF10B981), size: 20),
+                          child: const Icon(
+                            Icons.logout_rounded,
+                            color: Color(0xFFEF4444),
+                            size: 20,
+                          ),
                         ),
-                        title: const Text('Test Native Alarm (10s)', style: TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: const Text('Test full-screen ringing and audio'),
-                        trailing: const Icon(Icons.play_circle_outline, size: 20),
-                        onTap: () async {
-                          await NativeAlarmHelper.testAlarm();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('⏰ Test alarm scheduled for 10s from now. Lock phone to test!'),
-                                backgroundColor: Color(0xFF10B981),
-                                behavior: SnackBarBehavior.floating,
-                                duration: Duration(seconds: 4),
-                              ),
-                            );
-                          }
-                        },
+                        title: const Text(
+                          'Sign Out',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFEF4444),
+                          ),
+                        ),
+                        onTap: () => _logout(context),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 32),
                 ],
-
-                // ── 6. Account ──────────────────────────────────────────────
-                _buildSectionHeader('ACCOUNT'),
-                _buildSettingsCard(
-                  isDark: isDark,
-                  children: [
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF64748B).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.lock_reset_outlined, color: Color(0xFF64748B), size: 20),
-                      ),
-                      title: const Text('Change Password', style: TextStyle(fontWeight: FontWeight.w600)),
-                      trailing: const Icon(Icons.chevron_right, size: 20),
-                      onTap: () => Navigator.pushNamed(context, "/changepassword"),
-                    ),
-                    const Divider(indent: 56),
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
-                      ),
-                      title: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFEF4444))),
-                      onTap: () => _logout(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
     );
   }
 }

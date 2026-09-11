@@ -6,14 +6,20 @@ import 'package:flutter/services.dart';
 /// Handles notification, exact alarm, battery optimization, and autostart permissions
 /// natively via MethodChannel without relying on third-party packages.
 class NativePermissionService {
-  static const MethodChannel _channel = MethodChannel('daily_planner/native_permissions');
-  static const MethodChannel _alarmChannel = MethodChannel('com.example.daily_planner/alarm');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_permissions',
+  );
+  static const MethodChannel _alarmChannel = MethodChannel(
+    'com.example.daily_planner/alarm',
+  );
 
   /// Check if notification permission is granted
   static Future<bool> isNotificationPermissionGranted() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
-      final bool? granted = await _channel.invokeMethod<bool>('checkNotificationPermission');
+      final bool? granted = await _channel.invokeMethod<bool>(
+        'checkNotificationPermission',
+      );
       return granted ?? false;
     } catch (e) {
       debugPrint('⚠️ Error checking notification permission: $e');
@@ -25,7 +31,9 @@ class NativePermissionService {
   static Future<bool> requestNotificationPermission() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return true;
     try {
-      final bool? granted = await _channel.invokeMethod<bool>('requestNotificationPermission');
+      final bool? granted = await _channel.invokeMethod<bool>(
+        'requestNotificationPermission',
+      );
       return granted ?? false;
     } catch (e) {
       debugPrint('⚠️ Error requesting notification permission: $e');
@@ -39,7 +47,9 @@ class NativePermissionService {
     if (Platform.isIOS) return true;
     if (!Platform.isAndroid) return true;
     try {
-      final bool? granted = await _channel.invokeMethod<bool>('checkExactAlarmPermission');
+      final bool? granted = await _channel.invokeMethod<bool>(
+        'checkExactAlarmPermission',
+      );
       return granted ?? true;
     } catch (e) {
       debugPrint('⚠️ Error checking exact alarm permission: $e');
@@ -61,7 +71,9 @@ class NativePermissionService {
   static Future<bool> isIgnoringBatteryOptimizations() async {
     if (kIsWeb || !Platform.isAndroid) return true;
     try {
-      final bool? ignored = await _channel.invokeMethod<bool>('isIgnoringBatteryOptimizations');
+      final bool? ignored = await _channel.invokeMethod<bool>(
+        'isIgnoringBatteryOptimizations',
+      );
       return ignored ?? false;
     } catch (e) {
       debugPrint('⚠️ Error checking battery optimization: $e');
@@ -83,7 +95,9 @@ class NativePermissionService {
   static Future<bool> openAutoStartSettings() async {
     if (kIsWeb || !Platform.isAndroid) return false;
     try {
-      final bool? opened = await _channel.invokeMethod<bool>('openAutoStartSettings');
+      final bool? opened = await _channel.invokeMethod<bool>(
+        'openAutoStartSettings',
+      );
       return opened ?? false;
     } catch (e) {
       debugPrint('⚠️ Error opening OEM autostart settings: $e');
@@ -115,7 +129,9 @@ class NativePermissionService {
   static Future<bool> isCriticalAlertPermissionGranted() async {
     if (kIsWeb || !Platform.isIOS) return false;
     try {
-      final bool? granted = await _channel.invokeMethod<bool>('checkCriticalAlertPermission');
+      final bool? granted = await _channel.invokeMethod<bool>(
+        'checkCriticalAlertPermission',
+      );
       return granted ?? false;
     } catch (e) {
       debugPrint('⚠️ Error checking critical alert permission: $e');
@@ -127,7 +143,9 @@ class NativePermissionService {
   static Future<bool> requestCriticalAlertPermission() async {
     if (kIsWeb || !Platform.isIOS) return false;
     try {
-      final bool? granted = await _channel.invokeMethod<bool>('requestCriticalAlertPermission');
+      final bool? granted = await _channel.invokeMethod<bool>(
+        'requestCriticalAlertPermission',
+      );
       return granted ?? false;
     } catch (e) {
       debugPrint('⚠️ Error requesting critical alert permission: $e');
@@ -151,7 +169,9 @@ class NativePermissionService {
   static Future<Map<String, dynamic>> getDeviceBrandInfo() async {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return {};
     try {
-      final dynamic info = await _alarmChannel.invokeMethod('getDeviceBrandInfo');
+      final dynamic info = await _alarmChannel.invokeMethod(
+        'getDeviceBrandInfo',
+      );
       if (info is Map) {
         return Map<String, dynamic>.from(info);
       }

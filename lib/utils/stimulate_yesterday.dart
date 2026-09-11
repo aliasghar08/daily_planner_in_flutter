@@ -12,7 +12,8 @@ Future<void> simulateYesterdayCompletion(String taskId) async {
       .doc(taskId);
 
   await doc.update({
-    'completedAt': DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
+    'completedAt':
+        DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
     'isCompleted': true,
   });
 }

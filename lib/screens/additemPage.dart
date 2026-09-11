@@ -7,8 +7,6 @@ import 'package:intl/intl.dart';
 
 enum TaskType { oneTime, daily, weekly, monthly }
 
-
-
 extension TaskTypeExtension on TaskType {
   String get label {
     switch (this) {
@@ -70,7 +68,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   // New variables for recurring notifications
   NotificationRecurrence _notificationRecurrence = NotificationRecurrence.none;
-  TimeOfDay _recurringTime = const TimeOfDay(hour: 21, minute: 0); // Default 9 PM
+  TimeOfDay _recurringTime = const TimeOfDay(
+    hour: 21,
+    minute: 0,
+  ); // Default 9 PM
   final Map<String, bool> _selectedDays = {
     '1': false, // Monday
     '2': false, // Tuesday
@@ -160,7 +161,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   String _formatTimeOfDay(TimeOfDay time) {
     final now = DateTime.now();
-    final dateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    final dateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
     return DateFormat.jm().format(dateTime);
   }
 
@@ -175,10 +182,13 @@ class _AddTaskPageState extends State<AddTaskPage> {
   }
 
   // ✅ NEW: Calculate recurring notification times dynamically (not stored)
-  List<DateTime> _calculateNextRecurringNotifications(DateTime? taskDate, int count) {
+  List<DateTime> _calculateNextRecurringNotifications(
+    DateTime? taskDate,
+    int count,
+  ) {
     final now = DateTime.now();
     final List<DateTime> times = [];
-    
+
     if (_notificationRecurrence == NotificationRecurrence.none) {
       return times;
     }
@@ -214,12 +224,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       // Apply recurrence pattern
       bool shouldSchedule = true;
-      
+
       switch (_notificationRecurrence) {
         case NotificationRecurrence.daily:
           // Schedule every day
           break;
-          
+
         case NotificationRecurrence.weekly:
           // Schedule weekly on the same weekday
           if (currentTime.weekday != startDate.weekday) {
@@ -228,7 +238,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             continue;
           }
           break;
-          
+
         case NotificationRecurrence.monthly:
           // Schedule monthly on the same day
           if (currentTime.day != startDate.day) {
@@ -243,7 +253,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             continue;
           }
           break;
-          
+
         case NotificationRecurrence.custom:
           // Schedule only on selected days
           if (!(_selectedDays[currentTime.weekday.toString()] ?? false)) {
@@ -252,7 +262,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             continue;
           }
           break;
-          
+
         case NotificationRecurrence.none:
           shouldSchedule = false;
           break;
@@ -261,7 +271,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       if (shouldSchedule) {
         times.add(currentTime);
         scheduled++;
-        
+
         // Move to next occurrence based on pattern
         switch (_notificationRecurrence) {
           case NotificationRecurrence.daily:
@@ -303,28 +313,33 @@ class _AddTaskPageState extends State<AddTaskPage> {
     // For recurring notifications, calculate next occurrences and schedule them
     if (_notificationRecurrence != NotificationRecurrence.none) {
       // Calculate next 10 recurring notifications (or until task end date)
-      final List<DateTime> recurringTimes = _calculateNextRecurringNotifications(taskDate, 10);
-      
-      debugPrint("📅 Will schedule ${recurringTimes.length} recurring notifications");
-      
+      final List<DateTime> recurringTimes =
+          _calculateNextRecurringNotifications(taskDate, 10);
+
+      debugPrint(
+        "📅 Will schedule ${recurringTimes.length} recurring notifications",
+      );
+
       for (final notificationTime in recurringTimes) {
         if (notificationTime.isAfter(now)) {
           try {
             await NativeAlarmHelper.scheduleHybridAlarm(
               id: _generateAlarmId(taskId, notificationTime),
               title: 'Task Reminder: $title',
-              body: taskDate != null
-                  ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                  : '$title reminder',
+              body:
+                  taskDate != null
+                      ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                      : '$title reminder',
               dateTime: notificationTime,
               payload: {
                 'type': 'alarm',
                 'alarmId': _generateAlarmId(taskId, notificationTime),
                 'taskId': taskId,
                 'title': title,
-                'body': taskDate != null
-                    ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                    : '$title reminder',
+                'body':
+                    taskDate != null
+                        ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                        : '$title reminder',
                 'recurrence': _notificationRecurrence.name,
                 'recurrenceTime': {
                   'hour': _recurringTime.hour,
@@ -349,18 +364,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
             await NativeAlarmHelper.scheduleHybridAlarm(
               id: _generateAlarmId(taskId, notificationTime),
               title: 'Task Reminder: $title',
-              body: taskDate != null
-                  ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                  : '$title reminder',
+              body:
+                  taskDate != null
+                      ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                      : '$title reminder',
               dateTime: notificationTime,
               payload: {
                 'type': 'alarm',
                 'alarmId': _generateAlarmId(taskId, notificationTime),
                 'taskId': taskId,
                 'title': title,
-                'body': taskDate != null
-                    ? '$title is due at ${DateFormat.jm().format(taskDate)}'
-                    : '$title reminder',
+                'body':
+                    taskDate != null
+                        ? '$title is due at ${DateFormat.jm().format(taskDate)}'
+                        : '$title reminder',
               },
             );
             scheduledCount++;
@@ -375,9 +392,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     if (scheduledCount > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            "✅ $scheduledCount notification(s) scheduled",
-          ),
+          content: Text("✅ $scheduledCount notification(s) scheduled"),
           backgroundColor: Colors.green,
           duration: const Duration(seconds: 3),
         ),
@@ -432,7 +447,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
         !_selectedDays.values.any((selected) => selected)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("⚠️ Please select at least one day for custom notifications."),
+          content: Text(
+            "⚠️ Please select at least one day for custom notifications.",
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -475,9 +492,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
       // 🚀 CRITICAL FIX: Don't store recurring notification times in Firestore
       // Only store single notification times, not recurring ones
-      final List<DateTime> notificationTimesToStore = 
-          _notificationRecurrence == NotificationRecurrence.none 
-              ? _notificationTimes 
+      final List<DateTime> notificationTimesToStore =
+          _notificationRecurrence == NotificationRecurrence.none
+              ? _notificationTimes
               : [];
 
       switch (_selectedType) {
@@ -569,7 +586,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
       }
 
       debugPrint(
-        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}"
+        "Creating task of type: ${_selectedType.name} - ${newTask.runtimeType}",
       );
 
       await newTaskRef.set(newTask.toMap());
@@ -721,17 +738,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   String _getSelectedDaysText() {
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final selectedDayNames = _selectedDays.entries
-        .where((entry) => entry.value)
-        .map((entry) => days[int.parse(entry.key) - 1])
-        .toList();
-    
-    return selectedDayNames.isEmpty ? "No days selected" : selectedDayNames.join(', ');
+    final selectedDayNames =
+        _selectedDays.entries
+            .where((entry) => entry.value)
+            .map((entry) => days[int.parse(entry.key) - 1])
+            .toList();
+
+    return selectedDayNames.isEmpty
+        ? "No days selected"
+        : selectedDayNames.join(', ');
   }
 
   Widget _buildCustomDaysSelector() {
     final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(12),
@@ -753,7 +773,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
             children: List.generate(7, (index) {
               final dayKey = (index + 1).toString();
               final isSelected = _selectedDays[dayKey] ?? false;
-              
+
               return FilterChip(
                 label: Text(days[index]),
                 selected: isSelected,
@@ -801,7 +821,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
               ),
             ),
             const SizedBox(height: 12),
-            
+
             // Recurrence Type Selection
             DropdownButtonFormField<NotificationRecurrence>(
               initialValue: _notificationRecurrence,
@@ -810,34 +830,34 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-              items: NotificationRecurrence.values.map((recurrence) {
-                return DropdownMenuItem(
-                  value: recurrence,
-                  child: Row(
-                    children: [
-                      Icon(
-                        recurrence.icon,
-                        color: recurrence.color,
-                        size: 20,
+              items:
+                  NotificationRecurrence.values.map((recurrence) {
+                    return DropdownMenuItem(
+                      value: recurrence,
+                      child: Row(
+                        children: [
+                          Icon(
+                            recurrence.icon,
+                            color: recurrence.color,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            recurrence.label,
+                            style: TextStyle(color: recurrence.color),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 12),
-                      Text(
-                        recurrence.label,
-                        style: TextStyle(color: recurrence.color),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                    );
+                  }).toList(),
               onChanged: (recurrence) {
                 if (recurrence != null) {
                   setState(() {
                     _notificationRecurrence = recurrence;
-                    _showCustomDays = recurrence == NotificationRecurrence.custom;
+                    _showCustomDays =
+                        recurrence == NotificationRecurrence.custom;
                     // Clear single notifications if switching to recurring
                     if (recurrence != NotificationRecurrence.none) {
                       _notificationTimes.clear();
@@ -846,9 +866,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 }
               },
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Time Picker for Recurring Notifications
             if (_notificationRecurrence != NotificationRecurrence.none)
               Column(
@@ -856,10 +876,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 children: [
                   const Text(
                     "Notification Time:",
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   InkWell(
@@ -896,7 +913,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   ),
                 ],
               ),
-            
+
             // Custom Days Selector
             if (_showCustomDays)
               Column(
@@ -905,7 +922,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   _buildCustomDaysSelector(),
                 ],
               ),
-            
+
             // Single Notifications (only when recurrence is "none")
             if (_notificationRecurrence == NotificationRecurrence.none)
               Column(
@@ -914,10 +931,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   const SizedBox(height: 16),
                   const Text(
                     "Single Notifications:",
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   if (_notificationTimes.isEmpty)
@@ -947,7 +961,9 @@ class _AddTaskPageState extends State<AddTaskPage> {
                                   _notificationTimes.remove(time);
                                 });
                               },
-                              backgroundColor: Colors.blue.withValues(alpha: 0.1),
+                              backgroundColor: Colors.blue.withValues(
+                                alpha: 0.1,
+                              ),
                             );
                           }).toList(),
                     ),

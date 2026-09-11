@@ -80,7 +80,9 @@ class HelperFunctions {
     int onTimeCount = 0;
     if (notificationTimes.isNotEmpty) {
       final scheduledMinutesList =
-          notificationTimes.map((time) => time.hour * 60 + time.minute).toList();
+          notificationTimes
+              .map((time) => time.hour * 60 + time.minute)
+              .toList();
 
       for (final stamp in stamps) {
         final stampMinutes = stamp.hour * 60 + stamp.minute;
@@ -104,7 +106,9 @@ class HelperFunctions {
     return {
       'average': '${formatTimeOfDay(context, avgTime)} ± 15 min',
       'onTimeRate':
-          notificationTimes.isNotEmpty ? ((onTimeCount / stamps.length) * 100).round() : null,
+          notificationTimes.isNotEmpty
+              ? ((onTimeCount / stamps.length) * 100).round()
+              : null,
       'consistency': consistency,
     };
   }
@@ -206,7 +210,10 @@ class HelperFunctions {
     return DateFormat.jm().format(dt);
   }
 
-  static String formatNotificationTimes(BuildContext context, List<DateTime> times) {
+  static String formatNotificationTimes(
+    BuildContext context,
+    List<DateTime> times,
+  ) {
     if (times.isEmpty) return 'None';
 
     final formattedTimes = times
@@ -229,7 +236,10 @@ class HelperFunctions {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -270,7 +280,9 @@ class HelperFunctions {
     );
   }
 
-  static Widget buildPendingNotificationsChart(List<DateTime> notificationTimes) {
+  static Widget buildPendingNotificationsChart(
+    List<DateTime> notificationTimes,
+  ) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -283,59 +295,75 @@ class HelperFunctions {
       (hour) => DateTime(today.year, today.month, today.day, hour),
     );
 
-    final bars = hourlyBins.map((hour) {
-      final nextHour = hour.add(const Duration(hours: 1));
-      final pendingCount = pending.where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour)).length;
-      final sentCount = sent.where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour)).length;
+    final bars =
+        hourlyBins.map((hour) {
+          final nextHour = hour.add(const Duration(hours: 1));
+          final pendingCount =
+              pending
+                  .where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour))
+                  .length;
+          final sentCount =
+              sent
+                  .where((dt) => !dt.isBefore(hour) && dt.isBefore(nextHour))
+                  .length;
 
-      String label = '';
-      switch (hour.hour) {
-        case 0:
-          label = "12A";
-          break;
-        case 3:
-          label = "3A";
-          break;
-        case 6:
-          label = "6A";
-          break;
-        case 9:
-          label = "9A";
-          break;
-        case 12:
-          label = "12P";
-          break;
-        case 15:
-          label = "3P";
-          break;
-        case 18:
-          label = "6P";
-          break;
-        case 21:
-          label = "9P";
-          break;
-      }
+          String label = '';
+          switch (hour.hour) {
+            case 0:
+              label = "12A";
+              break;
+            case 3:
+              label = "3A";
+              break;
+            case 6:
+              label = "6A";
+              break;
+            case 9:
+              label = "9A";
+              break;
+            case 12:
+              label = "12P";
+              break;
+            case 15:
+              label = "3P";
+              break;
+            case 18:
+              label = "6P";
+              break;
+            case 21:
+              label = "9P";
+              break;
+          }
 
-      return CustomBarGroupData(
-        x: hour.hour,
-        label: label,
-        barRods: [
-          CustomBarRodData(toY: sentCount.toDouble(), color: Colors.green, width: 8),
-          CustomBarRodData(toY: pendingCount.toDouble(), color: Colors.blue, width: 8),
-        ],
-      );
-    }).toList();
+          return CustomBarGroupData(
+            x: hour.hour,
+            label: label,
+            barRods: [
+              CustomBarRodData(
+                toY: sentCount.toDouble(),
+                color: Colors.green,
+                width: 8,
+              ),
+              CustomBarRodData(
+                toY: pendingCount.toDouble(),
+                color: Colors.blue,
+                width: 8,
+              ),
+            ],
+          );
+        }).toList();
 
-    return CustomBarChart(
-      barGroups: bars,
-      showGrid: false,
-    );
+    return CustomBarChart(barGroups: bars, showGrid: false);
   }
 
   static Widget buildLegendItem(Color color, String label) {
     return Row(
       children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
@@ -345,7 +373,13 @@ class HelperFunctions {
   static DateTime getNextOccurrence(DateTime notificationTime) {
     final now = DateTime.now();
     final time = TimeOfDay.fromDateTime(notificationTime);
-    DateTime next = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+    DateTime next = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      time.hour,
+      time.minute,
+    );
 
     if (next.isBefore(now)) next = next.add(const Duration(days: 1));
 
@@ -368,7 +402,13 @@ class HelperFunctions {
   }
 
   static String formatFullDateWithDay(DateTime date, TimeOfDay time) {
-    final dateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final dateTime = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
     return DateFormat('EEEE, MMMM d, y').format(dateTime);
   }
 
@@ -434,8 +474,16 @@ class HelperFunctions {
 
     final maxCount = timeCounts.values.reduce(max);
     final mostCommonTimes =
-        timeCounts.entries.where((e) => e.value == maxCount).map((e) => e.key).toList()
-          ..sort((a, b) => a.hour != b.hour ? a.hour.compareTo(b.hour) : a.minute.compareTo(b.minute));
+        timeCounts.entries
+            .where((e) => e.value == maxCount)
+            .map((e) => e.key)
+            .toList()
+          ..sort(
+            (a, b) =>
+                a.hour != b.hour
+                    ? a.hour.compareTo(b.hour)
+                    : a.minute.compareTo(b.minute),
+          );
 
     return mostCommonTimes.first;
   }

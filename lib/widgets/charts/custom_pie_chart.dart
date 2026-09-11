@@ -113,9 +113,10 @@ class _CustomPieChartState extends State<CustomPieChart>
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final height = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : math.min(width, 220.0);
+        final height =
+            constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : math.min(width, 220.0);
         final size = Size(width, height);
 
         return GestureDetector(
@@ -178,7 +179,8 @@ class _PieChartPainter extends CustomPainter {
     if (totalValue <= 0) return;
 
     double currentAngleRad = startDegreeOffset * (math.pi / 180);
-    final spaceRad = (sections.length > 1 ? sectionsSpace : 0.0) * (math.pi / 180);
+    final spaceRad =
+        (sections.length > 1 ? sectionsSpace : 0.0) * (math.pi / 180);
 
     for (int i = 0; i < sections.length; i++) {
       final section = sections[i];
@@ -188,13 +190,15 @@ class _PieChartPainter extends CustomPainter {
       if (sweepAngle > 0) {
         final isTouched = touchedIndex == i;
         final extraRadius = isTouched ? 6.0 : 0.0;
-        final sectionThickness = (section.radius > 0 ? section.radius : 45.0) + extraRadius;
+        final sectionThickness =
+            (section.radius > 0 ? section.radius : 45.0) + extraRadius;
 
-        final paint = Paint()
-          ..isAntiAlias = true
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = sectionThickness
-          ..color = section.color;
+        final paint =
+            Paint()
+              ..isAntiAlias = true
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = sectionThickness
+              ..color = section.color;
 
         final arcRadius = math.min(
           centerSpaceRadius + (sectionThickness / 2),
@@ -221,14 +225,13 @@ class _PieChartPainter extends CustomPainter {
 
           final textSpan = TextSpan(
             text: section.title,
-            style: section.titleStyle ??
+            style:
+                section.titleStyle ??
                 const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(color: Colors.black45, blurRadius: 3),
-                  ],
+                  shadows: [Shadow(color: Colors.black45, blurRadius: 3)],
                 ),
           );
 

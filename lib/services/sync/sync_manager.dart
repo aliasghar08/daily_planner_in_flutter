@@ -24,10 +24,10 @@ class SyncManager {
     GoogleCalendarSyncService? calendarService,
     GoogleTasksSyncService? tasksService,
     HealthSyncService? healthService,
-  })  : _customPrefsService = prefsService,
-        _calendarService = calendarService ?? GoogleCalendarSyncService(),
-        _tasksService = tasksService ?? GoogleTasksSyncService(),
-        _healthService = healthService ?? HealthSyncService();
+  }) : _customPrefsService = prefsService,
+       _calendarService = calendarService ?? GoogleCalendarSyncService(),
+       _tasksService = tasksService ?? GoogleTasksSyncService(),
+       _healthService = healthService ?? HealthSyncService();
 
   Future<NativePreferencesService> _getPrefs() async {
     return _customPrefsService ?? await NativePreferencesService.getInstance();
@@ -105,18 +105,18 @@ class SyncManager {
     );
 
     final config = await loadConfig();
-    await saveConfig(config.copyWith(
-      lastCalendarSync: DateTime.now(),
-    ));
+    await saveConfig(config.copyWith(lastCalendarSync: DateTime.now()));
 
-    await addLog(SyncLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      serviceType: SyncServiceType.googleCalendar,
-      timestamp: DateTime.now(),
-      isSuccess: result.isSuccess,
-      message: result.message,
-      itemsSynced: result.itemsSynced,
-    ));
+    await addLog(
+      SyncLogEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        serviceType: SyncServiceType.googleCalendar,
+        timestamp: DateTime.now(),
+        isSuccess: result.isSuccess,
+        message: result.message,
+        itemsSynced: result.itemsSynced,
+      ),
+    );
 
     return result;
   }
@@ -132,44 +132,44 @@ class SyncManager {
     );
 
     final config = await loadConfig();
-    await saveConfig(config.copyWith(
-      lastTasksSync: DateTime.now(),
-    ));
+    await saveConfig(config.copyWith(lastTasksSync: DateTime.now()));
 
-    await addLog(SyncLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      serviceType: SyncServiceType.googleTasks,
-      timestamp: DateTime.now(),
-      isSuccess: result.isSuccess,
-      message: result.message,
-      itemsSynced: result.itemsSynced,
-    ));
+    await addLog(
+      SyncLogEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        serviceType: SyncServiceType.googleTasks,
+        timestamp: DateTime.now(),
+        isSuccess: result.isSuccess,
+        message: result.message,
+        itemsSynced: result.itemsSynced,
+      ),
+    );
 
     return result;
   }
 
   /// Synchronize Medication Intakes with Health Platform
-  Future<SyncResult> syncHealthPlatform(
-    List<MedicationIntake> intakes,
-  ) async {
-    final result = await _healthService.syncMedicationIntakes(
-      intakes: intakes,
-    );
+  Future<SyncResult> syncHealthPlatform(List<MedicationIntake> intakes) async {
+    final result = await _healthService.syncMedicationIntakes(intakes: intakes);
 
     final config = await loadConfig();
-    await saveConfig(config.copyWith(
-      lastHealthSync: DateTime.now(),
-      healthPermissionGranted: result.isSuccess,
-    ));
+    await saveConfig(
+      config.copyWith(
+        lastHealthSync: DateTime.now(),
+        healthPermissionGranted: result.isSuccess,
+      ),
+    );
 
-    await addLog(SyncLogEntry(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      serviceType: SyncServiceType.healthPlatform,
-      timestamp: DateTime.now(),
-      isSuccess: result.isSuccess,
-      message: result.message,
-      itemsSynced: result.itemsSynced,
-    ));
+    await addLog(
+      SyncLogEntry(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        serviceType: SyncServiceType.healthPlatform,
+        timestamp: DateTime.now(),
+        isSuccess: result.isSuccess,
+        message: result.message,
+        itemsSynced: result.itemsSynced,
+      ),
+    );
 
     return result;
   }
@@ -184,18 +184,23 @@ class SyncManager {
     final results = <SyncServiceType, SyncResult>{};
 
     if (config.googleCalendarEnabled) {
-      results[SyncServiceType.googleCalendar] =
-          await syncGoogleCalendar(tasks, accessToken: accessToken);
+      results[SyncServiceType.googleCalendar] = await syncGoogleCalendar(
+        tasks,
+        accessToken: accessToken,
+      );
     }
 
     if (config.googleTasksEnabled) {
-      results[SyncServiceType.googleTasks] =
-          await syncGoogleTasks(tasks, accessToken: accessToken);
+      results[SyncServiceType.googleTasks] = await syncGoogleTasks(
+        tasks,
+        accessToken: accessToken,
+      );
     }
 
     if (config.healthSyncEnabled) {
-      results[SyncServiceType.healthPlatform] =
-          await syncHealthPlatform(intakes);
+      results[SyncServiceType.healthPlatform] = await syncHealthPlatform(
+        intakes,
+      );
     }
 
     return results;

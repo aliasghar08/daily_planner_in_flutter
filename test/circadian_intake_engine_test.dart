@@ -10,31 +10,34 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Circadian-Aware Logical Date (4:00 AM Cutoff)', () {
-    test('Correctly maps timestamps before and after 4:00 AM to logical health days', () {
-      // 11:59 PM on Aug 7 -> Logical day Aug 7
-      final t1 = DateTime(2026, 8, 7, 23, 59);
-      expect(MedicationIntake.getLogicalDate(t1), DateTime(2026, 8, 7));
+    test(
+      'Correctly maps timestamps before and after 4:00 AM to logical health days',
+      () {
+        // 11:59 PM on Aug 7 -> Logical day Aug 7
+        final t1 = DateTime(2026, 8, 7, 23, 59);
+        expect(MedicationIntake.getLogicalDate(t1), DateTime(2026, 8, 7));
 
-      // 12:00 AM Midnight on Aug 8 -> Still logical day Aug 7 (Bedtime cycle)
-      final t2 = DateTime(2026, 8, 8, 0, 0);
-      expect(MedicationIntake.getLogicalDate(t2), DateTime(2026, 8, 7));
+        // 12:00 AM Midnight on Aug 8 -> Still logical day Aug 7 (Bedtime cycle)
+        final t2 = DateTime(2026, 8, 8, 0, 0);
+        expect(MedicationIntake.getLogicalDate(t2), DateTime(2026, 8, 7));
 
-      // 12:30 AM on Aug 8 -> Logical day Aug 7
-      final t3 = DateTime(2026, 8, 8, 0, 30);
-      expect(MedicationIntake.getLogicalDate(t3), DateTime(2026, 8, 7));
+        // 12:30 AM on Aug 8 -> Logical day Aug 7
+        final t3 = DateTime(2026, 8, 8, 0, 30);
+        expect(MedicationIntake.getLogicalDate(t3), DateTime(2026, 8, 7));
 
-      // 03:59 AM on Aug 8 -> Logical day Aug 7
-      final t4 = DateTime(2026, 8, 8, 3, 59);
-      expect(MedicationIntake.getLogicalDate(t4), DateTime(2026, 8, 7));
+        // 03:59 AM on Aug 8 -> Logical day Aug 7
+        final t4 = DateTime(2026, 8, 8, 3, 59);
+        expect(MedicationIntake.getLogicalDate(t4), DateTime(2026, 8, 7));
 
-      // 04:00 AM on Aug 8 -> Rollover to logical day Aug 8 (Morning!)
-      final t5 = DateTime(2026, 8, 8, 4, 0);
-      expect(MedicationIntake.getLogicalDate(t5), DateTime(2026, 8, 8));
+        // 04:00 AM on Aug 8 -> Rollover to logical day Aug 8 (Morning!)
+        final t5 = DateTime(2026, 8, 8, 4, 0);
+        expect(MedicationIntake.getLogicalDate(t5), DateTime(2026, 8, 8));
 
-      // 08:00 AM on Aug 8 -> Logical day Aug 8
-      final t6 = DateTime(2026, 8, 8, 8, 0);
-      expect(MedicationIntake.getLogicalDate(t6), DateTime(2026, 8, 8));
-    });
+        // 08:00 AM on Aug 8 -> Logical day Aug 8
+        final t6 = DateTime(2026, 8, 8, 8, 0);
+        expect(MedicationIntake.getLogicalDate(t6), DateTime(2026, 8, 8));
+      },
+    );
 
     test('isForLogicalDate matches correctly across midnight', () {
       final quetiapine = Medication(
@@ -65,7 +68,9 @@ void main() {
       expect(intakeAug7.isForLogicalDate(DateTime(2026, 8, 7)), isTrue);
       // Check from a test time of 12:30 AM on Aug 8
       final testTimeMidnight = DateTime(2026, 8, 8, 0, 30);
-      final logicalAtMidnight = MedicationIntake.getLogicalDate(testTimeMidnight);
+      final logicalAtMidnight = MedicationIntake.getLogicalDate(
+        testTimeMidnight,
+      );
       expect(intakeAug7.isForLogicalDate(logicalAtMidnight), isTrue);
     });
   });
@@ -129,15 +134,18 @@ void main() {
       expect(bedtimeIntake.isOverdue(DateTime(2026, 8, 8, 4, 1)), isTrue);
     });
 
-    test('Logging bedtime dose at 12:30 AM marks it taken and records actual time', () {
-      final logTime = DateTime(2026, 8, 8, 0, 30);
-      final takenIntake = bedtimeIntake.markTaken(actualTime: logTime);
+    test(
+      'Logging bedtime dose at 12:30 AM marks it taken and records actual time',
+      () {
+        final logTime = DateTime(2026, 8, 8, 0, 30);
+        final takenIntake = bedtimeIntake.markTaken(actualTime: logTime);
 
-      expect(takenIntake.status, IntakeStatus.taken);
-      expect(takenIntake.actualTime, logTime);
-      expect(takenIntake.isDueNow(logTime), isFalse);
-      expect(takenIntake.isOverdue(logTime), isFalse);
-    });
+        expect(takenIntake.status, IntakeStatus.taken);
+        expect(takenIntake.actualTime, logTime);
+        expect(takenIntake.isDueNow(logTime), isFalse);
+        expect(takenIntake.isOverdue(logTime), isFalse);
+      },
+    );
   });
 
   group('Morning Medication (Sertraline) Lifecycle', () {
@@ -248,105 +256,143 @@ void main() {
       manager.addSchedule(scheduleMorning);
     });
 
-    test('getIntakesForDate at 12:30 AM returns both Sertraline and Quetiapine for that logical day', () {
-      final midnightCheck = DateTime(2026, 8, 8, 0, 30);
-      final intakes = manager.getIntakesForDate(midnightCheck);
+    test(
+      'getIntakesForDate at 12:30 AM returns both Sertraline and Quetiapine for that logical day',
+      () {
+        final midnightCheck = DateTime(2026, 8, 8, 0, 30);
+        final intakes = manager.getIntakesForDate(midnightCheck);
 
-      expect(intakes.length, 2);
-      expect(intakes.any((i) => i.schedule.medication.name == 'Quetiapine'), isTrue);
-      expect(intakes.any((i) => i.schedule.medication.name == 'Sertraline'), isTrue);
-    });
+        expect(intakes.length, 2);
+        expect(
+          intakes.any((i) => i.schedule.medication.name == 'Quetiapine'),
+          isTrue,
+        );
+        expect(
+          intakes.any((i) => i.schedule.medication.name == 'Sertraline'),
+          isTrue,
+        );
+      },
+    );
 
-    test('checkAndMarkMissedIntakes preserves night dose pending at 12:30 AM', () {
-      manager.ensureIntakesForDate(DateTime(2026, 8, 7));
+    test(
+      'checkAndMarkMissedIntakes preserves night dose pending at 12:30 AM',
+      () {
+        manager.ensureIntakesForDate(DateTime(2026, 8, 7));
 
-      // At 12:30 AM, Quetiapine from Aug 7 is still pending
-      final quetiapineIntake = manager.allIntakes.firstWhere(
-        (i) => i.schedule.medication.name == 'Quetiapine',
-      );
-      expect(quetiapineIntake.status, IntakeStatus.pending);
+        // At 12:30 AM, Quetiapine from Aug 7 is still pending
+        final quetiapineIntake = manager.allIntakes.firstWhere(
+          (i) => i.schedule.medication.name == 'Quetiapine',
+        );
+        expect(quetiapineIntake.status, IntakeStatus.pending);
 
-      // Missed check logic
-      final testTime = DateTime(2026, 8, 8, 0, 30);
-      expect(quetiapineIntake.isOverdue(testTime), isFalse);
-    });
+        // Missed check logic
+        final testTime = DateTime(2026, 8, 8, 0, 30);
+        expect(quetiapineIntake.isOverdue(testTime), isFalse);
+      },
+    );
 
-    test('Adherence percentage properly calculates when Quetiapine is taken at 12:30 AM', () {
-      manager.ensureIntakesForDate(DateTime(2026, 8, 7));
-      final intakes = manager.getIntakesForDate(DateTime(2026, 8, 7));
-      expect(intakes.length, 2);
+    test(
+      'Adherence percentage properly calculates when Quetiapine is taken at 12:30 AM',
+      () {
+        manager.ensureIntakesForDate(DateTime(2026, 8, 7));
+        final intakes = manager.getIntakesForDate(DateTime(2026, 8, 7));
+        expect(intakes.length, 2);
 
-      // Take Sertraline at 8:15 AM
-      final sertraline = intakes.firstWhere((i) => i.schedule.medication.name == 'Sertraline');
-      manager.updateIntake(sertraline.markTaken(actualTime: DateTime(2026, 8, 7, 8, 15)));
+        // Take Sertraline at 8:15 AM
+        final sertraline = intakes.firstWhere(
+          (i) => i.schedule.medication.name == 'Sertraline',
+        );
+        manager.updateIntake(
+          sertraline.markTaken(actualTime: DateTime(2026, 8, 7, 8, 15)),
+        );
 
-      // Take Quetiapine at 12:30 AM (calendar next day)
-      final quetiapine = intakes.firstWhere((i) => i.schedule.medication.name == 'Quetiapine');
-      manager.updateIntake(quetiapine.markTaken(actualTime: DateTime(2026, 8, 8, 0, 30)));
+        // Take Quetiapine at 12:30 AM (calendar next day)
+        final quetiapine = intakes.firstWhere(
+          (i) => i.schedule.medication.name == 'Quetiapine',
+        );
+        manager.updateIntake(
+          quetiapine.markTaken(actualTime: DateTime(2026, 8, 8, 0, 30)),
+        );
 
-      // Check adherence for logical day Aug 7
-      final updatedIntakes = manager.getIntakesForDate(DateTime(2026, 8, 7));
-      final takenCount = updatedIntakes.where((i) => i.status == IntakeStatus.taken).length;
-      expect(takenCount, 2);
-      expect(takenCount / updatedIntakes.length, 1.0); // 100% adherence!
-    });
+        // Check adherence for logical day Aug 7
+        final updatedIntakes = manager.getIntakesForDate(DateTime(2026, 8, 7));
+        final takenCount =
+            updatedIntakes.where((i) => i.status == IntakeStatus.taken).length;
+        expect(takenCount, 2);
+        expect(takenCount / updatedIntakes.length, 1.0); // 100% adherence!
+      },
+    );
   });
 
   group('Overnight Schedule Generation & Cutoff Thresholds', () {
-    test('Schedules with times before 4 AM are placed on the next calendar morning', () {
-      final sleepAid = Medication(
-        medicationId: 'med_sleep',
-        name: 'Sleep Aid',
-        dosage: 10.0,
-        unit: DosageUnit.mg,
-        color: '#2c3e50',
-        icon: '💤',
-        createdAt: DateTime(2026, 1, 1),
-      );
+    test(
+      'Schedules with times before 4 AM are placed on the next calendar morning',
+      () {
+        final sleepAid = Medication(
+          medicationId: 'med_sleep',
+          name: 'Sleep Aid',
+          dosage: 10.0,
+          unit: DosageUnit.mg,
+          color: '#2c3e50',
+          icon: '💤',
+          createdAt: DateTime(2026, 1, 1),
+        );
 
-      final scheduleOvernight = MedicationSchedule(
-        scheduleId: 'sched_sleep',
-        medication: sleepAid,
-        startDate: DateTime(2026, 8, 1),
-        frequency: MedicationFrequency.daily,
-        timesPerDay: [
-          const TimeOfDay(hour: 0, minute: 0),   // 12:00 AM Midnight
-          const TimeOfDay(hour: 1, minute: 30),  // 01:30 AM
-          const TimeOfDay(hour: 3, minute: 59),  // 03:59 AM
-          const TimeOfDay(hour: 4, minute: 0),   // 04:00 AM (Day starts)
-          const TimeOfDay(hour: 23, minute: 0),  // 11:00 PM
-        ],
-        createdAt: DateTime(2026, 8, 1),
-      );
+        final scheduleOvernight = MedicationSchedule(
+          scheduleId: 'sched_sleep',
+          medication: sleepAid,
+          startDate: DateTime(2026, 8, 1),
+          frequency: MedicationFrequency.daily,
+          timesPerDay: [
+            const TimeOfDay(hour: 0, minute: 0), // 12:00 AM Midnight
+            const TimeOfDay(hour: 1, minute: 30), // 01:30 AM
+            const TimeOfDay(hour: 3, minute: 59), // 03:59 AM
+            const TimeOfDay(hour: 4, minute: 0), // 04:00 AM (Day starts)
+            const TimeOfDay(hour: 23, minute: 0), // 11:00 PM
+          ],
+          createdAt: DateTime(2026, 8, 1),
+        );
 
-      final generated = scheduleOvernight.generateIntakesForDate(DateTime(2026, 8, 7));
-      expect(generated.length, 5);
+        final generated = scheduleOvernight.generateIntakesForDate(
+          DateTime(2026, 8, 7),
+        );
+        expect(generated.length, 5);
 
-      // 12:00 AM -> Scheduled for Aug 8, 00:00
-      final midnightIntake = generated.firstWhere((i) => i.scheduledTime.hour == 0);
-      expect(midnightIntake.scheduledTime, DateTime(2026, 8, 8, 0, 0));
-      expect(midnightIntake.logicalDate, DateTime(2026, 8, 7));
+        // 12:00 AM -> Scheduled for Aug 8, 00:00
+        final midnightIntake = generated.firstWhere(
+          (i) => i.scheduledTime.hour == 0,
+        );
+        expect(midnightIntake.scheduledTime, DateTime(2026, 8, 8, 0, 0));
+        expect(midnightIntake.logicalDate, DateTime(2026, 8, 7));
 
-      // 1:30 AM -> Scheduled for Aug 8, 01:30
-      final lateIntake = generated.firstWhere((i) => i.scheduledTime.hour == 1);
-      expect(lateIntake.scheduledTime, DateTime(2026, 8, 8, 1, 30));
-      expect(lateIntake.logicalDate, DateTime(2026, 8, 7));
+        // 1:30 AM -> Scheduled for Aug 8, 01:30
+        final lateIntake = generated.firstWhere(
+          (i) => i.scheduledTime.hour == 1,
+        );
+        expect(lateIntake.scheduledTime, DateTime(2026, 8, 8, 1, 30));
+        expect(lateIntake.logicalDate, DateTime(2026, 8, 7));
 
-      // 3:59 AM -> Scheduled for Aug 8, 03:59
-      final preCutoff = generated.firstWhere((i) => i.scheduledTime.hour == 3);
-      expect(preCutoff.scheduledTime, DateTime(2026, 8, 8, 3, 59));
-      expect(preCutoff.logicalDate, DateTime(2026, 8, 7));
+        // 3:59 AM -> Scheduled for Aug 8, 03:59
+        final preCutoff = generated.firstWhere(
+          (i) => i.scheduledTime.hour == 3,
+        );
+        expect(preCutoff.scheduledTime, DateTime(2026, 8, 8, 3, 59));
+        expect(preCutoff.logicalDate, DateTime(2026, 8, 7));
 
-      // 4:00 AM -> Scheduled for Aug 7, 04:00 (Start of Aug 7 morning)
-      final morningIntake = generated.firstWhere((i) => i.scheduledTime.hour == 4);
-      expect(morningIntake.scheduledTime, DateTime(2026, 8, 7, 4, 0));
-      expect(morningIntake.logicalDate, DateTime(2026, 8, 7));
+        // 4:00 AM -> Scheduled for Aug 7, 04:00 (Start of Aug 7 morning)
+        final morningIntake = generated.firstWhere(
+          (i) => i.scheduledTime.hour == 4,
+        );
+        expect(morningIntake.scheduledTime, DateTime(2026, 8, 7, 4, 0));
+        expect(morningIntake.logicalDate, DateTime(2026, 8, 7));
 
-      // 11:00 PM -> Scheduled for Aug 7, 23:00
-      final eveningIntake = generated.firstWhere((i) => i.scheduledTime.hour == 23);
-      expect(eveningIntake.scheduledTime, DateTime(2026, 8, 7, 23, 0));
-      expect(eveningIntake.logicalDate, DateTime(2026, 8, 7));
-    });
+        // 11:00 PM -> Scheduled for Aug 7, 23:00
+        final eveningIntake = generated.firstWhere(
+          (i) => i.scheduledTime.hour == 23,
+        );
+        expect(eveningIntake.scheduledTime, DateTime(2026, 8, 7, 23, 0));
+        expect(eveningIntake.logicalDate, DateTime(2026, 8, 7));
+      },
+    );
   });
 }
-

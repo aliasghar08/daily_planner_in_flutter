@@ -34,18 +34,20 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
   Future<void> fetchTaskStats(User user) async {
     setState(() => isLoading = true);
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('tasks')
-          .orderBy('date')
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('tasks')
+              .orderBy('date')
+              .get();
 
-      final tasks = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
+      final tasks =
+          snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            return data;
+          }).toList();
 
       rawTasks = tasks;
       processStats();
@@ -59,27 +61,31 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
   void processStats() {
     final now = DateTime.now();
 
-    final cleanedTasks = rawTasks.where((task) {
-      if (task['isCompleted'] == true) {
-        return task.containsKey('completedAt') && task['completedAt'] != null;
-      }
-      return true;
-    }).toList();
+    final cleanedTasks =
+        rawTasks.where((task) {
+          if (task['isCompleted'] == true) {
+            return task.containsKey('completedAt') &&
+                task['completedAt'] != null;
+          }
+          return true;
+        }).toList();
 
     totalTasks = cleanedTasks.length;
     completedTasks =
         cleanedTasks.where((task) => task['isCompleted'] == true).length;
     completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
 
-    overdueTasks = cleanedTasks.where((task) {
-      final taskDate = task['date'] is Timestamp
-          ? (task['date'] as Timestamp).toDate()
-          : DateTime.tryParse(task['date'].toString());
+    overdueTasks =
+        cleanedTasks.where((task) {
+          final taskDate =
+              task['date'] is Timestamp
+                  ? (task['date'] as Timestamp).toDate()
+                  : DateTime.tryParse(task['date'].toString());
 
-      return taskDate != null &&
-          taskDate.isBefore(now) &&
-          task['isCompleted'] != true;
-    }).length;
+          return taskDate != null &&
+              taskDate.isBefore(now) &&
+              task['isCompleted'] != true;
+        }).length;
 
     rawTasks = cleanedTasks;
     calculateStreaks();
@@ -87,14 +93,19 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
   }
 
   void calculateStreaks() {
-    final completedDates = rawTasks
-        .where((task) =>
-            task['isCompleted'] == true &&
-            task['completedAt'] != null &&
-            task['completedAt'] is Timestamp)
-        .map((task) => (task['completedAt'] as Timestamp).toDate().toLocal())
-        .map((date) => DateTime(date.year, date.month, date.day))
-        .toSet();
+    final completedDates =
+        rawTasks
+            .where(
+              (task) =>
+                  task['isCompleted'] == true &&
+                  task['completedAt'] != null &&
+                  task['completedAt'] is Timestamp,
+            )
+            .map(
+              (task) => (task['completedAt'] as Timestamp).toDate().toLocal(),
+            )
+            .map((date) => DateTime(date.year, date.month, date.day))
+            .toSet();
 
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
@@ -209,65 +220,95 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
     const barColor = Colors.blueAccent;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Total Tasks Performance"), centerTitle: true),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                buildStatCard("📋 Total Tasks", totalTasks.toString(), theme),
-                buildStatCard("✅ Completed", completedTasks.toString(), theme),
-                buildStatCard("📊 Completion Rate",
-                    "${(completionRate * 100).toStringAsFixed(1)}%", theme),
-                buildStatCard("🔥 Current Streak", "$currentStreak days", theme),
-                buildStatCard("🏆 Longest Streak", "$longestStreak days", theme),
-                buildStatCard("⚠️ Overdue Tasks", overdueTasks.toString(), theme),
-                const SizedBox(height: 20),
-                Text("📈 Task Completion Pie Chart",
-                    style: theme.textTheme.titleMedium),
-                const SizedBox(height: 10),
-                totalTasks == 0
-                    ? const Center(child: Text("No data for pie chart"))
-                    : SizedBox(
+      appBar: AppBar(
+        title: const Text("Total Tasks Performance"),
+        centerTitle: true,
+      ),
+      body:
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  buildStatCard("📋 Total Tasks", totalTasks.toString(), theme),
+                  buildStatCard(
+                    "✅ Completed",
+                    completedTasks.toString(),
+                    theme,
+                  ),
+                  buildStatCard(
+                    "📊 Completion Rate",
+                    "${(completionRate * 100).toStringAsFixed(1)}%",
+                    theme,
+                  ),
+                  buildStatCard(
+                    "🔥 Current Streak",
+                    "$currentStreak days",
+                    theme,
+                  ),
+                  buildStatCard(
+                    "🏆 Longest Streak",
+                    "$longestStreak days",
+                    theme,
+                  ),
+                  buildStatCard(
+                    "⚠️ Overdue Tasks",
+                    overdueTasks.toString(),
+                    theme,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "📈 Task Completion Pie Chart",
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  totalTasks == 0
+                      ? const Center(child: Text("No data for pie chart"))
+                      : SizedBox(
                         height: 200,
                         child: CustomPieChart(
                           sections: generatePieChartData(
-                              completedTasks, totalTasks),
+                            completedTasks,
+                            totalTasks,
+                          ),
                           centerSpaceRadius: 40,
                           sectionsSpace: 3,
                         ),
                       ),
-                const SizedBox(height: 20),
-                Text("Completed Tasks (Last 7 Days)",
-                    style: theme.textTheme.titleMedium),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 250,
-                  child: CustomBarChart(
-                    barGroups: List.generate(7, (index) {
-                      final date = DateTime.now()
-                          .subtract(Duration(days: 6 - index));
-                      final key = formatDateKey(date);
-                      final count = completedLast7Days[key] ?? 0;
-                      final weekday = _getWeekdayAbbreviation(date.weekday);
-                      return CustomBarGroupData(
-                        x: index,
-                        label: weekday,
-                        barRods: [
-                          CustomBarRodData(
-                            toY: count.toDouble(),
-                            width: 20,
-                            color: barColor,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ],
-                      );
-                    }),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Completed Tasks (Last 7 Days)",
+                    style: theme.textTheme.titleMedium,
                   ),
-                ),
-                const SizedBox(height: 23),
-              ],
-            ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 250,
+                    child: CustomBarChart(
+                      barGroups: List.generate(7, (index) {
+                        final date = DateTime.now().subtract(
+                          Duration(days: 6 - index),
+                        );
+                        final key = formatDateKey(date);
+                        final count = completedLast7Days[key] ?? 0;
+                        final weekday = _getWeekdayAbbreviation(date.weekday);
+                        return CustomBarGroupData(
+                          x: index,
+                          label: weekday,
+                          barRods: [
+                            CustomBarRodData(
+                              toY: count.toDouble(),
+                              width: 20,
+                              color: barColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 23),
+                ],
+              ),
     );
   }
 
@@ -278,9 +319,12 @@ class _AdvancedPerformancePageState extends State<TotalTasks> {
       child: ListTile(
         leading: const Icon(Icons.analytics),
         title: Text(label, style: theme.textTheme.bodyLarge),
-        trailing: Text(value,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.bold)),
+        trailing: Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
     );
   }

@@ -68,7 +68,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: lightSurfaceAlt,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -89,7 +92,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
@@ -98,7 +103,9 @@ class AppTheme {
           backgroundColor: primaryBlue,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -106,7 +113,9 @@ class AppTheme {
           foregroundColor: primaryBlue,
           side: const BorderSide(color: primaryBlue),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
@@ -116,7 +125,10 @@ class AppTheme {
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
         labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+        unselectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: primaryBlue,
@@ -186,7 +198,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -207,7 +222,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
@@ -216,7 +233,9 @@ class AppTheme {
           backgroundColor: const Color(0xFF2563EB),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -224,7 +243,9 @@ class AppTheme {
           foregroundColor: const Color(0xFF60A5FA),
           side: const BorderSide(color: Color(0xFF60A5FA)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
       ),
@@ -234,7 +255,10 @@ class AppTheme {
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
         labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+        unselectedLabelStyle: TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 14,
+        ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: const Color(0xFF2563EB),

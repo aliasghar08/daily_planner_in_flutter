@@ -3,8 +3,9 @@ import 'package:flutter/services.dart';
 
 /// Custom in-house timezone service replacing package:timezone and package:flutter_timezone.
 class NativeTimezoneService {
-  static const MethodChannel _channel =
-      MethodChannel('daily_planner/native_timezone');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_timezone',
+  );
 
   static String? _cachedTimezone;
 
@@ -14,8 +15,9 @@ class NativeTimezoneService {
 
     if (Platform.isAndroid || Platform.isIOS) {
       try {
-        final String? tzId =
-            await _channel.invokeMethod<String>('getDeviceTimezone');
+        final String? tzId = await _channel.invokeMethod<String>(
+          'getDeviceTimezone',
+        );
         if (tzId != null && tzId.isNotEmpty) {
           _cachedTimezone = tzId;
           return tzId;
@@ -33,7 +35,8 @@ class NativeTimezoneService {
   static Duration get currentOffset => DateTime.now().timeZoneOffset;
 
   /// Convert a local date time to UTC timestamp in milliseconds
-  static int toEpochUtc(DateTime dateTime) => dateTime.toUtc().millisecondsSinceEpoch;
+  static int toEpochUtc(DateTime dateTime) =>
+      dateTime.toUtc().millisecondsSinceEpoch;
 
   /// Formats a 24-hour hour/minute pair to exact next occurrence DateTime
   static DateTime nextInstanceOfTime(int hour, int minute) {

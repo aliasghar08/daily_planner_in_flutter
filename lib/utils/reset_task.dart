@@ -14,14 +14,18 @@ Future<void> resetAllTasksIfNeeded() async {
 
   try {
     // Try to get data from cache first (works offline)
-    final snapshot = await taskCollection.get(const GetOptions(source: Source.cache));
-    
+    final snapshot = await taskCollection.get(
+      const GetOptions(source: Source.cache),
+    );
+
     // Process task reset with cached data
     await _processTaskReset(snapshot, taskCollection);
-    
+
     // Try to get server data in background and process if different
     try {
-      final serverSnapshot = await taskCollection.get(const GetOptions(source: Source.server));
+      final serverSnapshot = await taskCollection.get(
+        const GetOptions(source: Source.server),
+      );
       if (serverSnapshot.docs.length != snapshot.docs.length) {
         await _processTaskReset(serverSnapshot, taskCollection);
       }
@@ -36,9 +40,12 @@ Future<void> resetAllTasksIfNeeded() async {
   }
 }
 
-Future<void> _processTaskReset(QuerySnapshot snapshot, CollectionReference taskCollection) async {
+Future<void> _processTaskReset(
+  QuerySnapshot snapshot,
+  CollectionReference taskCollection,
+) async {
   final now = DateTime.now();
-  
+
   for (final doc in snapshot.docs) {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null) continue;
@@ -74,29 +81,32 @@ Future<void> _processTaskReset(QuerySnapshot snapshot, CollectionReference taskC
   }
 }
 
-bool _shouldSkipResetDueToRecentCompletion(DateTime? completedAt, DateTime now) {
+bool _shouldSkipResetDueToRecentCompletion(
+  DateTime? completedAt,
+  DateTime now,
+) {
   if (completedAt == null) return false;
-  
+
   // Convert both times to local for comparison
   final completedAtLocal = completedAt.toLocal();
   final nowLocal = now.toLocal();
-  
+
   return completedAtLocal.day == nowLocal.day &&
-         completedAtLocal.month == nowLocal.month &&
-         completedAtLocal.year == nowLocal.year;
+      completedAtLocal.month == nowLocal.month &&
+      completedAtLocal.year == nowLocal.year;
 }
 
 Map<String, dynamic> _prepareResetUpdates(Task task) {
-  final updates = <String, dynamic>{
-    'isCompleted': false,
-    'completedAt': null,
-  };
+  final updates = <String, dynamic>{'isCompleted': false, 'completedAt': null};
 
   // Preserve completion stamps
   if (task.completedAt != null &&
-      !task.completionStamps.any((ts) => ts.isAtSameMomentAs(task.completedAt!))) {
+      !task.completionStamps.any(
+        (ts) => ts.isAtSameMomentAs(task.completedAt!),
+      )) {
     final updatedStamps = [...task.completionStamps, task.completedAt!];
-    updates['completionStamps'] = updatedStamps.map((dt) => dt.toIso8601String()).toList();
+    updates['completionStamps'] =
+        updatedStamps.map((dt) => dt.toIso8601String()).toList();
   }
 
   return updates;
@@ -104,9 +114,12 @@ Map<String, dynamic> _prepareResetUpdates(Task task) {
 
 void _tryServerResetInBackground(CollectionReference taskCollection) {
   // This runs in background and won't block the app startup
-  taskCollection.get(const GetOptions(source: Source.server)).then((serverSnapshot) {
-    _processTaskReset(serverSnapshot, taskCollection);
-  }).catchError((e) {
-    debugPrint("Background server reset failed: $e");
-  });
+  taskCollection
+      .get(const GetOptions(source: Source.server))
+      .then((serverSnapshot) {
+        _processTaskReset(serverSnapshot, taskCollection);
+      })
+      .catchError((e) {
+        debugPrint("Background server reset failed: $e");
+      });
 }

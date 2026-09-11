@@ -29,8 +29,8 @@ class ChangeNotifierProvider<T extends ChangeNotifier> extends StatefulWidget
     required T this.value,
     this.child,
     this.builder,
-  })  : create = null,
-        lazy = false;
+  }) : create = null,
+       lazy = false;
 
   @override
   State<ChangeNotifierProvider<T>> createState() =>
@@ -98,11 +98,10 @@ class _ChangeNotifierProviderState<T extends ChangeNotifier>
     final effectiveNotifier = _notifier ?? widget.value;
     final Widget current = _InheritedChangeNotifier<T>(
       notifier: effectiveNotifier,
-      child: widget.builder != null
-          ? Builder(
-              builder: (ctx) => widget.builder!(ctx, widget.child),
-            )
-          : (widget.child ?? const SizedBox.shrink()),
+      child:
+          widget.builder != null
+              ? Builder(builder: (ctx) => widget.builder!(ctx, widget.child))
+              : (widget.child ?? const SizedBox.shrink()),
     );
     return current;
   }
@@ -160,8 +159,11 @@ class Provider {
     bool listen = true,
   }) {
     if (listen) {
-      final inherited = context
-          .dependOnInheritedWidgetOfExactType<_InheritedChangeNotifier<T>>();
+      final inherited =
+          context
+              .dependOnInheritedWidgetOfExactType<
+                _InheritedChangeNotifier<T>
+              >();
       if (inherited == null || inherited.notifier == null) {
         throw FlutterError(
           'Could not find ChangeNotifierProvider<$T> in widget tree.\n'
@@ -170,10 +172,13 @@ class Provider {
       }
       return inherited.notifier!;
     } else {
-      final inherited = context
-          .getElementForInheritedWidgetOfExactType<
-              _InheritedChangeNotifier<T>>()
-          ?.widget as _InheritedChangeNotifier<T>?;
+      final inherited =
+          context
+                  .getElementForInheritedWidgetOfExactType<
+                    _InheritedChangeNotifier<T>
+                  >()
+                  ?.widget
+              as _InheritedChangeNotifier<T>?;
       if (inherited == null || inherited.notifier == null) {
         throw FlutterError(
           'Could not find ChangeNotifierProvider<$T> in widget tree.\n'
@@ -190,11 +195,7 @@ class Consumer<T extends ChangeNotifier> extends StatelessWidget {
   final Widget Function(BuildContext context, T value, Widget? child) builder;
   final Widget? child;
 
-  const Consumer({
-    super.key,
-    required this.builder,
-    this.child,
-  });
+  const Consumer({super.key, required this.builder, this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -206,19 +207,11 @@ class Consumer<T extends ChangeNotifier> extends StatelessWidget {
 /// Consumer2 widget rebuilding when either [A] or [B] notifies listeners.
 class Consumer2<A extends ChangeNotifier, B extends ChangeNotifier>
     extends StatelessWidget {
-  final Widget Function(
-    BuildContext context,
-    A valueA,
-    B valueB,
-    Widget? child,
-  ) builder;
+  final Widget Function(BuildContext context, A valueA, B valueB, Widget? child)
+  builder;
   final Widget? child;
 
-  const Consumer2({
-    super.key,
-    required this.builder,
-    this.child,
-  });
+  const Consumer2({super.key, required this.builder, this.child});
 
   @override
   Widget build(BuildContext context) {

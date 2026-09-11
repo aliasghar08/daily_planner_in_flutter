@@ -29,9 +29,9 @@ class MedicationSchedule {
     this.instructions,
     this.reminderMinutesBefore = 15,
     DateTime? createdAt,
-  })  : scheduleId =
-            scheduleId ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt = createdAt ?? DateTime.now();
+  }) : scheduleId =
+           scheduleId ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
+       createdAt = createdAt ?? DateTime.now();
 
   MedicationSchedule copyWith({
     String? scheduleId,
@@ -92,9 +92,10 @@ class MedicationSchedule {
     // Generate intakes for each time of day
     for (final time in timesPerDay) {
       // If time is before circadian cutoff (e.g. 1:00 AM), it occurs on the calendar morning following this logical day
-      final targetDate = (time.hour < MedicationIntake.defaultCircadianCutoffHour)
-          ? normalizedDate.add(const Duration(days: 1))
-          : normalizedDate;
+      final targetDate =
+          (time.hour < MedicationIntake.defaultCircadianCutoffHour)
+              ? normalizedDate.add(const Duration(days: 1))
+              : normalizedDate;
 
       final scheduledTime = DateTime(
         targetDate.year,
@@ -104,7 +105,10 @@ class MedicationSchedule {
         time.minute,
       );
 
-      final intakeId = MedicationIntake.generateIntakeId(scheduleId, scheduledTime);
+      final intakeId = MedicationIntake.generateIntakeId(
+        scheduleId,
+        scheduledTime,
+      );
 
       final intake = MedicationIntake(
         intakeId: intakeId,
@@ -170,21 +174,32 @@ class MedicationSchedule {
       'endDate': endDate != null ? Timestamp.fromDate(endDate!.toUtc()) : null,
       'frequency': frequency.name,
       'timesPerDay':
-          timesPerDay.map((time) => {'hour': time.hour, 'minute': time.minute}).toList(),
+          timesPerDay
+              .map((time) => {'hour': time.hour, 'minute': time.minute})
+              .toList(),
       'daysOfWeek': daysOfWeek,
       'specificDates':
-          specificDates.map((date) => Timestamp.fromDate(date.toUtc())).toList(),
+          specificDates
+              .map((date) => Timestamp.fromDate(date.toUtc()))
+              .toList(),
       'instructions': instructions,
       'reminderMinutesBefore': reminderMinutesBefore,
       'createdAt': Timestamp.fromDate(createdAt.toUtc()),
     };
   }
 
-  factory MedicationSchedule.fromMap(Map<String, dynamic> map, [String? docId, Medication? fallbackMedication]) {
+  factory MedicationSchedule.fromMap(
+    Map<String, dynamic> map, [
+    String? docId,
+    Medication? fallbackMedication,
+  ]) {
     DateTime parseDate(dynamic value, [DateTime? defaultVal]) {
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+      if (value is int)
+        return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
       if (value is Timestamp) return value.toDate().toLocal();
-      if (value is String) return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now())).toLocal();
+      if (value is String)
+        return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now()))
+            .toLocal();
       return (defaultVal ?? DateTime.now()).toLocal();
     }
 
@@ -245,7 +260,10 @@ class MedicationSchedule {
     }
 
     return MedicationSchedule(
-      scheduleId: docId ?? map['scheduleId'] ?? 'sched_${DateTime.now().millisecondsSinceEpoch}',
+      scheduleId:
+          docId ??
+          map['scheduleId'] ??
+          'sched_${DateTime.now().millisecondsSinceEpoch}',
       medication: med,
       startDate: parseDate(map['startDate']),
       endDate: map['endDate'] != null ? parseDate(map['endDate']) : null,

@@ -90,9 +90,10 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
 
     totalTasks = dailyTasks.length;
 
-    final attemptedTasks = dailyTasks.where((task) {
-      return task['completedAt'] != null;
-    }).toList();
+    final attemptedTasks =
+        dailyTasks.where((task) {
+          return task['completedAt'] != null;
+        }).toList();
 
     completedTasks = attemptedTasks.length;
     completionRate = totalTasks > 0 ? completedTasks / totalTasks : 0;
@@ -261,7 +262,10 @@ class _DailyTasksStatsState extends State<DailyTasksStats> {
     final textStyle = theme.textTheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Daily Tasks Performance"), centerTitle: true),
+      appBar: AppBar(
+        title: const Text("Daily Tasks Performance"),
+        centerTitle: true,
+      ),
       body:
           isLoading
               ? const Center(child: CircularProgressIndicator())

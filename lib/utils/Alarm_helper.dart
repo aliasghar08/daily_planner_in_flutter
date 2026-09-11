@@ -260,7 +260,9 @@ class NativeAlarmHelper {
   static Future<List<dynamic>> getScheduledAlarms() async {
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return [];
-      final List<dynamic>? alarms = await _alarmChannel.invokeMethod('getScheduledAlarms');
+      final List<dynamic>? alarms = await _alarmChannel.invokeMethod(
+        'getScheduledAlarms',
+      );
       return alarms ?? [];
     } catch (e) {
       debugPrint('Error getting scheduled alarms: $e');
@@ -273,7 +275,7 @@ class NativeAlarmHelper {
     try {
       final List<dynamic> alarms = await getScheduledAlarms();
       int cancelledCount = 0;
-      
+
       for (final alarm in alarms) {
         if (alarm is Map) {
           final String payloadStr = alarm['payload']?.toString() ?? '';
@@ -302,7 +304,7 @@ class NativeAlarmHelper {
     try {
       final List<dynamic> alarms = await getScheduledAlarms();
       int cancelledCount = 0;
-      
+
       for (final alarm in alarms) {
         if (alarm is Map) {
           final String payloadStr = alarm['payload']?.toString() ?? '';
@@ -320,7 +322,9 @@ class NativeAlarmHelper {
           }
         }
       }
-      debugPrint('✅ Cancelled $cancelledCount alarms for medication: $medicationId');
+      debugPrint(
+        '✅ Cancelled $cancelledCount alarms for medication: $medicationId',
+      );
     } catch (e) {
       debugPrint('Error cancelling alarms for medication $medicationId: $e');
     }
@@ -423,49 +427,65 @@ class NativeAlarmHelper {
   /// Show customized OEM optimization guidance dialog
   static Future<void> showOemOptimizationGuide(BuildContext context) async {
     final info = await getDeviceBrandInfo();
-    final String manufacturer = (info['manufacturer'] ?? '').toString().toLowerCase();
-    final bool isIgnoringBattery = info['isIgnoringBatteryOptimizations'] == true;
+    final String manufacturer =
+        (info['manufacturer'] ?? '').toString().toLowerCase();
+    final bool isIgnoringBattery =
+        info['isIgnoringBatteryOptimizations'] == true;
 
     String oemTitle = 'Background Alarm Optimization';
     String oemGuide = '';
 
-    if (manufacturer.contains('infinix') || manufacturer.contains('tecno') || manufacturer.contains('transsion') || manufacturer.contains('itel')) {
+    if (manufacturer.contains('infinix') ||
+        manufacturer.contains('tecno') ||
+        manufacturer.contains('transsion') ||
+        manufacturer.contains('itel')) {
       oemTitle = 'Infinix / Tecno (Transsion) Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
           '2. In Phone Master, turn ON "Auto-start" for Daily Planner.\n'
           '3. Disable "App Freeze" / Power Save restrictions for Daily Planner.';
-    } else if (manufacturer.contains('xiaomi') || manufacturer.contains('redmi') || manufacturer.contains('poco')) {
+    } else if (manufacturer.contains('xiaomi') ||
+        manufacturer.contains('redmi') ||
+        manufacturer.contains('poco')) {
       oemTitle = 'Xiaomi / MIUI / HyperOS Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below and turn ON "Autostart" for Daily Planner.\n'
           '2. In App Info -> Battery saver, select "No restrictions".\n'
           '3. Under Other Permissions, allow "Show on Lock screen".';
-    } else if (manufacturer.contains('oppo') || manufacturer.contains('realme')) {
+    } else if (manufacturer.contains('oppo') ||
+        manufacturer.contains('realme')) {
       oemTitle = 'Oppo / Realme (ColorOS) Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
           '2. Enable "Auto-launch" for Daily Planner.\n'
           '3. Under Battery -> App Battery Management, enable "Allow background activity".';
     } else if (manufacturer.contains('vivo') || manufacturer.contains('iqoo')) {
       oemTitle = 'Vivo / iQOO (FuntouchOS) Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below and enable Daily Planner.\n'
           '2. In Settings -> Battery, enable "High background power consumption".';
-    } else if (manufacturer.contains('huawei') || manufacturer.contains('honor')) {
+    } else if (manufacturer.contains('huawei') ||
+        manufacturer.contains('honor')) {
       oemTitle = 'Huawei / Honor Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
           '2. Set Daily Planner launch to "Manage manually".\n'
           '3. Turn ON Auto-launch, Secondary launch, and Run in background.';
     } else if (manufacturer.contains('samsung')) {
       oemTitle = 'Samsung OneUI Setup';
-      oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
+      oemGuide =
+          'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. In Settings -> Battery -> Background usage limits, ensure Daily Planner is NOT in "Sleeping apps" or "Deep sleeping apps".\n'
           '2. Tap "Battery Settings" below.';
     } else {
       oemTitle = 'Alarm Reliability Settings';
-      oemGuide = 'To ensure notifications & alarms ring reliably even when the app is closed or after restarting:\n\n'
+      oemGuide =
+          'To ensure notifications & alarms ring reliably even when the app is closed or after restarting:\n\n'
           '1. Disable battery optimization for Daily Planner.\n'
           '2. Ensure exact alarm permissions are granted.';
     }
@@ -474,52 +494,73 @@ class NativeAlarmHelper {
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            const Icon(Icons.notifications_active, color: Colors.orange),
-            const SizedBox(width: 8),
-            Expanded(child: Text(oemTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(oemGuide, style: const TextStyle(fontSize: 14, height: 1.4)),
-              const SizedBox(height: 12),
-              if (isIgnoringBattery)
-                const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 18),
-                    SizedBox(width: 6),
-                    Text('Battery optimization disabled', style: TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.w600)),
-                  ],
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                const Icon(Icons.notifications_active, color: Colors.orange),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    oemTitle,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    oemGuide,
+                    style: const TextStyle(fontSize: 14, height: 1.4),
+                  ),
+                  const SizedBox(height: 12),
+                  if (isIgnoringBattery)
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Battery optimization disabled',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Close'),
+              ),
+              OutlinedButton(
+                onPressed: () async {
+                  await disableBatteryOptimization();
+                },
+                child: const Text('Battery Settings'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  await openAutoStartSettings();
+                },
+                child: const Text('Open Auto-Start'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          OutlinedButton(
-            onPressed: () async {
-              await disableBatteryOptimization();
-            },
-            child: const Text('Battery Settings'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await openAutoStartSettings();
-            },
-            child: const Text('Open Auto-Start'),
-          ),
-        ],
-      ),
     );
   }
 

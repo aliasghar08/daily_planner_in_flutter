@@ -31,13 +31,20 @@ class TaskHistoryWidget extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("🕒 Edit History:", style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text(
+                    "🕒 Edit History:",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 6),
                   ...editHistory.map((edit) {
-                    final formatted = DateFormat('MMM d, yyyy – h:mm a').format(edit.timestamp);
+                    final formatted = DateFormat(
+                      'MMM d, yyyy – h:mm a',
+                    ).format(edit.timestamp);
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text("• $formatted${edit.note != null ? " — ${edit.note}" : ""}"),
+                      child: Text(
+                        "• $formatted${edit.note != null ? " — ${edit.note}" : ""}",
+                      ),
                     );
                   }),
                 ],

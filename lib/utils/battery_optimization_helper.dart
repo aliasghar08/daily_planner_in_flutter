@@ -7,7 +7,8 @@ class BatteryOptimizationHelper {
   /// Checks if battery optimization is disabled and prompts the user if needed.
   static Future<void> ensureDisabled() async {
     try {
-      final isIgnored = await NativePermissionService.isIgnoringBatteryOptimizations();
+      final isIgnored =
+          await NativePermissionService.isIgnoringBatteryOptimizations();
 
       if (kDebugMode) {
         debugPrint("🔋 Battery optimization ignored: $isIgnored");
@@ -26,7 +27,8 @@ class BatteryOptimizationHelper {
   /// Opens OEM-specific power saver / autostart settings if applicable.
   static Future<void> ensureManufacturerBatteryOptimizationDisabled() async {
     try {
-      final isIgnored = await NativePermissionService.isIgnoringBatteryOptimizations();
+      final isIgnored =
+          await NativePermissionService.isIgnoringBatteryOptimizations();
       if (!isIgnored) {
         await NativePermissionService.openAutoStartSettings();
       }
@@ -44,4 +46,3 @@ class BatteryOptimizationHelper {
     }
   }
 }
-

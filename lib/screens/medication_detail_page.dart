@@ -13,10 +13,7 @@ import 'package:daily_planner/services/custom_state_management.dart';
 class MedicationDetailPage extends StatefulWidget {
   final Medication medication;
 
-  const MedicationDetailPage({
-    super.key,
-    required this.medication,
-  });
+  const MedicationDetailPage({super.key, required this.medication});
 
   @override
   State<MedicationDetailPage> createState() => _MedicationDetailPageState();
@@ -67,15 +64,16 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('medications')
-          .doc(widget.medication.medicationId)
-          .collection('intakes')
-          .orderBy('scheduledTime', descending: true)
-          .limit(50)
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('medications')
+              .doc(widget.medication.medicationId)
+              .collection('intakes')
+              .orderBy('scheduledTime', descending: true)
+              .limit(50)
+              .get();
 
       final List<MedicationIntake> list = [];
       for (final doc in snapshot.docs) {
@@ -84,8 +82,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           final scheduleId = data['scheduleId'];
           MedicationSchedule? sched;
           try {
-            sched = medProvider.schedules
-                .firstWhere((s) => s.scheduleId == scheduleId);
+            sched = medProvider.schedules.firstWhere(
+              (s) => s.scheduleId == scheduleId,
+            );
           } catch (_) {
             sched = null;
           }
@@ -115,18 +114,23 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     final medColor = _parseColor(widget.medication.color);
 
     // Find schedule for this medication
-    final schedule = medProvider.schedules.cast<MedicationSchedule?>().firstWhere(
+    final schedule = medProvider.schedules
+        .cast<MedicationSchedule?>()
+        .firstWhere(
           (s) => s?.medication.medicationId == widget.medication.medicationId,
           orElse: () => null,
         );
 
-    final takenCount = _history.where((i) => i.status == IntakeStatus.taken).length;
-    final skippedCount = _history.where((i) => i.status == IntakeStatus.skipped).length;
+    final takenCount =
+        _history.where((i) => i.status == IntakeStatus.taken).length;
+    final skippedCount =
+        _history.where((i) => i.status == IntakeStatus.skipped).length;
     final totalLogged = _history.length;
     final adherenceRate = totalLogged > 0 ? (takenCount / totalLogged) : 1.0;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FA),
+      backgroundColor:
+          isDark ? const Color(0xFF121212) : const Color(0xFFF6F8FA),
       appBar: AppBar(
         title: Text(widget.medication.name),
         elevation: 0,
@@ -139,10 +143,11 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => AddMedicationPage(
-                    existingMedication: widget.medication,
-                    existingSchedule: schedule,
-                  ),
+                  builder:
+                      (_) => AddMedicationPage(
+                        existingMedication: widget.medication,
+                        existingSchedule: schedule,
+                      ),
                 ),
               );
               _loadIntakeHistory();
@@ -158,9 +163,13 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
           controller: _tabController,
           indicatorColor: medColor,
           labelColor: medColor,
-          unselectedLabelColor: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+          unselectedLabelColor:
+              isDark ? Colors.grey.shade400 : Colors.grey.shade600,
           tabs: const [
-            Tab(text: 'Overview', icon: Icon(Icons.dashboard_outlined, size: 20)),
+            Tab(
+              text: 'Overview',
+              icon: Icon(Icons.dashboard_outlined, size: 20),
+            ),
             Tab(text: 'History', icon: Icon(Icons.history_rounded, size: 20)),
             Tab(text: 'Schedule', icon: Icon(Icons.alarm_on_rounded, size: 20)),
           ],
@@ -170,7 +179,15 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
         controller: _tabController,
         children: [
           // Tab 1: Overview
-          _buildOverviewTab(medColor, isDark, adherenceRate, takenCount, skippedCount, totalLogged, schedule),
+          _buildOverviewTab(
+            medColor,
+            isDark,
+            adherenceRate,
+            takenCount,
+            skippedCount,
+            totalLogged,
+            schedule,
+          ),
           // Tab 2: History
           _buildHistoryTab(isDark, medProvider),
           // Tab 3: Schedule Details
@@ -253,7 +270,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                         widget.medication.description!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: isDark ? Colors.grey.shade400 : Colors.grey.shade700,
+                          color:
+                              isDark
+                                  ? Colors.grey.shade400
+                                  : Colors.grey.shade700,
                         ),
                       ),
                     ],
@@ -316,9 +336,17 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                       children: [
                         _buildStatRow('Total Logged', '$totalLogged doses'),
                         const SizedBox(height: 6),
-                        _buildStatRow('Taken On-Time', '$takenCount', Colors.green),
+                        _buildStatRow(
+                          'Taken On-Time',
+                          '$takenCount',
+                          Colors.green,
+                        ),
                         const SizedBox(height: 6),
-                        _buildStatRow('Skipped', '$skippedCount', Colors.orange),
+                        _buildStatRow(
+                          'Skipped',
+                          '$skippedCount',
+                          Colors.orange,
+                        ),
                       ],
                     ),
                   ),
@@ -331,22 +359,31 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
         const SizedBox(height: 16),
 
         // Quick Instructions & Notes Card
-        if (schedule?.instructions != null && schedule!.instructions!.isNotEmpty)
+        if (schedule?.instructions != null &&
+            schedule!.instructions!.isNotEmpty)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.blue.shade50.withValues(alpha: isDark ? 0.1 : 0.8),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: Colors.blueAccent.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: Colors.blueAccent),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.blueAccent,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     schedule.instructions!,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -431,13 +468,17 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
         return Card(
           elevation: 0.5,
           margin: const EdgeInsets.only(bottom: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: ListTile(
             onTap: () => _showModifyIntakeBottomSheet(context, intake),
             leading: Icon(
               isTaken
                   ? Icons.check_circle_rounded
-                  : (isSkipped ? Icons.remove_circle_outline : Icons.schedule_rounded),
+                  : (isSkipped
+                      ? Icons.remove_circle_outline
+                      : Icons.schedule_rounded),
               color: badgeColor,
             ),
             title: Text(
@@ -469,7 +510,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
     );
   }
 
-  void _showModifyIntakeBottomSheet(BuildContext context, MedicationIntake intake) {
+  void _showModifyIntakeBottomSheet(
+    BuildContext context,
+    MedicationIntake intake,
+  ) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -482,7 +526,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
             children: [
               const Padding(
                 padding: EdgeInsets.all(16.0),
-                child: Text('Modify Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'Modify Log',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
               if (intake.status != IntakeStatus.taken)
                 ListTile(
@@ -495,13 +542,15 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                       initialTime: TimeOfDay.fromDateTime(intake.scheduledTime),
                       helpText: 'Select time taken',
                     );
-                    
+
                     if (pickedTime != null) {
                       final logical = intake.logicalDate;
-                      final targetDate = (pickedTime.hour < MedicationIntake.defaultCircadianCutoffHour)
-                          ? logical.add(const Duration(days: 1))
-                          : logical;
-                          
+                      final targetDate =
+                          (pickedTime.hour <
+                                  MedicationIntake.defaultCircadianCutoffHour)
+                              ? logical.add(const Duration(days: 1))
+                              : logical;
+
                       final actualTime = DateTime(
                         targetDate.year,
                         targetDate.month,
@@ -533,12 +582,18 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 ),
               if (intake.status != IntakeStatus.skipped)
                 ListTile(
-                  leading: const Icon(Icons.remove_circle, color: Colors.orange),
+                  leading: const Icon(
+                    Icons.remove_circle,
+                    color: Colors.orange,
+                  ),
                   title: const Text('Mark as Skipped'),
                   onTap: () async {
                     Navigator.pop(ctx);
                     try {
-                      await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.skipped);
+                      await context.read<MedicationProvider>().markIntake(
+                        intake: intake,
+                        status: IntakeStatus.skipped,
+                      );
                       _loadIntakeHistory();
                     } catch (e) {
                       if (context.mounted) {
@@ -559,7 +614,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                   onTap: () async {
                     Navigator.pop(ctx);
                     try {
-                      await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.missed);
+                      await context.read<MedicationProvider>().markIntake(
+                        intake: intake,
+                        status: IntakeStatus.missed,
+                      );
                       _loadIntakeHistory();
                     } catch (e) {
                       if (context.mounted) {
@@ -579,7 +637,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 onTap: () async {
                   Navigator.pop(ctx);
                   try {
-                    await context.read<MedicationProvider>().markIntake(intake: intake, status: IntakeStatus.pending);
+                    await context.read<MedicationProvider>().markIntake(
+                      intake: intake,
+                      status: IntakeStatus.pending,
+                    );
                     _loadIntakeHistory();
                   } catch (e) {
                     if (context.mounted) {
@@ -621,9 +682,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => AddMedicationPage(
-                      existingMedication: widget.medication,
-                    ),
+                    builder:
+                        (_) => AddMedicationPage(
+                          existingMedication: widget.medication,
+                        ),
                   ),
                 );
               },
@@ -638,7 +700,9 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
       padding: const EdgeInsets.all(16),
       children: [
         Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -662,9 +726,11 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
                 _buildScheduleDetailRow(
                   'Times',
                   schedule.timesPerDay
-                      .map((t) => DateFormat('h:mm a').format(
-                            DateTime(2022, 1, 1, t.hour, t.minute),
-                          ))
+                      .map(
+                        (t) => DateFormat(
+                          'h:mm a',
+                        ).format(DateTime(2022, 1, 1, t.hour, t.minute)),
+                      )
                       .join(', '),
                 ),
                 const SizedBox(height: 12),
@@ -697,7 +763,10 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          value,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
       ],
     );
   }
@@ -705,27 +774,33 @@ class _MedicationDetailPageState extends State<MedicationDetailPage>
   void _confirmDelete(MedicationProvider medProvider) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete ${widget.medication.name}?'),
-        content: const Text(
-          'This will permanently delete this medication, its schedules, and all recorded intakes.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text('Delete ${widget.medication.name}?'),
+            content: const Text(
+              'This will permanently delete this medication, its schedules, and all recorded intakes.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () async {
+                  Navigator.pop(ctx); // Close dialog
+                  Navigator.pop(context); // Close detail page
+                  await medProvider.deleteMedication(
+                    widget.medication.medicationId,
+                  );
+                },
+                child: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () async {
-              Navigator.pop(ctx); // Close dialog
-              Navigator.pop(context); // Close detail page
-              await medProvider.deleteMedication(widget.medication.medicationId);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -16,7 +16,10 @@ class SyncResult {
     this.errors = const [],
   });
 
-  factory SyncResult.success(int itemsSynced, [String message = 'Sync completed successfully']) {
+  factory SyncResult.success(
+    int itemsSynced, [
+    String message = 'Sync completed successfully',
+  ]) {
     return SyncResult(
       itemsSynced: itemsSynced,
       isSuccess: true,
@@ -36,17 +39,18 @@ class SyncResult {
 
 /// Service handling Google Calendar API v3 synchronization for Daily Planner tasks
 class GoogleCalendarSyncService {
-  static const String _calendarApiBase = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+  static const String _calendarApiBase =
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
   final http.Client _httpClient;
 
   GoogleCalendarSyncService({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? http.Client();
 
   /// Converts a Daily Planner [Task] to a Google Calendar Event JSON payload
   Map<String, dynamic> taskToCalendarEvent(Task task) {
     final taskDate = task.date ?? task.createdAt;
-    
+
     // Determine start & end times
     DateTime startTime = taskDate;
     DateTime endTime = taskDate.add(const Duration(minutes: 30));
@@ -58,7 +62,13 @@ class GoogleCalendarSyncService {
     } else if (task.notificationRecurrenceTime != null) {
       final hour = task.notificationRecurrenceTime!['hour'] ?? 9;
       final minute = task.notificationRecurrenceTime!['minute'] ?? 0;
-      startTime = DateTime(taskDate.year, taskDate.month, taskDate.day, hour, minute);
+      startTime = DateTime(
+        taskDate.year,
+        taskDate.month,
+        taskDate.day,
+        hour,
+        minute,
+      );
       endTime = startTime.add(const Duration(minutes: 30));
     }
 
@@ -69,10 +79,7 @@ class GoogleCalendarSyncService {
         'dateTime': startTime.toUtc().toIso8601String(),
         'timeZone': 'UTC',
       },
-      'end': {
-        'dateTime': endTime.toUtc().toIso8601String(),
-        'timeZone': 'UTC',
-      },
+      'end': {'dateTime': endTime.toUtc().toIso8601String(), 'timeZone': 'UTC'},
       'status': task.isCompleted ? 'confirmed' : 'confirmed',
       'extendedProperties': {
         'private': {
@@ -113,7 +120,9 @@ class GoogleCalendarSyncService {
 
     if (accessToken == null || accessToken.isEmpty) {
       // Local / Offline sync simulation or token not yet attached
-      debugPrint('Google Calendar Sync: Running in offline local cache mode (no access token)');
+      debugPrint(
+        'Google Calendar Sync: Running in offline local cache mode (no access token)',
+      );
       return SyncResult.success(
         tasks.length,
         'Exported ${tasks.length} tasks ready for Google Calendar sync',
@@ -138,7 +147,9 @@ class GoogleCalendarSyncService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           successCount++;
         } else {
-          errorList.add('Task "${task.title}": HTTP ${response.statusCode} - ${response.body}');
+          errorList.add(
+            'Task "${task.title}": HTTP ${response.statusCode} - ${response.body}',
+          );
         }
       } catch (e) {
         errorList.add('Task "${task.title}": $e');
@@ -153,7 +164,10 @@ class GoogleCalendarSyncService {
         errors: errorList,
       );
     } else {
-      return SyncResult.failure('Failed to sync tasks to Google Calendar', errorList);
+      return SyncResult.failure(
+        'Failed to sync tasks to Google Calendar',
+        errorList,
+      );
     }
   }
 
@@ -175,7 +189,9 @@ class GoogleCalendarSyncService {
         queryParams['timeMin'] = since.toUtc().toIso8601String();
       }
 
-      final uri = Uri.parse(_calendarApiBase).replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        _calendarApiBase,
+      ).replace(queryParameters: queryParams);
       final response = await _httpClient.get(
         uri,
         headers: {

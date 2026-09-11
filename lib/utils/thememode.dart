@@ -39,9 +39,10 @@ class ThemePreferences {
 
   static void setThemeMode(ThemeMode mode) {
     themeNotifier.value = mode;
-    final modeStr = mode == ThemeMode.system
-        ? 'system'
-        : (mode == ThemeMode.dark ? 'dark' : 'light');
+    final modeStr =
+        mode == ThemeMode.system
+            ? 'system'
+            : (mode == ThemeMode.dark ? 'dark' : 'light');
     saveTheme(modeStr);
   }
 

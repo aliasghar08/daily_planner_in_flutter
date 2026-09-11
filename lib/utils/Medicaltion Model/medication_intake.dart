@@ -19,14 +19,21 @@ class MedicationIntake {
   /// Returns the circadian "logical date" for a given DateTime.
   /// Any time between 00:00 and 03:59 AM is treated as part of the previous day's night/bedtime cycle.
   /// From 04:00 AM onwards, it is treated as the current calendar day.
-  static DateTime getLogicalDate(DateTime dt, {int cutoffHour = defaultCircadianCutoffHour}) {
-    // If dt has no time component (it's exactly midnight down to microseconds), 
-    // it usually represents a purely logical calendar date selected from UI, 
+  static DateTime getLogicalDate(
+    DateTime dt, {
+    int cutoffHour = defaultCircadianCutoffHour,
+  }) {
+    // If dt has no time component (it's exactly midnight down to microseconds),
+    // it usually represents a purely logical calendar date selected from UI,
     // rather than an actual wall-clock time that happened to be precisely midnight.
-    if (dt.hour == 0 && dt.minute == 0 && dt.second == 0 && dt.millisecond == 0 && dt.microsecond == 0) {
+    if (dt.hour == 0 &&
+        dt.minute == 0 &&
+        dt.second == 0 &&
+        dt.millisecond == 0 &&
+        dt.microsecond == 0) {
       return DateTime(dt.year, dt.month, dt.day);
     }
-    
+
     if (dt.hour < cutoffHour) {
       final prev = dt.subtract(const Duration(days: 1));
       return DateTime(prev.year, prev.month, prev.day);
@@ -46,7 +53,8 @@ class MedicationIntake {
     this.status = IntakeStatus.pending,
     this.notes,
     this.dosageTaken,
-  }) : intakeId = intakeId ?? generateIntakeId(schedule.scheduleId, scheduledTime);
+  }) : intakeId =
+           intakeId ?? generateIntakeId(schedule.scheduleId, scheduledTime);
 
   MedicationIntake copyWith({
     String? intakeId,
@@ -108,9 +116,16 @@ class MedicationIntake {
   DateTime get logicalDate => getLogicalDate(scheduledTime);
 
   /// Whether this intake belongs to the given logical date
-  bool isForLogicalDate(DateTime targetLogicalDate, {int cutoffHour = defaultCircadianCutoffHour}) {
+  bool isForLogicalDate(
+    DateTime targetLogicalDate, {
+    int cutoffHour = defaultCircadianCutoffHour,
+  }) {
     final myLogical = getLogicalDate(scheduledTime, cutoffHour: cutoffHour);
-    final target = DateTime(targetLogicalDate.year, targetLogicalDate.month, targetLogicalDate.day);
+    final target = DateTime(
+      targetLogicalDate.year,
+      targetLogicalDate.month,
+      targetLogicalDate.day,
+    );
     return myLogical.year == target.year &&
         myLogical.month == target.month &&
         myLogical.day == target.day;
@@ -144,7 +159,9 @@ class MedicationIntake {
         final h = now.hour;
         if (h >= 20 || h < 4) return true;
         // Or if within 2 hours of scheduled time
-        return now.isAfter(scheduledTime.subtract(const Duration(minutes: 30))) &&
+        return now.isAfter(
+              scheduledTime.subtract(const Duration(minutes: 30)),
+            ) &&
             now.isBefore(scheduledTime.add(const Duration(hours: 4)));
       }
       return false;
@@ -188,7 +205,8 @@ class MedicationIntake {
       'dosage': schedule.medication.dosage,
       'unit': schedule.medication.unit.name,
       'scheduledTime': Timestamp.fromDate(scheduledTime.toUtc()),
-      'actualTime': actualTime != null ? Timestamp.fromDate(actualTime!.toUtc()) : null,
+      'actualTime':
+          actualTime != null ? Timestamp.fromDate(actualTime!.toUtc()) : null,
       'intakeDate': Timestamp.fromDate(logicalDate.toUtc()),
       'status': status.name,
       'notes': notes,
@@ -203,15 +221,20 @@ class MedicationIntake {
     MedicationSchedule? fallbackSchedule,
   ]) {
     DateTime parseDate(dynamic value, [DateTime? defaultVal]) {
-      if (value is int) return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+      if (value is int)
+        return DateTime.fromMillisecondsSinceEpoch(value).toLocal();
       if (value is Timestamp) return value.toDate().toLocal();
-      if (value is String) return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now())).toLocal();
+      if (value is String)
+        return (DateTime.tryParse(value) ?? (defaultVal ?? DateTime.now()))
+            .toLocal();
       return (defaultVal ?? DateTime.now()).toLocal();
     }
 
     MedicationSchedule sched;
     if (map['schedule'] is Map<String, dynamic>) {
-      sched = MedicationSchedule.fromMap(map['schedule'] as Map<String, dynamic>);
+      sched = MedicationSchedule.fromMap(
+        map['schedule'] as Map<String, dynamic>,
+      );
     } else if (fallbackSchedule != null) {
       sched = fallbackSchedule;
     } else {
@@ -220,14 +243,17 @@ class MedicationIntake {
       final String medName = map['medicationName'] ?? 'Unknown Medication';
       final double dosage = (map['dosage'] as num?)?.toDouble() ?? 0.0;
       final String unitStr = map['unit'] ?? 'tablet';
-      
+
       final med = Medication(
         medicationId: medId,
         name: medName,
         dosage: dosage,
-        unit: DosageUnit.values.firstWhere((e) => e.name == unitStr, orElse: () => DosageUnit.tablet),
+        unit: DosageUnit.values.firstWhere(
+          (e) => e.name == unitStr,
+          orElse: () => DosageUnit.tablet,
+        ),
       );
-      
+
       sched = MedicationSchedule(
         scheduleId: map['scheduleId'] ?? 'unknown_sched',
         medication: med,
@@ -238,10 +264,14 @@ class MedicationIntake {
     }
 
     return MedicationIntake(
-      intakeId: docId ?? map['intakeId'] ?? 'intake_${DateTime.now().millisecondsSinceEpoch}',
+      intakeId:
+          docId ??
+          map['intakeId'] ??
+          'intake_${DateTime.now().millisecondsSinceEpoch}',
       schedule: sched,
       scheduledTime: parseDate(map['scheduledTime']),
-      actualTime: map['actualTime'] != null ? parseDate(map['actualTime']) : null,
+      actualTime:
+          map['actualTime'] != null ? parseDate(map['actualTime']) : null,
       status: IntakeStatus.values.firstWhere(
         (e) => e.name == map['status'],
         orElse: () => IntakeStatus.pending,

@@ -31,12 +31,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
       // Step 1: Use cached currentUser first (works offline & across restarts)
       _user = FirebaseAuth.instance.currentUser;
-      debugPrint('🔐 Cached user session: ${_user?.email ?? 'No active session'}');
+      debugPrint(
+        '🔐 Cached user session: ${_user?.email ?? 'No active session'}',
+      );
 
       // Step 2: Listen for auth state changes in background
       FirebaseAuth.instance.authStateChanges().listen((User? newUser) {
         if (mounted) {
-          debugPrint('🔄 Auth state changed: ${newUser?.email ?? 'Signed out'}');
+          debugPrint(
+            '🔄 Auth state changed: ${newUser?.email ?? 'Signed out'}',
+          );
           setState(() {
             _user = newUser;
             _isLoading = false;
@@ -64,11 +68,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   Future<void> _syncUserDocument(User user) async {
     try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
       final doc = await docRef.get();
       if (!doc.exists) {
         await docRef.set({
-          'fullName': user.displayName ?? (user.email?.split('@').first ?? 'User'),
+          'fullName':
+              user.displayName ?? (user.email?.split('@').first ?? 'User'),
           'email': user.email ?? '',
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
@@ -89,10 +96,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text(
-                'Checking session...',
-                style: TextStyle(fontSize: 16),
-              ),
+              Text('Checking session...', style: TextStyle(fontSize: 16)),
             ],
           ),
         ),
@@ -108,27 +112,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red.shade400,
-                ),
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 16),
                 const Text(
                   'Authentication Error',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(

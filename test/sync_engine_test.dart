@@ -18,14 +18,14 @@ void main() {
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('daily_planner/native_preferences'),
-      (MethodCall methodCall) async {
-        if (methodCall.method == 'getAll') {
-          return <String, dynamic>{};
-        }
-        return true;
-      },
-    );
+          const MethodChannel('daily_planner/native_preferences'),
+          (MethodCall methodCall) async {
+            if (methodCall.method == 'getAll') {
+              return <String, dynamic>{};
+            }
+            return true;
+          },
+        );
   });
 
   group('Google Calendar Sync Engine Tests', () {
@@ -52,8 +52,14 @@ void main() {
       expect(event['description'], contains('[Synced from Daily Planner]'));
       expect(event['start']['dateTime'], isNotNull);
       expect(event['end']['dateTime'], isNotNull);
-      expect(event['extendedProperties']['private']['dailyPlannerTaskId'], equals('task_123'));
-      expect(event['extendedProperties']['private']['dailyPlannerTaskType'], equals('oneTime'));
+      expect(
+        event['extendedProperties']['private']['dailyPlannerTaskId'],
+        equals('task_123'),
+      );
+      expect(
+        event['extendedProperties']['private']['dailyPlannerTaskType'],
+        equals('oneTime'),
+      );
       expect(event.containsKey('recurrence'), isFalse);
     });
 
@@ -145,7 +151,8 @@ void main() {
       final googleTaskJson = {
         'id': 'remote_task_99',
         'title': 'Submit Tax Return',
-        'notes': 'Online submission\n\n[Synced from Daily Planner | ID: local_12]',
+        'notes':
+            'Online submission\n\n[Synced from Daily Planner | ID: local_12]',
         'status': 'completed',
         'due': '2026-08-15T00:00:00.000Z',
         'completed': '2026-08-15T10:00:00.000Z',
@@ -168,46 +175,58 @@ void main() {
       healthService = HealthSyncService();
     });
 
-    test('Maps MedicationIntake to Health Platform record payload correctly', () {
-      final med = Medication(
-        medicationId: 'med_ser',
-        name: 'Sertraline',
-        dosage: 50.0,
-        unit: DosageUnit.mg,
-      );
+    test(
+      'Maps MedicationIntake to Health Platform record payload correctly',
+      () {
+        final med = Medication(
+          medicationId: 'med_ser',
+          name: 'Sertraline',
+          dosage: 50.0,
+          unit: DosageUnit.mg,
+        );
 
-      final schedule = MedicationSchedule(
-        scheduleId: 'sched_ser',
-        medication: med,
-        startDate: DateTime(2026, 8, 1),
-        frequency: MedicationFrequency.daily,
-        timesPerDay: [const TimeOfDay(hour: 8, minute: 0)],
-        instructions: 'Take with water after breakfast',
-      );
+        final schedule = MedicationSchedule(
+          scheduleId: 'sched_ser',
+          medication: med,
+          startDate: DateTime(2026, 8, 1),
+          frequency: MedicationFrequency.daily,
+          timesPerDay: [const TimeOfDay(hour: 8, minute: 0)],
+          instructions: 'Take with water after breakfast',
+        );
 
-      final scheduledTime = DateTime(2026, 8, 8, 8, 0);
-      final actualTime = DateTime(2026, 8, 8, 8, 15);
+        final scheduledTime = DateTime(2026, 8, 8, 8, 0);
+        final actualTime = DateTime(2026, 8, 8, 8, 15);
 
-      final intake = MedicationIntake(
-        intakeId: 'intake_101',
-        schedule: schedule,
-        scheduledTime: scheduledTime,
-        status: IntakeStatus.taken,
-        actualTime: actualTime,
-        dosageTaken: 50.0,
-      );
+        final intake = MedicationIntake(
+          intakeId: 'intake_101',
+          schedule: schedule,
+          scheduledTime: scheduledTime,
+          status: IntakeStatus.taken,
+          actualTime: actualTime,
+          dosageTaken: 50.0,
+        );
 
-      final record = healthService.intakeToHealthRecord(intake);
+        final record = healthService.intakeToHealthRecord(intake);
 
-      expect(record['recordId'], equals('health_intake_101'));
-      expect(record['medicationName'], equals('Sertraline'));
-      expect(record['dosage'], equals(50.0));
-      expect(record['dosageUnit'], equals('mg'));
-      expect(record['status'], equals('taken'));
-      expect(record['actualTime'], equals(actualTime.toUtc().toIso8601String()));
-      expect(record['logicalDate'], equals(intake.logicalDate.toIso8601String()));
-      expect(record['metadata']['instructions'], equals('Take with water after breakfast'));
-    });
+        expect(record['recordId'], equals('health_intake_101'));
+        expect(record['medicationName'], equals('Sertraline'));
+        expect(record['dosage'], equals(50.0));
+        expect(record['dosageUnit'], equals('mg'));
+        expect(record['status'], equals('taken'));
+        expect(
+          record['actualTime'],
+          equals(actualTime.toUtc().toIso8601String()),
+        );
+        expect(
+          record['logicalDate'],
+          equals(intake.logicalDate.toIso8601String()),
+        );
+        expect(
+          record['metadata']['instructions'],
+          equals('Take with water after breakfast'),
+        );
+      },
+    );
   });
 
   group('Sync Models & Configuration Tests', () {

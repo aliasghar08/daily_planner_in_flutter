@@ -82,10 +82,6 @@ class AdvancedPerformancePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: DailyTasksStats(),
-      ),
-    );
+    return const MaterialApp(home: Scaffold(body: DailyTasksStats()));
   }
 }

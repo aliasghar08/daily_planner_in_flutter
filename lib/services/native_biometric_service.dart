@@ -3,16 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 /// Enum representing biometric types available on the device
-enum BiometricType {
-  face,
-  fingerprint,
-  iris,
-  deviceCredential,
-}
+enum BiometricType { face, fingerprint, iris, deviceCredential }
 
 /// Custom native biometric service replacing third-party `local_auth` package
 class NativeBiometricService {
-  static const MethodChannel _channel = MethodChannel('daily_planner/native_biometric');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_biometric',
+  );
 
   /// Check if the device hardware supports biometrics or screen lock
   static Future<bool> isDeviceSupported() async {
@@ -20,7 +17,9 @@ class NativeBiometricService {
       return false;
     }
     try {
-      final bool? result = await _channel.invokeMethod<bool>('isBiometricSupported');
+      final bool? result = await _channel.invokeMethod<bool>(
+        'isBiometricSupported',
+      );
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint('Error checking biometric support: ${e.message}');
@@ -37,7 +36,9 @@ class NativeBiometricService {
       return false;
     }
     try {
-      final bool? result = await _channel.invokeMethod<bool>('canCheckBiometrics');
+      final bool? result = await _channel.invokeMethod<bool>(
+        'canCheckBiometrics',
+      );
       return result ?? false;
     } on PlatformException catch (e) {
       debugPrint('Error in canCheckBiometrics: ${e.message}');
@@ -54,7 +55,9 @@ class NativeBiometricService {
       return [];
     }
     try {
-      final List<dynamic>? rawList = await _channel.invokeMethod<List<dynamic>>('getAvailableBiometrics');
+      final List<dynamic>? rawList = await _channel.invokeMethod<List<dynamic>>(
+        'getAvailableBiometrics',
+      );
       if (rawList == null) return [];
 
       final biometrics = <BiometricType>[];
@@ -95,15 +98,18 @@ class NativeBiometricService {
       return false;
     }
     try {
-      final bool? result = await _channel.invokeMethod<bool>('authenticateBiometric', {
-        'title': title,
-        'subtitle': subtitle,
-        'description': description,
-        'negativeButtonText': negativeButtonText,
-      });
+      final bool? result = await _channel
+          .invokeMethod<bool>('authenticateBiometric', {
+            'title': title,
+            'subtitle': subtitle,
+            'description': description,
+            'negativeButtonText': negativeButtonText,
+          });
       return result ?? false;
     } on PlatformException catch (e) {
-      debugPrint('PlatformException during authentication: ${e.code} - ${e.message}');
+      debugPrint(
+        'PlatformException during authentication: ${e.code} - ${e.message}',
+      );
       return false;
     } catch (e) {
       debugPrint('Unexpected error during authentication: $e');

@@ -29,9 +29,10 @@ class ThemeProvider with ChangeNotifier {
     notifyListeners();
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final String value = mode == ThemeMode.system
-        ? 'system'
-        : (mode == ThemeMode.dark ? 'dark' : 'light');
+    final String value =
+        mode == ThemeMode.system
+            ? 'system'
+            : (mode == ThemeMode.dark ? 'dark' : 'light');
     await prefs.setString(_themeKey, value);
   }
 
@@ -56,7 +57,8 @@ class ThemeProvider with ChangeNotifier {
           break;
       }
     } else {
-      final bool? legacyBool = prefs.getBool('isDarkMode') ?? prefs.getBool(_themeKey);
+      final bool? legacyBool =
+          prefs.getBool('isDarkMode') ?? prefs.getBool(_themeKey);
       if (legacyBool != null) {
         _themeMode = legacyBool ? ThemeMode.dark : ThemeMode.light;
       } else {

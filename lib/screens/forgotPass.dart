@@ -19,21 +19,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() => isLoading = true);
 
     try {
-      await FirebaseAuth.instance
-          .sendPasswordResetEmail(email: _emailController.text.trim());
+      await FirebaseAuth.instance.sendPasswordResetEmail(
+        email: _emailController.text.trim(),
+      );
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Reset link sent to your email")),
       );
 
-      Navigator.pop(context); 
+      Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: ${e.message}")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.message}")));
     } finally {
       setState(() => isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
   }
 
   @override
@@ -54,17 +61,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   labelText: "Email",
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) =>
-                    value == null || !value.contains("@")
-                        ? "Enter a valid email"
-                        : null,
+                validator:
+                    (value) =>
+                        value == null || !value.contains("@")
+                            ? "Enter a valid email"
+                            : null,
               ),
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: isLoading ? null : _resetPassword,
-                child: isLoading
-                    ? const CircularProgressIndicator()
-                    : const Text("Send Reset Link"),
+                child:
+                    isLoading
+                        ? const CircularProgressIndicator()
+                        : const Text("Send Reset Link"),
               ),
             ],
           ),

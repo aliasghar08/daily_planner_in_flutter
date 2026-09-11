@@ -54,9 +54,10 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
         ),
         boxShadow: [
           BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : const Color(0xFF0F172A).withValues(alpha: 0.04),
+            color:
+                isDark
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : const Color(0xFF0F172A).withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -121,7 +122,10 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
             const SizedBox(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF2563EB)),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF2563EB),
+              ),
             )
           else
             Icon(icon, size: 13, color: fg),
@@ -150,10 +154,7 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
     final allIntakes = medProvider.todayIntakes;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sync & Integrations'),
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('Sync & Integrations'), elevation: 0),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         children: [
@@ -186,7 +187,11 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.sync, color: Colors.white, size: 24),
+                      child: const Icon(
+                        Icons.sync,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     const Expanded(
@@ -218,11 +223,7 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '${[
-                        if (syncProvider.isCalendarEnabled) 'Calendar',
-                        if (syncProvider.isTasksEnabled) 'Tasks',
-                        if (syncProvider.isHealthEnabled) 'Health',
-                      ].length} of 3 active',
+                      '${[if (syncProvider.isCalendarEnabled) 'Calendar', if (syncProvider.isTasksEnabled) 'Tasks', if (syncProvider.isHealthEnabled) 'Health'].length} of 3 active',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
@@ -236,36 +237,45 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                       ),
-                      onPressed: syncProvider.isSyncingAll
-                          ? null
-                          : () async {
-                              await syncProvider.syncAll(
-                                tasks: allTasks,
-                                intakes: allIntakes,
-                              );
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Sync completed successfully'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                      onPressed:
+                          syncProvider.isSyncingAll
+                              ? null
+                              : () async {
+                                await syncProvider.syncAll(
+                                  tasks: allTasks,
+                                  intakes: allIntakes,
                                 );
-                              }
-                            },
-                      icon: syncProvider.isSyncingAll
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFF2563EB),
-                              ),
-                            )
-                          : const Icon(Icons.refresh, size: 18),
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Sync completed successfully',
+                                      ),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                      icon:
+                          syncProvider.isSyncingAll
+                              ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              )
+                              : const Icon(Icons.refresh, size: 18),
                       label: Text(
-                        syncProvider.isSyncingAll ? 'Syncing...' : 'Sync All Now',
+                        syncProvider.isSyncingAll
+                            ? 'Syncing...'
+                            : 'Sync All Now',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -289,7 +299,11 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       color: const Color(0xFF4285F4).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.calendar_month_outlined, color: Color(0xFF4285F4), size: 24),
+                    child: const Icon(
+                      Icons.calendar_month_outlined,
+                      color: Color(0xFF4285F4),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -298,11 +312,15 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       children: [
                         const Text(
                           'Google Calendar',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          syncProvider.googleEmail ?? 'Sync tasks and schedules with Google Calendar',
+                          syncProvider.googleEmail ??
+                              'Sync tasks and schedules with Google Calendar',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white60 : Colors.black54,
@@ -341,16 +359,22 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: syncProvider.calendarStatus == SyncStatus.syncing
-                        ? null
-                        : () async {
-                            final res = await syncProvider.syncCalendar(allTasks);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res.message), behavior: SnackBarBehavior.floating),
+                    onPressed:
+                        syncProvider.calendarStatus == SyncStatus.syncing
+                            ? null
+                            : () async {
+                              final res = await syncProvider.syncCalendar(
+                                allTasks,
                               );
-                            }
-                          },
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res.message),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
                     icon: const Icon(Icons.sync, size: 16),
                     label: const Text('Sync Calendar'),
                   ),
@@ -373,7 +397,11 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       color: const Color(0xFF0F9D58).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.task_alt, color: Color(0xFF0F9D58), size: 24),
+                    child: const Icon(
+                      Icons.task_alt,
+                      color: Color(0xFF0F9D58),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -382,11 +410,15 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       children: [
                         const Text(
                           'Google Tasks',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          syncProvider.googleEmail ?? 'Two-way sync for todo items and completion status',
+                          syncProvider.googleEmail ??
+                              'Two-way sync for todo items and completion status',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white60 : Colors.black54,
@@ -425,16 +457,22 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: syncProvider.tasksStatus == SyncStatus.syncing
-                        ? null
-                        : () async {
-                            final res = await syncProvider.syncGoogleTasks(allTasks);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res.message), behavior: SnackBarBehavior.floating),
+                    onPressed:
+                        syncProvider.tasksStatus == SyncStatus.syncing
+                            ? null
+                            : () async {
+                              final res = await syncProvider.syncGoogleTasks(
+                                allTasks,
                               );
-                            }
-                          },
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res.message),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
                     icon: const Icon(Icons.sync, size: 16),
                     label: const Text('Sync Tasks'),
                   ),
@@ -444,7 +482,9 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
           ),
 
           // 4. Health Platform Card (Health Connect / Apple Health)
-          _buildSectionHeader('HEALTH PLATFORM (APPLE HEALTH / HEALTH CONNECT)'),
+          _buildSectionHeader(
+            'HEALTH PLATFORM (APPLE HEALTH / HEALTH CONNECT)',
+          ),
           _buildCard(
             isDark: isDark,
             children: [
@@ -457,7 +497,11 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       color: const Color(0xFFE11D48).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.favorite_rounded, color: Color(0xFFE11D48), size: 24),
+                    child: const Icon(
+                      Icons.favorite_rounded,
+                      color: Color(0xFFE11D48),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -466,7 +510,10 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                       children: [
                         const Text(
                           'Medication & Health Records',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -509,16 +556,22 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: syncProvider.healthStatus == SyncStatus.syncing
-                        ? null
-                        : () async {
-                            final res = await syncProvider.syncHealth(allIntakes);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res.message), behavior: SnackBarBehavior.floating),
+                    onPressed:
+                        syncProvider.healthStatus == SyncStatus.syncing
+                            ? null
+                            : () async {
+                              final res = await syncProvider.syncHealth(
+                                allIntakes,
                               );
-                            }
-                          },
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res.message),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
                     icon: const Icon(Icons.medical_services_outlined, size: 16),
                     label: const Text('Sync Health'),
                   ),
@@ -549,12 +602,18 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                     dense: true,
                     leading: Icon(
                       log.isSuccess ? Icons.check_circle : Icons.error,
-                      color: log.isSuccess ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                      color:
+                          log.isSuccess
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFEF4444),
                       size: 18,
                     ),
                     title: Text(
                       log.serviceType.displayName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                     ),
                     subtitle: Text(
                       '${log.message} • ${_formatTimestamp(log.timestamp)}',
@@ -563,23 +622,29 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                         color: isDark ? Colors.white60 : Colors.black54,
                       ),
                     ),
-                    trailing: log.itemsSynced > 0
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '+${log.itemsSynced}',
-                              style: const TextStyle(
-                                color: Color(0xFF2563EB),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
+                    trailing:
+                        log.itemsSynced > 0
+                            ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
                               ),
-                            ),
-                          )
-                        : null,
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF2563EB,
+                                ).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '+${log.itemsSynced}',
+                                style: const TextStyle(
+                                  color: Color(0xFF2563EB),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            )
+                            : null,
                   );
                 }),
               if (syncProvider.logs.isNotEmpty) ...[
@@ -587,8 +652,15 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                 Center(
                   child: TextButton.icon(
                     onPressed: () => syncProvider.clearLogs(),
-                    icon: const Icon(Icons.delete_outline, size: 16, color: Colors.grey),
-                    label: const Text('Clear Activity Logs', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Colors.grey,
+                    ),
+                    label: const Text(
+                      'Clear Activity Logs',
+                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
                   ),
                 ),
               ],

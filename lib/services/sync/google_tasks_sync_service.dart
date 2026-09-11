@@ -6,12 +6,13 @@ import 'package:http/http.dart' as http;
 
 /// Service handling Google Tasks API v1 synchronization for Daily Planner tasks
 class GoogleTasksSyncService {
-  static const String _tasksApiBase = 'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks';
+  static const String _tasksApiBase =
+      'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks';
 
   final http.Client _httpClient;
 
   GoogleTasksSyncService({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? http.Client();
 
   /// Converts a Daily Planner [Task] to a Google Tasks JSON payload
   Map<String, dynamic> taskToGoogleTask(Task task) {
@@ -19,7 +20,8 @@ class GoogleTasksSyncService {
 
     final payload = <String, dynamic>{
       'title': task.title,
-      'notes': '${task.detail}\n\n[Synced from Daily Planner | ID: ${task.docId ?? "local"}]',
+      'notes':
+          '${task.detail}\n\n[Synced from Daily Planner | ID: ${task.docId ?? "local"}]',
       'due': taskDate.toUtc().toIso8601String(),
       'status': task.isCompleted ? 'completed' : 'needsAction',
     };
@@ -35,7 +37,8 @@ class GoogleTasksSyncService {
   Task googleTaskToDailyPlannerTask(Map<String, dynamic> map) {
     final title = map['title'] as String? ?? 'Untitled Task';
     final notes = map['notes'] as String? ?? '';
-    final isCompleted = (map['status'] as String? ?? 'needsAction') == 'completed';
+    final isCompleted =
+        (map['status'] as String? ?? 'needsAction') == 'completed';
     final dueStr = map['due'] as String?;
     final completedStr = map['completed'] as String?;
 
@@ -50,7 +53,10 @@ class GoogleTasksSyncService {
     }
 
     // Clean notes by removing the sync footer if present
-    final cleanDetail = notes.replaceAll(RegExp(r'\n\n\[Synced from Daily Planner.*\]'), '').trim();
+    final cleanDetail =
+        notes
+            .replaceAll(RegExp(r'\n\n\[Synced from Daily Planner.*\]'), '')
+            .trim();
 
     return Task(
       docId: map['id'] as String?,
@@ -73,11 +79,14 @@ class GoogleTasksSyncService {
     }
 
     if (accessToken == null || accessToken.isEmpty) {
-      debugPrint('Google Tasks Sync: No access token — ${tasks.length} tasks queued for next online sync');
+      debugPrint(
+        'Google Tasks Sync: No access token — ${tasks.length} tasks queued for next online sync',
+      );
       return SyncResult(
         itemsSynced: 0,
         isSuccess: false,
-        message: 'Offline — ${tasks.length} task(s) will sync to Google Tasks when connected',
+        message:
+            'Offline — ${tasks.length} task(s) will sync to Google Tasks when connected',
         errors: [],
       );
     }
@@ -100,7 +109,9 @@ class GoogleTasksSyncService {
         if (response.statusCode == 200 || response.statusCode == 201) {
           successCount++;
         } else {
-          errorList.add('Task "${task.title}": HTTP ${response.statusCode} - ${response.body}');
+          errorList.add(
+            'Task "${task.title}": HTTP ${response.statusCode} - ${response.body}',
+          );
         }
       } catch (e) {
         errorList.add('Task "${task.title}": $e');
@@ -115,7 +126,10 @@ class GoogleTasksSyncService {
         errors: errorList,
       );
     } else {
-      return SyncResult.failure('Failed to sync tasks to Google Tasks', errorList);
+      return SyncResult.failure(
+        'Failed to sync tasks to Google Tasks',
+        errorList,
+      );
     }
   }
 
@@ -134,7 +148,9 @@ class GoogleTasksSyncService {
         'showHidden': 'true',
       };
 
-      final uri = Uri.parse(_tasksApiBase).replace(queryParameters: queryParams);
+      final uri = Uri.parse(
+        _tasksApiBase,
+      ).replace(queryParameters: queryParams);
       final response = await _httpClient.get(
         uri,
         headers: {
@@ -147,7 +163,10 @@ class GoogleTasksSyncService {
         final data = json.decode(response.body) as Map<String, dynamic>;
         final items = data['items'] as List<dynamic>? ?? [];
         return items
-            .map((item) => googleTaskToDailyPlannerTask(item as Map<String, dynamic>))
+            .map(
+              (item) =>
+                  googleTaskToDailyPlannerTask(item as Map<String, dynamic>),
+            )
             .toList();
       }
       return [];

@@ -2,17 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/services.dart';
 
-enum CustomConnectivityResult {
-  mobile,
-  wifi,
-  ethernet,
-  none,
-}
+enum CustomConnectivityResult { mobile, wifi, ethernet, none }
 
 /// Custom in-house connectivity service replacing package:connectivity_plus.
 class NativeConnectivityService {
-  static const MethodChannel _channel =
-      MethodChannel('daily_planner/native_connectivity');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_connectivity',
+  );
 
   static final StreamController<CustomConnectivityResult> _controller =
       StreamController<CustomConnectivityResult>.broadcast();
@@ -51,16 +47,18 @@ class NativeConnectivityService {
   static Future<CustomConnectivityResult> checkConnectivity() async {
     if (Platform.isAndroid || Platform.isIOS) {
       try {
-        final String? status =
-            await _channel.invokeMethod<String>('checkConnectivity');
+        final String? status = await _channel.invokeMethod<String>(
+          'checkConnectivity',
+        );
         return _parseStatus(status ?? 'none');
       } catch (_) {}
     }
 
     // Fallback: socket ping
     try {
-      final lookup = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
+      final lookup = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 3));
       if (lookup.isNotEmpty && lookup[0].rawAddress.isNotEmpty) {
         return CustomConnectivityResult.wifi;
       }

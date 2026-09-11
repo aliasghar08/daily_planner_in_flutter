@@ -49,7 +49,10 @@ void main() {
         medication: med,
         startDate: DateTime(2026, 1, 1),
         frequency: MedicationFrequency.daily,
-        timesPerDay: [const TimeOfDay(hour: 9, minute: 0), const TimeOfDay(hour: 21, minute: 0)],
+        timesPerDay: [
+          const TimeOfDay(hour: 9, minute: 0),
+          const TimeOfDay(hour: 21, minute: 0),
+        ],
         reminderMinutesBefore: 15,
         createdAt: DateTime(2026, 1, 1),
       );
@@ -90,7 +93,10 @@ void main() {
       );
 
       final scheduledTime = DateTime(2026, 8, 4, 8, 30);
-      final intakeId = MedicationIntake.generateIntakeId('sched_123', scheduledTime);
+      final intakeId = MedicationIntake.generateIntakeId(
+        'sched_123',
+        scheduledTime,
+      );
       expect(intakeId, 'intake_sched_123_2026_8_4_8_30');
 
       final intake = MedicationIntake(

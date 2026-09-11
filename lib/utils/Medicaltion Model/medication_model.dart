@@ -24,9 +24,9 @@ class Medication {
     this.icon = '💊',
     DateTime? createdAt,
     this.isActive = true,
-  })  : medicationId =
-            medicationId ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
-        createdAt = createdAt ?? DateTime.now();
+  }) : medicationId =
+           medicationId ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
+       createdAt = createdAt ?? DateTime.now();
 
   Medication copyWith({
     String? medicationId,
@@ -75,7 +75,10 @@ class Medication {
     }
 
     return Medication(
-      medicationId: docId ?? map['medicationId'] ?? 'med_${DateTime.now().millisecondsSinceEpoch}',
+      medicationId:
+          docId ??
+          map['medicationId'] ??
+          'med_${DateTime.now().millisecondsSinceEpoch}',
       name: map['name'] ?? '',
       dosage: (map['dosage'] as num?)?.toDouble() ?? 0.0,
       unit: DosageUnit.values.firstWhere(

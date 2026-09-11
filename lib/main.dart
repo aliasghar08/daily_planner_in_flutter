@@ -239,15 +239,24 @@ Future<void> _initializePlatformServices() async {
               final medicationId = payload['medicationId'];
               final context = navigatorKey.currentContext;
               if (context != null) {
-                final medProvider = Provider.of<MedicationProvider>(context, listen: false);
+                final medProvider = Provider.of<MedicationProvider>(
+                  context,
+                  listen: false,
+                );
                 try {
-                  final med = medProvider.medications.firstWhere((m) => m.medicationId == medicationId);
-                  Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => MedicationDetailPage(medication: med),
-                  ));
+                  final med = medProvider.medications.firstWhere(
+                    (m) => m.medicationId == medicationId,
+                  );
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => MedicationDetailPage(medication: med),
+                    ),
+                  );
                   return; // Don't navigate to home
                 } catch (e) {
-                  debugPrint('Medication not found for tap action: $medicationId');
+                  debugPrint(
+                    'Medication not found for tap action: $medicationId',
+                  );
                 }
               }
             }
@@ -264,8 +273,6 @@ Future<void> _initializePlatformServices() async {
     debugPrint('❌ Error initializing platform services: $e');
   }
 }
-
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -324,10 +331,7 @@ class AuthWrapper extends StatelessWidget {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text(
-                'Checking session...',
-                style: TextStyle(fontSize: 16),
-              ),
+              Text('Checking session...', style: TextStyle(fontSize: 16)),
             ],
           ),
         ),
@@ -343,27 +347,17 @@ class AuthWrapper extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red.shade400,
-                ),
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 16),
                 const Text(
                   'Authentication Error',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   authProvider.error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(

@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:intl/intl.dart';
 
-
-
 class EditTaskPage extends StatefulWidget {
   final Task task;
   const EditTaskPage({super.key, required this.task});
@@ -443,7 +441,9 @@ class _EditTaskPageState extends State<EditTaskPage> {
 
     // Cancel all existing notifications for this task
     await NativeAlarmHelper.cancelAlarmsForTask(taskId);
-    await NativeAlarmHelper.cancelAlarmById(widget.task.docId.hashCode & 0x7FFFFFFF);
+    await NativeAlarmHelper.cancelAlarmById(
+      widget.task.docId.hashCode & 0x7FFFFFFF,
+    );
 
     // Schedule new notifications based on type
     if (_notificationRecurrenceNotifier.value != NotificationRecurrence.none) {

@@ -1,10 +1,6 @@
 import 'dart:convert';
 
-enum SyncServiceType {
-  googleCalendar,
-  googleTasks,
-  healthPlatform,
-}
+enum SyncServiceType { googleCalendar, googleTasks, healthPlatform }
 
 extension SyncServiceTypeExtension on SyncServiceType {
   String get displayName {
@@ -30,13 +26,7 @@ extension SyncServiceTypeExtension on SyncServiceType {
   }
 }
 
-enum SyncStatus {
-  idle,
-  syncing,
-  success,
-  error,
-  disconnected,
-}
+enum SyncStatus { idle, syncing, success, error, disconnected }
 
 class SyncLogEntry {
   final String id;
@@ -68,11 +58,14 @@ class SyncLogEntry {
 
   factory SyncLogEntry.fromMap(Map<String, dynamic> map) {
     return SyncLogEntry(
-      id: map['id'] as String? ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      id:
+          map['id'] as String? ??
+          DateTime.now().millisecondsSinceEpoch.toString(),
       serviceType: SyncServiceType.values[map['serviceType'] as int? ?? 0],
-      timestamp: map['timestamp'] != null
-          ? DateTime.tryParse(map['timestamp'] as String) ?? DateTime.now()
-          : DateTime.now(),
+      timestamp:
+          map['timestamp'] != null
+              ? DateTime.tryParse(map['timestamp'] as String) ?? DateTime.now()
+              : DateTime.now(),
       isSuccess: map['isSuccess'] as bool? ?? false,
       message: map['message'] as String? ?? '',
       itemsSynced: map['itemsSynced'] as int? ?? 0,
@@ -123,7 +116,8 @@ class SyncConfig {
     bool? healthPermissionGranted,
   }) {
     return SyncConfig(
-      googleCalendarEnabled: googleCalendarEnabled ?? this.googleCalendarEnabled,
+      googleCalendarEnabled:
+          googleCalendarEnabled ?? this.googleCalendarEnabled,
       googleTasksEnabled: googleTasksEnabled ?? this.googleTasksEnabled,
       healthSyncEnabled: healthSyncEnabled ?? this.healthSyncEnabled,
       googleAccountEmail: googleAccountEmail ?? this.googleAccountEmail,
@@ -159,15 +153,18 @@ class SyncConfig {
       googleTasksEnabled: map['googleTasksEnabled'] as bool? ?? false,
       healthSyncEnabled: map['healthSyncEnabled'] as bool? ?? false,
       googleAccountEmail: map['googleAccountEmail'] as String?,
-      lastCalendarSync: map['lastCalendarSync'] != null
-          ? DateTime.tryParse(map['lastCalendarSync'] as String)
-          : null,
-      lastTasksSync: map['lastTasksSync'] != null
-          ? DateTime.tryParse(map['lastTasksSync'] as String)
-          : null,
-      lastHealthSync: map['lastHealthSync'] != null
-          ? DateTime.tryParse(map['lastHealthSync'] as String)
-          : null,
+      lastCalendarSync:
+          map['lastCalendarSync'] != null
+              ? DateTime.tryParse(map['lastCalendarSync'] as String)
+              : null,
+      lastTasksSync:
+          map['lastTasksSync'] != null
+              ? DateTime.tryParse(map['lastTasksSync'] as String)
+              : null,
+      lastHealthSync:
+          map['lastHealthSync'] != null
+              ? DateTime.tryParse(map['lastHealthSync'] as String)
+              : null,
       autoSyncIntervalMinutes: map['autoSyncIntervalMinutes'] as int? ?? 30,
       syncCompletedTasks: map['syncCompletedTasks'] as bool? ?? true,
       healthPermissionGranted: map['healthPermissionGranted'] as bool? ?? false,

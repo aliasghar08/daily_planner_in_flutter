@@ -5,9 +5,10 @@ void main() {
   print("CompletedAt UTC: $completedAt");
   print("Now UTC: $now");
 
-  final shouldReset = !(completedAt.year == now.year &&
-      completedAt.month == now.month &&
-      completedAt.day == now.day);
-      
+  final shouldReset =
+      !(completedAt.year == now.year &&
+          completedAt.month == now.month &&
+          completedAt.day == now.day);
+
   print("Should reset: $shouldReset");
 }

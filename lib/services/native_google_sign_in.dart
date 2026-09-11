@@ -57,8 +57,9 @@ class NativeGoogleSignInAccount {
 
 /// Custom in-house Google Sign-In Service replacing third-party package:google_sign_in.
 class NativeGoogleSignIn {
-  static const MethodChannel _channel =
-      MethodChannel('daily_planner/native_google_signin');
+  static const MethodChannel _channel = MethodChannel(
+    'daily_planner/native_google_signin',
+  );
 
   /// Start native Google Sign-In flow
   static Future<NativeGoogleSignInAccount?> signIn({
@@ -74,7 +75,9 @@ class NativeGoogleSignIn {
       }
       return null;
     } on PlatformException catch (e) {
-      debugPrint('Native Google Sign-In PlatformException: ${e.code} - ${e.message}');
+      debugPrint(
+        'Native Google Sign-In PlatformException: ${e.code} - ${e.message}',
+      );
       return null;
     } catch (e) {
       debugPrint('Native Google Sign-In error: $e');

@@ -43,7 +43,9 @@ class IntakeGeneratorService {
     }
     final durationUntilReset = nextReset.difference(now);
 
-    debugPrint('IntakeGeneratorService: Next circadian reset (4 AM) in $durationUntilReset');
+    debugPrint(
+      'IntakeGeneratorService: Next circadian reset (4 AM) in $durationUntilReset',
+    );
 
     _dailyTimer = Timer(durationUntilReset, () {
       debugPrint('IntakeGeneratorService: 4 AM Circadian reset triggered');

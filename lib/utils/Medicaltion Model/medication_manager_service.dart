@@ -33,9 +33,10 @@ class MedicationManager {
   List<MedicationIntake> get allIntakes => _intakes.values.toList();
 
   List<MedicationIntake> getIntakesForDate(DateTime date) {
-    final logicalDate = (date.hour == 0 && date.minute == 0 && date.second == 0)
-        ? DateTime(date.year, date.month, date.day)
-        : MedicationIntake.getLogicalDate(date);
+    final logicalDate =
+        (date.hour == 0 && date.minute == 0 && date.second == 0)
+            ? DateTime(date.year, date.month, date.day)
+            : MedicationIntake.getLogicalDate(date);
     ensureIntakesForDate(logicalDate);
     return _intakes.values.where((intake) {
       return intake.isForLogicalDate(logicalDate);
@@ -47,9 +48,10 @@ class MedicationManager {
   }
 
   void ensureIntakesForDate(DateTime date) {
-    final logicalDate = (date.hour == 0 && date.minute == 0 && date.second == 0)
-        ? DateTime(date.year, date.month, date.day)
-        : MedicationIntake.getLogicalDate(date);
+    final logicalDate =
+        (date.hour == 0 && date.minute == 0 && date.second == 0)
+            ? DateTime(date.year, date.month, date.day)
+            : MedicationIntake.getLogicalDate(date);
     for (final schedule in _schedules.values) {
       final generated = schedule.generateIntakesForDate(logicalDate);
       for (final intake in generated) {

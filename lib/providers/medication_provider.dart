@@ -292,10 +292,14 @@ class MedicationProvider extends ChangeNotifier {
           .collection('medications')
           .doc(medication.medicationId)
           .collection('intakes')
-          .where('scheduledTime',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(startOfLogicalWindow))
-          .where('scheduledTime',
-              isLessThan: Timestamp.fromDate(endOfLogicalWindow))
+          .where(
+            'scheduledTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfLogicalWindow),
+          )
+          .where(
+            'scheduledTime',
+            isLessThan: Timestamp.fromDate(endOfLogicalWindow),
+          )
           .snapshots()
           .listen((snapshot) {
             // Rebuild full recorded intakes map from the snapshot docs (not just docChanges)
@@ -314,9 +318,9 @@ class MedicationProvider extends ChangeNotifier {
                   sched = null;
                 }
                 final intake = MedicationIntake.fromMap(data, doc.id, sched);
-                
+
                 // Local filtering: only include intakes inside the current logical day window
-                if (intake.scheduledTime.isBefore(startOfLogicalWindow) || 
+                if (intake.scheduledTime.isBefore(startOfLogicalWindow) ||
                     !intake.scheduledTime.isBefore(endOfLogicalWindow)) {
                   continue;
                 }
@@ -362,7 +366,8 @@ class MedicationProvider extends ChangeNotifier {
     for (final candidate in generatedIntakes) {
       if (_rawRecordedIntakes.containsKey(candidate.intakeId)) {
         final recorded = _rawRecordedIntakes[candidate.intakeId]!;
-        if (recorded.status == IntakeStatus.pending && recorded.isOverdue(now)) {
+        if (recorded.status == IntakeStatus.pending &&
+            recorded.isOverdue(now)) {
           final missed = recorded.copyWith(status: IntakeStatus.missed);
           resolvedIntakes.add(missed);
           if (autoMarkMissed) {

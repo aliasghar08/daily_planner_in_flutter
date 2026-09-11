@@ -12,11 +12,13 @@ class AppLockWrapper extends StatefulWidget {
   State<AppLockWrapper> createState() => _AppLockWrapperState();
 }
 
-class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObserver {
+class _AppLockWrapperState extends State<AppLockWrapper>
+    with WidgetsBindingObserver {
   bool _isLocked = false;
   bool _isChecking = true;
   bool _isAuthenticating = false; // Guard against concurrent auth calls
-  bool _wasActuallyPaused = false; // Only lock/auth if app was truly backgrounded
+  bool _wasActuallyPaused =
+      false; // Only lock/auth if app was truly backgrounded
 
   @override
   void initState() {
@@ -35,9 +37,9 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
     // Check if biometric is enabled
     final isEnabled = await PasskeyAuthService().isPasskeyEnabled();
     if (!mounted) return;
-    
+
     final authProvider = context.read<app_auth.AuthProvider>();
-    
+
     // Wait for authProvider to finish initial loading
     while (authProvider.isLoading && mounted) {
       await Future.delayed(const Duration(milliseconds: 50));
@@ -78,7 +80,7 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
     if (!mounted) return false;
     final authProvider = context.read<app_auth.AuthProvider>();
     final isEnabled = await PasskeyAuthService().isPasskeyEnabled();
-    
+
     if (isEnabled && authProvider.isLoggedIn) {
       if (!_isLocked && mounted) {
         setState(() => _isLocked = true);
@@ -91,13 +93,13 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
   Future<void> _authenticate() async {
     // Prevent duplicate/concurrent authentication calls
     if (!_isLocked || _isAuthenticating) return;
-    
+
     _isAuthenticating = true;
     try {
       final success = await PasskeyAuthService().verifyWithPasskey(
         reason: 'Please authenticate to unlock the app',
       );
-      
+
       if (success && mounted) {
         setState(() => _isLocked = false);
       }
@@ -109,7 +111,7 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
   @override
   Widget build(BuildContext context) {
     // While checking initial state, we just show a blank screen or loading
-    // Since this wraps the whole app, returning child is fine, but we might want 
+    // Since this wraps the whole app, returning child is fine, but we might want
     // to hide it if we suspect it will lock. Let's return empty container to prevent flicker of sensitive data.
     if (_isChecking) {
       return Container(color: Theme.of(context).scaffoldBackgroundColor);
@@ -119,11 +121,7 @@ class _AppLockWrapperState extends State<AppLockWrapper> with WidgetsBindingObse
       children: [
         widget.child,
         if (_isLocked)
-          Positioned.fill(
-            child: AppLockScreen(
-              onUnlock: _authenticate,
-            ),
-          ),
+          Positioned.fill(child: AppLockScreen(onUnlock: _authenticate)),
       ],
     );
   }
