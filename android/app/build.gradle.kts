@@ -1,0 +1,81 @@
+import java.util.Properties
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
+    id("dev.flutter.flutter-gradle-plugin") // Flutter plugin
+}
+
+// --- Load Flutter properties from local.properties ---
+val localProps = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+val flutterVersionCode = (localProps.getProperty("flutter.versionCode") ?: "1").toInt()
+val flutterVersionName = localProps.getProperty("flutter.versionName") ?: "1.0.0"
+
+android {
+    namespace = "com.dartnexus.meddayflow"
+    compileSdk = 36
+    
+    // ✅ FIXED: Updated NDK version to match requirements
+    ndkVersion = "28.2.13676358"  // Changed from 27.0.12077973
+
+    defaultConfig {
+        applicationId = "com.dartnexus.meddayflow"
+        minSdk = 24         
+        targetSdk = 36  
+        versionCode = flutterVersionCode
+        versionName = flutterVersionName
+
+        manifestPlaceholders["googleRedirectScheme"] =
+            "com.googleusercontent.apps.777337977048-vf0nr3plk0e3k5h11u4r1gqsqrbm9o2u"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17  // ✅ Changed from 21 to 17 (more compatible)
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"  // ✅ Changed from 21 to 17
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("debug") // Replace with release key later
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+// Dependencies
+dependencies {
+    // Core library desugaring for modern Java APIs
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // Firebase Auth
+    implementation("com.google.firebase:firebase-auth-ktx:22.3.0")
+
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+
+    // WorkManager for background tasks
+    implementation("androidx.work:work-runtime-ktx:2.8.1")
+
+    // Biometric authentication (Fingerprint, Face, Passkey/Device Credential)
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+}
+
+// ✅ Important: DO NOT add any `flutter { source = ... }` block here
