@@ -1,4 +1,4 @@
-package com.example.daily_planner
+package com.dartnexuslab.meddayflow
 
 import android.app.AlarmManager
 import android.app.PendingIntent

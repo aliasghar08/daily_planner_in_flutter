@@ -1,4 +1,4 @@
-package com.example.daily_planner
+package com.dartnexuslab.meddayflow
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -11,7 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.dartnexus.meddayflow.R
+import com.dartnexuslab.meddayflow.R
 
 class AlarmForegroundService : Service() {
 

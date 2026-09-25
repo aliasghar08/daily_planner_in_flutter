@@ -22,14 +22,14 @@ val flutterVersionCode = (localProps.getProperty("flutter.versionCode") ?: "1").
 val flutterVersionName = localProps.getProperty("flutter.versionName") ?: "1.0.0"
 
 android {
-    namespace = "com.dartnexus.meddayflow"
+    namespace = "com.dartnexuslab.meddayflow"
     compileSdk = 36
     
     // ✅ FIXED: Updated NDK version to match requirements
     ndkVersion = "28.2.13676358"  // Changed from 27.0.12077973
 
     defaultConfig {
-        applicationId = "com.dartnexus.meddayflow"
+        applicationId = "com.dartnexuslab.meddayflow"
         minSdk = 24         
         targetSdk = 36  
         versionCode = flutterVersionCode

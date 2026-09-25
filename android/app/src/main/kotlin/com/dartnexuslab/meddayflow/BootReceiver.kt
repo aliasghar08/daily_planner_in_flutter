@@ -1,4 +1,4 @@
-package com.example.daily_planner
+package com.dartnexuslab.meddayflow
 
 import android.content.BroadcastReceiver
 import android.content.Context
