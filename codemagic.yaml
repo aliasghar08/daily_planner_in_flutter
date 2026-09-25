@@ -1,0 +1,53 @@
+workflows:
+  ios-app-store:
+    name: iOS App Store Release
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      flutter: default
+      xcode: latest
+      cocoapods: default
+      groups:
+        # You need to create this environment group in Codemagic UI and add the following variables:
+        # - APP_STORE_CONNECT_ISSUER_ID
+        # - APP_STORE_CONNECT_KEY_IDENTIFIER
+        # - APP_STORE_CONNECT_PRIVATE_KEY
+        - app_store_credentials
+    scripts:
+      - name: Set up keychain
+        script: |
+          keychain initialize
+      - name: Fetch signing files
+        script: |
+          app-store-connect fetch-signing-files "com.dartnexuslab.meddayflow" --type IOS_APP_STORE --create
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+      - name: Build IPA
+        script: |
+          flutter build ipa --release --export-method app-store
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        
+        # If using 'integration' auth (Apple Developer Portal linked directly to Codemagic):
+        # You don't necessarily need the environment variables below.
+        
+        # If using environment variables, uncomment these and comment out 'auth: integration':
+        # api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        # key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        # issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        
+        submit_to_testflight: true
