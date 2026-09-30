@@ -610,7 +610,7 @@ class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Daily Planner"),
+        title: const Text("Medday Flow"),
         actions: [
           IconButton(
             icon: const Icon(Icons.medication_outlined),

@@ -27,7 +27,7 @@
     <uses-permission android:name="com.miui.securitycenter.permission.AUTO_START" />
 
     <application
-        android:label="Daily Planner"
+        android:label="Medday Flow"
         android:icon="@mipmap/ic_launcher"
         android:name="${applicationName}">
 

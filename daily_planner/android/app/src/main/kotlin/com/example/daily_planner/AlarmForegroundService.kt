@@ -49,7 +49,7 @@ class AlarmForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Daily Planner Service",
+                "Medday Flow Service",
                 NotificationManager.IMPORTANCE_LOW  // LOW (not MIN) so XOS does not silently kill it
             ).apply {
                 description = "Keeps alarm service active"
@@ -60,7 +60,7 @@ class AlarmForegroundService : Service() {
         }
 
         val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Daily Planner")
+            .setContentTitle("Medday Flow")
             .setContentText("Alarm service active in background")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_LOW)  // LOW keeps it alive without being intrusive
