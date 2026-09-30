@@ -169,6 +169,135 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // ── Delete Account (required by App Store Guideline 5.1.1) ──────────────
+
+  Future<void> _deleteAccount(BuildContext context) async {
+    // ── Step 1: First confirmation ──────────────────────────────────────
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFEF4444)),
+            SizedBox(width: 8),
+            Text('Delete Account?'),
+          ],
+        ),
+        content: const Text(
+          'This will permanently delete:\n\n'
+          '• Your account and login credentials\n'
+          '• All tasks, medications, and reminders\n'
+          '• All app preferences and settings\n\n'
+          'This action CANNOT be undone.',
+          style: TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // ── Step 2: Type "DELETE" to confirm ────────────────────────────────
+    final controller = TextEditingController();
+    final typed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Type "DELETE" to confirm'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: const InputDecoration(
+            hintText: 'DELETE',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(
+                ctx,
+                controller.text.trim().toUpperCase() == 'DELETE',
+              );
+            },
+            child: const Text('Delete Forever'),
+          ),
+        ],
+      ),
+    );
+
+    if (typed != true || !context.mounted) return;
+
+    // ── Step 3: Perform the deletion ────────────────────────────────────
+    try {
+      // Show a blocking loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final authProvider = context.read<app_auth.AuthProvider>();
+      await authProvider.deleteAccount();
+
+      if (!context.mounted) return;
+
+      // Pop the loading dialog
+      Navigator.of(context).pop();
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Your account has been deleted.'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+
+      // Navigate to login screen
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+
+      // Pop the loading dialog
+      Navigator.of(context).pop();
+
+      // Show error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: const Color(0xFFEF4444),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
   // ── Build helpers ─────────────────────────────────────────────────────────
 
   Widget _buildSectionHeader(String title) {
@@ -204,8 +333,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
-      child: Column(
-        children: children,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: children,
+        ),
       ),
     );
   }
@@ -656,6 +789,35 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
+
+                // ── 7. Danger Zone ──────────────────────────────────────────
+                _buildSectionHeader('DANGER ZONE'),
+                _buildSettingsCard(
+                  isDark: isDark,
+                  children: [
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.delete_forever, color: Color(0xFFEF4444), size: 20),
+                      ),
+                      title: const Text(
+                        'Delete Account',
+                        style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFEF4444)),
+                      ),
+                      subtitle: const Text(
+                        'Permanently delete your account and all data',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right, size: 20, color: Color(0xFFEF4444)),
+                      onTap: () => _deleteAccount(context),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 32),
               ],
             ),

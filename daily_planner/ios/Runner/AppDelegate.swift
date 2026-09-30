@@ -10,7 +10,7 @@ import Network
   // 1. Create a shared Flutter Engine
   lazy var flutterEngine = FlutterEngine(name: "daily_planner_engine")
 
-  // ✅ Track whether we've already started the engine (isRunning not available in this Flutter version)
+  // ✅ Track whether we've already started the engine
   private var engineStarted = false
 
   private var alarmChannel: FlutterMethodChannel?
@@ -30,7 +30,6 @@ import Network
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
 
-    // ✅ FIX: Only start the engine if it isn't already started.
     if engineStarted {
       print("⚠️ AppDelegate: flutterEngine already started — skipping run()")
     } else {
@@ -581,6 +580,7 @@ import Network
 
     switch call.method {
     case "isBiometricSupported":
+      // ✅ True if either biometrics OR passcode is available (works on Face ID & Touch ID iPhones)
       let canBiometric = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
       let canPasscode = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
       result(canBiometric || canPasscode)
@@ -610,9 +610,73 @@ import Network
       let args = call.arguments as? [String: Any]
       let reason = args?["title"] as? String ?? "Verify your identity to proceed"
       context.localizedCancelTitle = args?["negativeButtonText"] as? String ?? "Cancel"
+      // ✅ Leave localizedFallbackTitle unset so iOS shows the standard localized "Enter Passcode" button
 
-      context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
-        DispatchQueue.main.async { result(success) }
+      // ✅ Use .deviceOwnerAuthentication:
+      //    - Tries Face ID on Face ID iPhones
+      //    - Tries Touch ID on Touch ID iPhones
+      //    - Falls back to device passcode automatically if biometrics fail or aren't enrolled
+      //    This is Apple's recommended policy and handles both device types with the same code.
+      guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+        DispatchQueue.main.async {
+          var code = "AUTH_UNAVAILABLE"
+          var message = error?.localizedDescription ?? "Authentication is not available on this device."
+
+          if let laError = error as? LAError {
+            switch laError.code {
+            case .passcodeNotSet:
+              code = "PASSCODE_NOT_SET"
+              message = "Please set a passcode in Settings to secure your device."
+            case .biometryNotEnrolled:
+              code = "BIOMETRY_NOT_ENROLLED"
+              message = "No biometrics enrolled. Falling back to passcode."
+            case .biometryNotAvailable:
+              code = "BIOMETRY_NOT_AVAILABLE"
+              message = "Biometrics are not available right now."
+            default:
+              break
+            }
+          }
+
+          result(FlutterError(code: code, message: message, details: nil))
+        }
+        return
+      }
+
+      // ✅ Perform authentication — iOS handles biometrics-first with passcode fallback automatically
+      context.evaluatePolicy(
+        .deviceOwnerAuthentication,
+        localizedReason: reason
+      ) { success, authError in
+        DispatchQueue.main.async {
+          if success {
+            result(true)
+          } else {
+            var code = "AUTH_FAILED"
+            var message = authError?.localizedDescription ?? "Authentication failed."
+
+            if let laError = authError as? LAError {
+              switch laError.code {
+              case .userCancel:
+                code = "USER_CANCELLED"
+                message = "Authentication was cancelled."
+              case .userFallback:
+                code = "USER_FALLBACK"
+                message = "User chose to enter passcode."
+              case .authenticationFailed:
+                code = "AUTH_FAILED"
+                message = "Could not verify your identity. Please try again."
+              case .biometryLockout:
+                code = "BIOMETRY_LOCKOUT"
+                message = "Biometrics locked. Please enter your passcode."
+              default:
+                break
+              }
+            }
+
+            result(FlutterError(code: code, message: message, details: nil))
+          }
+        }
       }
 
     default:
