@@ -34,11 +34,19 @@ class _LoginPageState extends State<LoginPage> {
     _checkPasskeyAvailability();
   }
 
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   // ✅ Check if Passkeys/Biometrics are supported and enabled
   Future<void> _checkPasskeyAvailability() async {
     try {
       final isSupported = await _passkeyAuthService.isDeviceSupported();
-      final hasCreds = (await _passkeyAuthService.getSavedPasskeyCredential()) != null;
+      final hasCreds =
+          (await _passkeyAuthService.getSavedPasskeyCredential()) != null;
       final isEnabled = await _passkeyAuthService.isPasskeyEnabled();
       if (mounted) {
         setState(() {
@@ -58,19 +66,22 @@ class _LoginPageState extends State<LoginPage> {
         reason: 'Verify with Passkey to sign in to Daily Planner',
       );
 
+      if (!mounted) return;
+
       if (!authenticated) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Passkey verification cancelled or not recognized.'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Passkey verification cancelled or not recognized.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
         return;
       }
 
       final savedCreds = await _passkeyAuthService.getSavedPasskeyCredential();
+
+      if (!mounted) return;
+
       if (savedCreds != null) {
         final email = savedCreds['email']!;
         final password = savedCreds['password']!;
@@ -78,46 +89,50 @@ class _LoginPageState extends State<LoginPage> {
         final userCredential = await FirebaseAuth.instance
             .signInWithEmailAndPassword(email: email, password: password);
 
+        if (!mounted) return;
+
         TextInput.finishAutofillContext(shouldSave: true);
 
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userCredential.user!.uid)
-            .get();
+        final userDoc =
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(userCredential.user!.uid)
+                .get();
+
+        if (!mounted) return;
 
         final String fullName = userDoc.data()?['fullName'] ?? 'User';
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Welcome back, $fullName! (Verified with Passkey)')),
-          );
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const MyHome()),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Welcome back, $fullName! (Verified with Passkey)'),
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MyHome()),
+        );
       } else if (FirebaseAuth.instance.currentUser != null) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const MyHome()),
-          );
-        }
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MyHome()),
+        );
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please sign in with email and password once to register your Passkey.'),
-              duration: Duration(seconds: 3),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please sign in with email and password once to register your Passkey.',
             ),
-          );
-        }
+            duration: Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Passkey login error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Passkey login error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isPasskeyLoading = false);
@@ -161,7 +176,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> loginUser() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Logging in...'),
@@ -174,10 +189,10 @@ class _LoginPageState extends State<LoginPage> {
       final password = _passwordController.text.trim();
 
       final userCredential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(
-            email: email,
-            password: password,
-          );
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      // ✅ CRITICAL: Check if widget is still mounted before using context
+      if (!mounted) return;
 
       // ✅ Trigger Google Password Manager and Apple Passwords save dialog
       TextInput.finishAutofillContext(shouldSave: true);
@@ -188,28 +203,34 @@ class _LoginPageState extends State<LoginPage> {
         password: password,
       );
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .get();
+      if (!mounted) return;
+
+      final userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .get();
+
+      if (!mounted) return;
 
       final String fullName = userDoc.data()?['fullName'] ?? 'User';
 
       // ✅ Save Remember Me preference after successful login
       await _saveRememberMePreference();
 
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Welcome, $fullName!')));
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MyHome()),
-        );
-      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MyHome()),
+      );
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       String message = 'Login failed.';
@@ -220,13 +241,15 @@ class _LoginPageState extends State<LoginPage> {
       } else if (e.code == 'invalid-email') {
         message = 'The email address is not valid.';
       } else if (e.code == 'invalid-credential') {
-        message = 'Invalid login credentials. Please check your email and password.';
+        message =
+            'Invalid login credentials. Please check your email and password.';
       }
 
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -255,11 +278,13 @@ class _LoginPageState extends State<LoginPage> {
 
       final uid = userCredential.user!.uid;
 
-      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
-          'fullName': googleAccount.displayName ?? userCredential.user?.displayName,
+          'fullName':
+              googleAccount.displayName ?? userCredential.user?.displayName,
           'email': googleAccount.email ?? userCredential.user?.email,
           'createdAt': Timestamp.now(),
         });
@@ -276,7 +301,9 @@ class _LoginPageState extends State<LoginPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Welcome, ${googleAccount.displayName ?? userCredential.user?.displayName ?? "User"}!'),
+          content: Text(
+            'Welcome, ${googleAccount.displayName ?? userCredential.user?.displayName ?? "User"}!',
+          ),
         ),
       );
 
@@ -316,7 +343,6 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 24),
-
                   TextFormField(
                     controller: _emailController,
                     decoration: InputDecoration(
@@ -332,13 +358,15 @@ class _LoginPageState extends State<LoginPage> {
                       AutofillHints.username,
                     ],
                     textInputAction: TextInputAction.next,
-                    validator: (value) =>
-                        value != null && value.contains('@') && value.endsWith('.com')
-                            ? null
-                            : 'Enter a valid email (e.g., example@domain.com)',
+                    validator:
+                        (value) =>
+                            value != null &&
+                                    value.contains('@') &&
+                                    value.endsWith('.com')
+                                ? null
+                                : 'Enter a valid email (e.g., example@domain.com)',
                   ),
                   const SizedBox(height: 16),
-
                   TextFormField(
                     controller: _passwordController,
                     obscureText: !_isPasswordVisible,
@@ -347,7 +375,9 @@ class _LoginPageState extends State<LoginPage> {
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                          _isPasswordVisible
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                         ),
                         onPressed: () {
                           setState(() {
@@ -365,12 +395,13 @@ class _LoginPageState extends State<LoginPage> {
                       FocusScope.of(context).unfocus();
                       await loginUser();
                     },
-                    validator: (value) =>
-                        value != null && value.length >= 6
-                            ? null
-                            : 'Password must be at least 6 characters long',
+                    validator:
+                        (value) =>
+                            value != null && value.length >= 6
+                                ? null
+                                : 'Password must be at least 6 characters long',
                   ),
-                  
+
                   // ✅ Remember Me Checkbox
                   Row(
                     children: [
@@ -383,17 +414,15 @@ class _LoginPageState extends State<LoginPage> {
                         },
                         activeColor: Colors.blueAccent,
                       ),
-                      const Text(
-                        'Remember Me',
-                        style: TextStyle(fontSize: 14),
-                      ),
+                      const Text('Remember Me', style: TextStyle(fontSize: 14)),
                       const Spacer(),
                       TextButton(
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const ForgotPasswordScreen(),
+                              builder:
+                                  (context) => const ForgotPasswordScreen(),
                             ),
                           );
                         },
@@ -419,7 +448,10 @@ class _LoginPageState extends State<LoginPage> {
                         FocusScope.of(context).unfocus();
                         await loginUser();
                       },
-                      child: const Text('Login', style: TextStyle(fontSize: 16)),
+                      child: const Text(
+                        'Login',
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
 
@@ -428,19 +460,23 @@ class _LoginPageState extends State<LoginPage> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        icon: _isPasskeyLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.fingerprint, size: 22),
+                        icon:
+                            _isPasskeyLoading
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : const Icon(Icons.fingerprint, size: 22),
                         label: const Text(
                           'Sign in with Passkey / Biometrics',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 12),

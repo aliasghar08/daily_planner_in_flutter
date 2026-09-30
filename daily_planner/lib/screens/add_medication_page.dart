@@ -433,6 +433,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         const SizedBox(height: 8),
         DropdownButtonFormField<MedicationFrequency>(
           initialValue: _selectedFrequency,
+          isExpanded: true, // ✅ FIX: prevents text overflow
           decoration: const InputDecoration(
             labelText: 'Frequency',
             border: OutlineInputBorder(),
@@ -440,7 +441,10 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           items: MedicationFrequency.values.map((frequency) {
             return DropdownMenuItem<MedicationFrequency>(
               value: frequency,
-              child: Text(_getFrequencyDisplayName(frequency)),
+              child: Text(
+                _getFrequencyDisplayName(frequency),
+                overflow: TextOverflow.ellipsis,
+              ),
             );
           }).toList(),
           onChanged: (value) {
@@ -619,6 +623,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
         const SizedBox(height: 8),
         DropdownButtonFormField<int>(
           initialValue: _reminderMinutesBefore,
+          isExpanded: true, // ✅ FIX: prevents text overflow
           decoration: const InputDecoration(
             labelText: 'Remind Before',
             border: OutlineInputBorder(),
@@ -626,7 +631,10 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
           items: [0, 5, 10, 15, 30, 60].map((minutes) {
             return DropdownMenuItem<int>(
               value: minutes,
-              child: Text(minutes == 0 ? 'At exact time' : '$minutes minutes before'),
+              child: Text(
+                minutes == 0 ? 'At exact time' : '$minutes minutes before',
+                overflow: TextOverflow.ellipsis,
+              ),
             );
           }).toList(),
           onChanged: (value) {
@@ -825,10 +833,12 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                         },
                       ),
                       const SizedBox(height: 16),
+                      // ✅ FIXED ROW: dosage + unit dropdown
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            flex: 2,
+                            flex: 3, // ✅ CHANGED: was 2
                             child: TextFormField(
                               controller: _dosageController,
                               decoration: const InputDecoration(
@@ -851,19 +861,24 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
                               },
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 12),
                           Expanded(
-                            flex: 1,
+                            flex: 2, // ✅ CHANGED: was 1
                             child: DropdownButtonFormField<DosageUnit>(
                               initialValue: _selectedUnit,
+                              isExpanded: true, // ✅ ADDED: prevents overflow
                               decoration: const InputDecoration(
                                 labelText: 'Unit',
                                 border: OutlineInputBorder(),
+                                isDense: true, // ✅ ADDED: compact layout
                               ),
                               items: DosageUnit.values.map((unit) {
                                 return DropdownMenuItem<DosageUnit>(
                                   value: unit,
-                                  child: Text(_getUnitDisplayName(unit)),
+                                  child: Text(
+                                    _getUnitDisplayName(unit),
+                                    overflow: TextOverflow.ellipsis, // ✅ ADDED
+                                  ),
                                 );
                               }).toList(),
                               onChanged: (value) {

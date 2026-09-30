@@ -10,6 +10,9 @@ import Network
   // 1. Create a shared Flutter Engine
   lazy var flutterEngine = FlutterEngine(name: "daily_planner_engine")
 
+  // ✅ Track whether we've already started the engine (isRunning not available in this Flutter version)
+  private var engineStarted = false
+
   private var alarmChannel: FlutterMethodChannel?
   private var permissionsChannel: FlutterMethodChannel?
   private var preferencesChannel: FlutterMethodChannel?
@@ -26,24 +29,22 @@ import Network
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    
-    // 2. Start the engine and register plugins
-    flutterEngine.run()
+
+    // ✅ FIX: Only start the engine if it isn't already started.
+    if engineStarted {
+      print("⚠️ AppDelegate: flutterEngine already started — skipping run()")
+    } else {
+      print("✅ AppDelegate: starting flutterEngine for the first time")
+      flutterEngine.run()
+      engineStarted = true
+    }
+
     GeneratedPluginRegistrant.register(with: flutterEngine)
 
-    // Set notification center delegate
     UNUserNotificationCenter.current().delegate = self
-
-    // Register notification categories (Stop, Snooze)
     setupNotificationCategories()
-
-    // Register for remote notifications safely on main thread
     application.registerForRemoteNotifications()
-
-    // Setup network connectivity monitoring
     startNetworkMonitoring()
-
-    // 3. Setup Method Channels using the Engine's messenger (NOT the window)
     setupMethodChannels(messenger: flutterEngine.binaryMessenger)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -61,7 +62,7 @@ import Network
     let snoozeAction = UNNotificationAction(
       identifier: "snooze_action",
       title: "Snooze 5m",
-      options: []  // No .foreground: snooze happens in background, doesn't force-open the app
+      options: []
     )
 
     let alarmCategory = UNNotificationCategory(
@@ -81,7 +82,6 @@ import Network
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    // Show banner, badge, and sound when app is in foreground on iOS 14+ / iOS 15+ / iOS 16+
     if #available(iOS 14.0, *) {
       completionHandler([.banner, .badge, .sound, .list])
     } else {
@@ -113,7 +113,6 @@ import Network
       action = "dismiss"
     }
 
-    // Forward action to Flutter on the main queue
     DispatchQueue.main.async { [weak self] in
       self?.alarmChannel?.invokeMethod("onNotificationAction", arguments: [
         "action": action,
@@ -130,7 +129,6 @@ import Network
   // MARK: - Method Channels Setup
 
   private func setupMethodChannels(messenger: FlutterBinaryMessenger) {
-    // 1. Alarm & Service Channels
     alarmChannel = FlutterMethodChannel(name: "com.example.daily_planner/alarm", binaryMessenger: messenger)
     let exactAlarmChannel = FlutterMethodChannel(name: "exact_alarm_permission", binaryMessenger: messenger)
     let serviceChannel = FlutterMethodChannel(name: "daily_planner/alarm_service", binaryMessenger: messenger)
@@ -143,25 +141,21 @@ import Network
     exactAlarmChannel.setMethodCallHandler(alarmHandler)
     serviceChannel.setMethodCallHandler(alarmHandler)
 
-    // 2. Permissions Channel
     permissionsChannel = FlutterMethodChannel(name: "daily_planner/native_permissions", binaryMessenger: messenger)
     permissionsChannel?.setMethodCallHandler { [weak self] call, result in
       self?.handlePermissionCalls(call: call, result: result)
     }
 
-    // 3. Preferences Channel
     preferencesChannel = FlutterMethodChannel(name: "daily_planner/native_preferences", binaryMessenger: messenger)
     preferencesChannel?.setMethodCallHandler { [weak self] call, result in
       self?.handlePreferencesCalls(call: call, result: result)
     }
 
-    // 4. Biometric Channel
     biometricChannel = FlutterMethodChannel(name: "daily_planner/native_biometric", binaryMessenger: messenger)
     biometricChannel?.setMethodCallHandler { [weak self] call, result in
       self?.handleBiometricCalls(call: call, result: result)
     }
 
-    // 5. Timezone Channel
     timezoneChannel = FlutterMethodChannel(name: "daily_planner/native_timezone", binaryMessenger: messenger)
     timezoneChannel?.setMethodCallHandler { call, result in
       if call.method == "getDeviceTimezone" {
@@ -171,7 +165,6 @@ import Network
       }
     }
 
-    // 6. Connectivity Channel
     connectivityChannel = FlutterMethodChannel(name: "daily_planner/native_connectivity", binaryMessenger: messenger)
     connectivityChannel?.setMethodCallHandler { [weak self] call, result in
       if call.method == "checkConnectivity" {
@@ -181,15 +174,13 @@ import Network
       }
     }
 
-    // 7. Share Channel
     shareChannel = FlutterMethodChannel(name: "daily_planner/native_share", binaryMessenger: messenger)
     shareChannel?.setMethodCallHandler { [weak self] call, result in
       if call.method == "shareText" {
         let args = call.arguments as? [String: Any]
         let text = args?["text"] as? String ?? ""
         let subject = args?["subject"] as? String
-        
-        // Safely get the top view controller to present the share sheet
+
         if let rootVC = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .flatMap({ $0.windows })
@@ -204,7 +195,7 @@ import Network
     }
   }
 
-  // MARK: - Alarm & Notification Handler (Crash-Resistant for iOS)
+  // MARK: - Alarm & Notification Handler
 
   private func handleAlarmCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
@@ -248,7 +239,6 @@ import Network
           let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: targetDate)
           trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         } else {
-          // Immediately deliver using trigger: nil (prevents UNTimeIntervalNotificationTrigger crash on <= 0)
           trigger = nil
         }
       } else {
@@ -294,7 +284,6 @@ import Network
         "payload": payload
       ]
 
-      // trigger: nil delivers immediately on iOS without crashing
       let request = UNNotificationRequest(identifier: "alarm_\(id)", content: content, trigger: nil)
 
       UNUserNotificationCenter.current().add(request) { error in
@@ -397,9 +386,7 @@ import Network
     case "checkNotificationPermission":
       UNUserNotificationCenter.current().getNotificationSettings { settings in
         let granted = (settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional)
-        DispatchQueue.main.async {
-          result(granted)
-        }
+        DispatchQueue.main.async { result(granted) }
       }
 
     case "requestNotificationPermission":
@@ -420,17 +407,13 @@ import Network
         } else {
           granted = false
         }
-        DispatchQueue.main.async {
-          result(granted)
-        }
+        DispatchQueue.main.async { result(granted) }
       }
 
     case "requestCriticalAlertPermission":
       if #available(iOS 12.0, *) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .criticalAlert]) { granted, error in
-          DispatchQueue.main.async {
-            result(granted)
-          }
+          DispatchQueue.main.async { result(granted) }
         }
       } else {
         result(false)
@@ -461,7 +444,7 @@ import Network
     }
   }
 
-  // MARK: - Persistent Key-Value Preferences Handler (UserDefaults Safe Serialization)
+  // MARK: - Persistent Key-Value Preferences Handler
 
   private func handlePreferencesCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     let defaults = UserDefaults.standard
@@ -472,8 +455,6 @@ import Network
       var dict: [String: Any] = [:]
       let defaultsDict = defaults.dictionaryRepresentation()
       for (key, val) in defaultsDict {
-        // Filter out non-serializable objects (NSDate, NSData, internal Apple classes)
-        // that cause FlutterStandardMessageCodec encoding crashes.
         if let str = val as? String {
           dict[key] = str
         } else if let boolVal = val as? Bool {
@@ -592,7 +573,7 @@ import Network
     }
   }
 
-  // MARK: - Biometric Authentication Handler (LocalAuthentication)
+  // MARK: - Biometric Authentication Handler
 
   private func handleBiometricCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     let context = LAContext()
@@ -631,9 +612,7 @@ import Network
       context.localizedCancelTitle = args?["negativeButtonText"] as? String ?? "Cancel"
 
       context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
-        DispatchQueue.main.async {
-          result(success)
-        }
+        DispatchQueue.main.async { result(success) }
       }
 
     default:
@@ -641,7 +620,7 @@ import Network
     }
   }
 
-  // MARK: - Network Connectivity Monitoring (NWPathMonitor)
+  // MARK: - Network Connectivity Monitoring
 
   private func startNetworkMonitoring() {
     pathMonitor.pathUpdateHandler = { [weak self] path in

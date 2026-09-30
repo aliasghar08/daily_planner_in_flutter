@@ -10,7 +10,7 @@ import 'package:daily_planner/providers/sync_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/native_permission_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
-import 'package:flutter/foundation.dart'; // Added for kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -28,13 +28,15 @@ import 'firebase_options.dart';
 // Global navigator key for notifications
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// ✅ Tracks whether all initialization has finished
+final ValueNotifier<bool> _appReady = ValueNotifier<bool>(false);
+
 // Background message handler (must be top-level)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   debugPrint("Handling a background message: ${message.messageId}");
 
-  // Show notification when app is in background/terminated
   if (message.notification != null) {
     await NativeAlarmHelper.showNow(
       id: message.hashCode.abs() % 100000,
@@ -55,7 +57,6 @@ Future<void> showNotification({
   );
 }
 
-// Show notification helper
 Future<void> _showNotification({
   required String title,
   required String body,
@@ -76,52 +77,64 @@ Future<void> _initializeNotificationService() async {
   }
 }
 
+// ✅ THE FIX: runApp is called FIRST, then heavy init runs in background
 Future<void> main() async {
+  // 1. Minimum required to boot the engine
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with offline persistence
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    // Enable Firestore offline persistence
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-    );
-
-    // ✅ CRITICAL: Set persistence to LOCAL to remember login (Web only)
-    if (kIsWeb) {
-      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-    }
-
-    debugPrint("✅ Firebase initialized with offline persistence");
-  } catch (e) {
-    debugPrint("❌ Firebase initialization error: $e");
-    // Continue anyway - we'll use offline capabilities
-  }
-
-  // Initialize NotificationService BEFORE running app
-  await _initializeNotificationService();
-
-  // Call runApp AFTER all critical initializations
+  // 2. Draw the first frame IMMEDIATELY — satisfies the iOS watchdog
   runApp(const MyApp());
 
-  // Initialize FCM and other platform services
-  await _initializeFCM();
-  await _initializePlatformServices();
-
-  // Perform async initializations in background
-  resetAllTasksIfNeeded();
+  // 3. Everything else runs AFTER the first frame
+  _runStartupTasks();
 }
 
-// Test method - call this somewhere in your app
+// All slow work runs here, AFTER the UI is on screen
+Future<void> _runStartupTasks() async {
+  try {
+    // Firebase
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+
+      if (kIsWeb) {
+        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+      }
+
+      debugPrint("✅ Firebase initialized with offline persistence");
+    } catch (e) {
+      debugPrint("❌ Firebase initialization error: $e");
+    }
+
+    // Notification service
+    await _initializeNotificationService();
+
+    // FCM + platform services
+    await _initializeFCM();
+    await _initializePlatformServices();
+
+    // Background task
+    resetAllTasksIfNeeded();
+
+    debugPrint('✅ All startup tasks completed');
+  } catch (e) {
+    debugPrint('❌ Startup task error: $e');
+  } finally {
+    // Signal to the UI that it's safe to show the real app
+    _appReady.value = true;
+  }
+}
+
 Future<void> testNotificationSystem() async {
   final notifications = PushNotifications();
   await notifications.initialize();
 
-  // Schedule a test notification 1 minute from now
   final testTime = DateTime.now().add(const Duration(minutes: 1));
   final testId = DateTime.now().millisecondsSinceEpoch;
 
@@ -133,8 +146,6 @@ Future<void> testNotificationSystem() async {
   );
 
   debugPrint('Test notification scheduled: $success');
-
-  // Print all scheduled notifications
   await notifications.debugPrintScheduledNotifications();
 }
 
@@ -142,10 +153,8 @@ Future<void> _initializeFCM() async {
   try {
     final FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-    // Set background message handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Request notification permissions
     final NotificationSettings settings = await messaging.requestPermission(
       alert: true,
       badge: true,
@@ -157,12 +166,10 @@ Future<void> _initializeFCM() async {
 
     debugPrint('FCM Permission status: ${settings.authorizationStatus}');
 
-    // Get FCM token
     try {
       final String? token = await messaging.getToken();
       debugPrint('FCM Token: $token');
 
-      // Save token to user's document in Firestore
       if (FirebaseAuth.instance.currentUser != null) {
         await _saveFCMTokenToFirestore(token);
       }
@@ -170,17 +177,11 @@ Future<void> _initializeFCM() async {
       debugPrint("Error uploading FCM token $e");
     }
 
-    // Handle foreground messages
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('Got a message whilst in the foreground!');
       debugPrint('Message data: ${message.data}');
 
       if (message.notification != null) {
-        debugPrint(
-          'Message also contained a notification: ${message.notification}',
-        );
-
-        // Show notification when app is in foreground
         _showNotification(
           title: message.notification!.title ?? 'Daily Planner',
           body: message.notification!.body ?? 'New notification',
@@ -188,16 +189,12 @@ Future<void> _initializeFCM() async {
       }
     });
 
-    // Handle when app is opened from terminated state via notification
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       debugPrint('App opened via notification');
       debugPrint('Message data: ${message.data}');
-
-      // Navigate to specific screen based on message data if needed
       navigatorKey.currentState?.pushNamed('/home');
     });
 
-    // Handle token refresh
     messaging.onTokenRefresh.listen((String newToken) {
       debugPrint('FCM token refreshed: $newToken');
       _saveFCMTokenToFirestore(newToken);
@@ -213,7 +210,6 @@ Future<void> _saveFCMTokenToFirestore(String? token) async {
   try {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      // Use array to store multiple tokens for multiple devices
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'fcmTokens': FieldValue.arrayUnion([token]),
         'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
@@ -248,7 +244,7 @@ Future<void> _initializePlatformServices() async {
                   Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => MedicationDetailPage(medication: med),
                   ));
-                  return; // Don't navigate to home
+                  return;
                 } catch (e) {
                   debugPrint('Medication not found for tap action: $medicationId');
                 }
@@ -268,10 +264,32 @@ Future<void> _initializePlatformServices() async {
   }
 }
 
-
-
+// ✅ MyApp shows a splash screen until _appReady becomes true
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: _appReady,
+      builder: (context, ready, _) {
+        if (!ready) {
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+        return const _MyAppBody();
+      },
+    );
+  }
+}
+
+// The actual app UI — only built after init is done
+class _MyAppBody extends StatelessWidget {
+  const _MyAppBody();
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +328,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ✅ AuthWrapper now consumes AuthProvider — no local state needed
+// ✅ AuthWrapper unchanged
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -318,7 +336,6 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = context.watch<app_auth.AuthProvider>();
 
-    // Show loading spinner while checking auth
     if (authProvider.isLoading) {
       return const Scaffold(
         body: Center(
@@ -327,17 +344,13 @@ class AuthWrapper extends StatelessWidget {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text(
-                'Checking session...',
-                style: TextStyle(fontSize: 16),
-              ),
+              Text('Checking session...', style: TextStyle(fontSize: 16)),
             ],
           ),
         ),
       );
     }
 
-    // Show error if any
     if (authProvider.error != null) {
       return Scaffold(
         body: Center(
@@ -346,27 +359,17 @@ class AuthWrapper extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: Colors.red.shade400,
-                ),
+                Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
                 const SizedBox(height: 16),
                 const Text(
                   'Authentication Error',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   authProvider.error!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -380,7 +383,6 @@ class AuthWrapper extends StatelessWidget {
       );
     }
 
-    // Navigate based on auth state
     return authProvider.isLoggedIn ? const MyHome() : const LoginPage();
   }
 }

@@ -11,7 +11,6 @@ import 'native_permission_service.dart';
 /// Custom service layer connecting Flutter to native Android AlarmManager,
 /// ForegroundService, NotificationManagerCompat, and OEM power optimizations.
 class NativeAlarmHelper {
-  // Method channels matching Android MainActivity.kt
   static const MethodChannel _alarmChannel = MethodChannel(
     'exact_alarm_permission',
   );
@@ -24,31 +23,22 @@ class NativeAlarmHelper {
     'daily_planner/alarm_service',
   );
 
-  // Stream controller to handle action callbacks
   static final StreamController<Map<String, dynamic>> _actionStreamController =
       StreamController<Map<String, dynamic>>.broadcast();
   static Stream<Map<String, dynamic>> get actionStream =>
       _actionStreamController.stream;
 
-  /// MUST call once during app startup
   static Future<void> initialize() async {
-    // Ensure notification channel/categories are created
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         await _alarmChannel.invokeMethod('ensureNotificationChannel');
       }
     } catch (_) {}
 
-    // Initialize native connectivity monitoring
     NativeConnectivityService.initialize();
-
-    // Cache device timezone
     await NativeTimezoneService.getLocalTimezone();
-
-    // Setup method channel for native actions from Kotlin
     _setupNotificationChannel();
 
-    // Start background service to maintain process health
     try {
       await startForegroundService();
     } catch (_) {}
@@ -56,7 +46,6 @@ class NativeAlarmHelper {
     debugPrint('✅ NativeAlarmHelper initialized with custom native engine');
   }
 
-  /// Setup method channel to receive native actions from Kotlin
   static void _setupNotificationChannel() {
     _notificationChannel.setMethodCallHandler((MethodCall call) async {
       debugPrint(
@@ -73,7 +62,7 @@ class NativeAlarmHelper {
           final String? payload = args['payload']?.toString();
 
           debugPrint(
-            '🎯 Received notification action from Kotlin: $action for ID: $id with payload: $payload',
+            '🎯 Received notification action: $action for ID: $id with payload: $payload',
           );
 
           _actionStreamController.add({
@@ -82,7 +71,7 @@ class NativeAlarmHelper {
             'title': title,
             'body': body,
             'payload': payload,
-            'source': 'kotlin',
+            'source': Platform.isIOS ? 'ios' : 'android',
           });
 
           await _handleNativeAction(action, id, title, body);
@@ -91,7 +80,6 @@ class NativeAlarmHelper {
     });
   }
 
-  /// Handle native actions from Kotlin
   static Future<void> _handleNativeAction(
     String action,
     int id,
@@ -160,7 +148,6 @@ class NativeAlarmHelper {
     List<String>? fcmTokens,
   }) async {
     try {
-      // Schedule custom native Android alarm (persisted and survives reboots & killed states)
       await _scheduleNativeAlarm(
         id: id,
         title: title,
@@ -169,13 +156,14 @@ class NativeAlarmHelper {
         payload: json.encode(payload),
       );
 
-      debugPrint('✅ Native alarm scheduled via Kotlin: ID $id at $dateTime');
+      // ✅ Platform-aware log (was hardcoded to "Kotlin" before)
+      final platformName = Platform.isIOS ? 'iOS' : 'Android';
+      debugPrint('✅ Native alarm scheduled via $platformName: ID $id at $dateTime');
     } catch (e) {
       debugPrint('❌ Native alarm scheduling failed: $e');
     }
   }
 
-  /// Schedule native alarm using platform engine (Kotlin on Android, UserNotifications on iOS)
   static Future<void> _scheduleNativeAlarm({
     required int id,
     required String title,
@@ -200,14 +188,12 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Handle stop action
   static Future<void> handleStopAction(int id) async {
     debugPrint('🛑 Stop action triggered for alarm ID: $id');
     await cancelHybridAlarm(id);
     await cancelHybridAlarm(id + 1000);
   }
 
-  /// Handle snooze action
   static Future<void> handleSnoozeAction(
     int id,
     String title,
@@ -226,25 +212,20 @@ class NativeAlarmHelper {
     );
   }
 
-  /// Check online state using native connectivity service
   static Future<bool> get isOnline => NativeConnectivityService.isOnline();
   static int get pendingNotificationsCount => 0;
 
-  /// Cancel alarm natively
   static Future<void> cancelHybridAlarm(int id) async {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        // Cancel custom native alarm from AlarmManager / UNUserNotificationCenter
         await _alarmChannel.invokeMethod('cancelAlarm', {'id': id});
       }
-
       debugPrint('✅ Native alarm cancelled: ID $id');
     } catch (e) {
       debugPrint('Error cancelling native alarm: $e');
     }
   }
 
-  /// Cancel all alarms
   static Future<void> cancelAllAlarms() async {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
@@ -256,7 +237,6 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Get list of active native alarms from persistent storage
   static Future<List<dynamic>> getScheduledAlarms() async {
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return [];
@@ -268,12 +248,11 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Cancel all alarms associated with a specific task
   static Future<void> cancelAlarmsForTask(String taskId) async {
     try {
       final List<dynamic> alarms = await getScheduledAlarms();
       int cancelledCount = 0;
-      
+
       for (final alarm in alarms) {
         if (alarm is Map) {
           final String payloadStr = alarm['payload']?.toString() ?? '';
@@ -297,12 +276,11 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Cancel all alarms associated with a specific medication
   static Future<void> cancelAlarmsForMedication(String medicationId) async {
     try {
       final List<dynamic> alarms = await getScheduledAlarms();
       int cancelledCount = 0;
-      
+
       for (final alarm in alarms) {
         if (alarm is Map) {
           final String payloadStr = alarm['payload']?.toString() ?? '';
@@ -326,17 +304,14 @@ class NativeAlarmHelper {
     }
   }
 
-  /// Check if the app has exact alarm permission (Android 12+)
   static Future<bool> checkExactAlarmPermission() async {
     return await NativePermissionService.isExactAlarmPermissionGranted();
   }
 
-  /// Request exact alarm permission (Android 12+)
   static Future<void> requestExactAlarmPermission() async {
     await NativePermissionService.requestExactAlarmPermission();
   }
 
-  /// Schedule method for backward compatibility
   static Future<void> scheduleAlarmAtTime({
     required int id,
     required String title,
@@ -352,12 +327,10 @@ class NativeAlarmHelper {
     );
   }
 
-  /// Cancel alarm by ID for backward compatibility
   static Future<void> cancelAlarmById(int id) async {
     await cancelHybridAlarm(id);
   }
 
-  // Show immediate notification
   static Future<void> showNow({
     required int id,
     required String title,
@@ -415,12 +388,10 @@ class NativeAlarmHelper {
     debugPrint('🧪 Test alarm scheduled for ${testTime.toString()}');
   }
 
-  /// Fetch device brand and battery optimization info
   static Future<Map<String, dynamic>> getDeviceBrandInfo() async {
     return await NativePermissionService.getDeviceBrandInfo();
   }
 
-  /// Show customized OEM optimization guidance dialog
   static Future<void> showOemOptimizationGuide(BuildContext context) async {
     final info = await getDeviceBrandInfo();
     final String manufacturer = (info['manufacturer'] ?? '').toString().toLowerCase();
