@@ -7,6 +7,9 @@ import Network
 @main
 @objc class AppDelegate: FlutterAppDelegate {
 
+  // 1. Create a shared Flutter Engine
+  lazy var flutterEngine = FlutterEngine(name: "daily_planner_engine")
+
   private var alarmChannel: FlutterMethodChannel?
   private var permissionsChannel: FlutterMethodChannel?
   private var preferencesChannel: FlutterMethodChannel?
@@ -23,7 +26,10 @@ import Network
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    
+    // 2. Start the engine and register plugins
+    flutterEngine.run()
+    GeneratedPluginRegistrant.register(with: flutterEngine)
 
     // Set notification center delegate
     UNUserNotificationCenter.current().delegate = self
@@ -37,12 +43,8 @@ import Network
     // Setup network connectivity monitoring
     startNetworkMonitoring()
 
-    // Setup Flutter method channels
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    }
-
-    setupMethodChannels(controller: controller)
+    // 3. Setup Method Channels using the Engine's messenger (NOT the window)
+    setupMethodChannels(messenger: flutterEngine.binaryMessenger)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -127,9 +129,7 @@ import Network
 
   // MARK: - Method Channels Setup
 
-  private func setupMethodChannels(controller: FlutterViewController) {
-    let messenger = controller.binaryMessenger
-
+  private func setupMethodChannels(messenger: FlutterBinaryMessenger) {
     // 1. Alarm & Service Channels
     alarmChannel = FlutterMethodChannel(name: "com.example.daily_planner/alarm", binaryMessenger: messenger)
     let exactAlarmChannel = FlutterMethodChannel(name: "exact_alarm_permission", binaryMessenger: messenger)
@@ -188,7 +188,16 @@ import Network
         let args = call.arguments as? [String: Any]
         let text = args?["text"] as? String ?? ""
         let subject = args?["subject"] as? String
-        self?.shareText(text: text, subject: subject, controller: controller, result: result)
+        
+        // Safely get the top view controller to present the share sheet
+        if let rootVC = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow })?.rootViewController {
+            self?.shareText(text: text, subject: subject, controller: rootVC, result: result)
+        } else {
+            result(FlutterError(code: "NO_VIEW_CONTROLLER", message: "Could not find root view controller", details: nil))
+        }
       } else {
         result(FlutterMethodNotImplemented)
       }

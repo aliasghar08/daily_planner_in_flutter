@@ -10,6 +10,7 @@ import 'package:daily_planner/providers/sync_provider.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/native_permission_service.dart';
 import 'package:daily_planner/utils/push_notifications.dart';
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -90,8 +91,10 @@ Future<void> main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
 
-    // ✅ CRITICAL: Set persistence to LOCAL to remember login
-    await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    // ✅ CRITICAL: Set persistence to LOCAL to remember login (Web only)
+    if (kIsWeb) {
+      await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    }
 
     debugPrint("✅ Firebase initialized with offline persistence");
   } catch (e) {

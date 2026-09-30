@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // Added to use kIsWeb
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -22,11 +22,13 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // Step 1: Ensure Local Persistence is active
-      try {
-        await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
-      } catch (e) {
-        debugPrint('Auth persistence setting warning: $e');
+      // Step 1: Ensure Local Persistence is active (Web only)
+      if (kIsWeb) {
+        try {
+          await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+        } catch (e) {
+          debugPrint('Auth persistence setting warning: $e');
+        }
       }
 
       // Step 2: Read current authenticated user session
