@@ -580,7 +580,6 @@ import Network
 
     switch call.method {
     case "isBiometricSupported":
-      // ✅ True if either biometrics OR passcode is available (works on Face ID & Touch ID iPhones)
       let canBiometric = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
       let canPasscode = context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error)
       result(canBiometric || canPasscode)
@@ -610,13 +609,7 @@ import Network
       let args = call.arguments as? [String: Any]
       let reason = args?["title"] as? String ?? "Verify your identity to proceed"
       context.localizedCancelTitle = args?["negativeButtonText"] as? String ?? "Cancel"
-      // ✅ Leave localizedFallbackTitle unset so iOS shows the standard localized "Enter Passcode" button
 
-      // ✅ Use .deviceOwnerAuthentication:
-      //    - Tries Face ID on Face ID iPhones
-      //    - Tries Touch ID on Touch ID iPhones
-      //    - Falls back to device passcode automatically if biometrics fail or aren't enrolled
-      //    This is Apple's recommended policy and handles both device types with the same code.
       guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
         DispatchQueue.main.async {
           var code = "AUTH_UNAVAILABLE"
@@ -643,7 +636,6 @@ import Network
         return
       }
 
-      // ✅ Perform authentication — iOS handles biometrics-first with passcode fallback automatically
       context.evaluatePolicy(
         .deviceOwnerAuthentication,
         localizedReason: reason

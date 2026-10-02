@@ -160,6 +160,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       loadedNotifications.sort((a, b) => b.compareTo(a));
       loadedEditHistory.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
+      if (!mounted) return;
       setState(() {
         _currentCompletionStatus = loadedCompletionStatus;
         completedList = loadedStamps;
@@ -198,11 +199,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     if (oldWidget.task.docId != widget.task.docId) _loadTaskData();
   }
 
-
-
   // ✅ NEW: Format recurrence information for display
   String _getRecurrenceDescription() {
-    if (_notificationRecurrence == null || 
+    if (_notificationRecurrence == null ||
         _notificationRecurrence == NotificationRecurrence.none) {
       return "No recurring notifications";
     }
@@ -237,14 +236,14 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   // ✅ NEW: Get selected day names
   List<String> _getSelectedDayNames() {
     if (_selectedDays == null) return [];
-    
+
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return _selectedDays!.entries
         .where((entry) => entry.value)
         .map((entry) {
           final index = int.tryParse(entry.key);
-          return index != null && index >= 1 && index <= 7 
-              ? days[index - 1] 
+          return index != null && index >= 1 && index <= 7
+              ? days[index - 1]
               : 'Day $entry.key';
         })
         .toList();
@@ -344,7 +343,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       final notificationTypeText = _notificationRecurrence != NotificationRecurrence.none
           ? "Recurring (${_notificationRecurrence!.name})"
           : "Single";
-      
+
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
           content: Text(
@@ -388,7 +387,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
       if (_nativeAlarmInitialized) {
         // Cancel all potential alarms for this task
         await NativeAlarmHelper.cancelAlarmsForTask(widget.task.docId!);
-        
+
         // Also cancel legacy single-alarm ID
         await NativeAlarmHelper.cancelAlarmById(
           (widget.task.docId.hashCode & 0x7FFFFFFF)
@@ -591,7 +590,9 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
   Widget build(BuildContext context) {
     final task = widget.task;
 
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    // ✅ Removed: no more full-page spinner. Page renders instantly with
+    // the data already on `widget.task`. Async sections fill in when
+    // _loadTaskData() completes.
 
     // ✅ Use new date formatting functions
     final formattedDeadline = _formatDateTime(task.date);
@@ -837,7 +838,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        if (_notificationRecurrence == NotificationRecurrence.none && 
+                        if (_notificationRecurrence == NotificationRecurrence.none &&
                             notificationTimes.isNotEmpty)
                           Text(
                             "${notificationTimes.length} single notification(s) scheduled",
@@ -953,24 +954,38 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
+  // ✅ UPDATED: Show loading indicator inside the expansion instead of
+  // blocking the whole page.
   Widget _buildCompletionTimesExpansion() => Card(
     elevation: 2,
     child: ExpansionTile(
       leading: const Icon(Icons.list_alt),
       title: const Text("Completion History"),
-      children:
-          completedList.isEmpty
-              ? [
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(
-                    child: Text(
-                      "No completion times available",
-                      style: TextStyle(color: Colors.grey),
-                    ),
+      children: _isLoading
+          ? [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
-              ]
+              ),
+            ]
+          : completedList.isEmpty
+              ? [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text(
+                        "No completion times available",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                ]
               : completedList
                   .map(
                     (date) => ListTile(
@@ -982,24 +997,37 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     ),
   );
 
+  // ✅ UPDATED: Same loading-in-place pattern.
   Widget _buildNotificationTimesExpansion() => Card(
     elevation: 2,
     child: ExpansionTile(
       leading: const Icon(Icons.notifications),
       title: const Text("Scheduled Notifications"),
-      children:
-          notificationTimes.isEmpty
-              ? [
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(
-                    child: Text(
-                      "No notifications scheduled",
-                      style: TextStyle(color: Colors.grey),
-                    ),
+      children: _isLoading
+          ? [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 ),
-              ]
+              ),
+            ]
+          : notificationTimes.isEmpty
+              ? [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: Text(
+                        "No notifications scheduled",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
+                ]
               : notificationTimes
                   .map(
                     (date) => ListTile(
@@ -1014,6 +1042,59 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
                     ),
                   )
                   .toList(),
+    ),
+  );
+
+  // ✅ UPDATED: Same loading-in-place pattern.
+  Widget _buildEditHistory() => Card(
+    elevation: 2,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "📜 Edit History",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (widget.task.editHistory.isEmpty)
+            const Text(
+              "No edits made yet.",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children:
+                  widget.task.editHistory.map((edit) {
+                    final formattedEditTime = _formatShortDateTime(
+                      edit.timestamp,
+                    );
+                    return ListTile(
+                      leading: const Icon(Icons.edit_note),
+                      title: Text(formattedEditTime),
+                      subtitle:
+                          edit.note != null && edit.note!.isNotEmpty
+                              ? Text(edit.note!)
+                              : const Text("No note"),
+                      contentPadding: EdgeInsets.zero,
+                    );
+                  }).toList(),
+            ),
+        ],
+      ),
     ),
   );
 
@@ -1192,47 +1273,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
           ),
         ),
       ],
-    ),
-  );
-
-  Widget _buildEditHistory() => Card(
-    elevation: 2,
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "📜 Edit History",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          if (widget.task.editHistory.isEmpty)
-            const Text(
-              "No edits made yet.",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children:
-                  widget.task.editHistory.map((edit) {
-                    final formattedEditTime = _formatShortDateTime(
-                      edit.timestamp,
-                    );
-                    return ListTile(
-                      leading: const Icon(Icons.edit_note),
-                      title: Text(formattedEditTime),
-                      subtitle:
-                          edit.note != null && edit.note!.isNotEmpty
-                              ? Text(edit.note!)
-                              : const Text("No note"),
-                      contentPadding: EdgeInsets.zero,
-                    );
-                  }).toList(),
-            ),
-        ],
-      ),
     ),
   );
 }

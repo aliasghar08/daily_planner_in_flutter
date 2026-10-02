@@ -6,6 +6,7 @@ import 'package:daily_planner/screens/taskInsights.dart';
 import 'package:daily_planner/utils/Alarm_helper.dart';
 import 'package:daily_planner/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:daily_planner/services/custom_state_management.dart';
@@ -422,7 +423,7 @@ class _ItemWidgetState extends State<ItemWidget> {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => ItemDetailPage(task: task)),
+              CupertinoPageRoute(builder: (_) => ItemDetailPage(task: task)),
             );
           },
           child: Padding(
@@ -619,7 +620,7 @@ class _ItemWidgetState extends State<ItemWidget> {
                     } else if (value == 'details') {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => ItemDetailPage(task: task)),
+                        CupertinoPageRoute(builder: (_) => ItemDetailPage(task: task)),
                       );
                     } else if (value == 'analytics') {
                       Navigator.push(
