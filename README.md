@@ -1,4 +1,4 @@
-# 🗓️ Daily Planner — Modern Flutter & Native Android Productivity App
+# 🗓️ MedDay Flow — Modern Flutter & Native Productivity App
 
 [![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=Flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-%230175C2.svg?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
@@ -6,7 +6,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Android 14+ Ready](https://img.shields.io/badge/Android%2014%2B-Compatible-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)
 
-**Daily Planner** is a high-performance, offline-first personal productivity, medication scheduling, and habit-tracking application built with Flutter, Firebase, and custom Native Android Kotlin platform services. Engineered with a zero-bloat philosophy, it delivers enterprise-grade reliability, circadian-aware scheduling, bi-directional cloud sync, and custom canvas-rendered analytics.
+**MedDay Flow** is a high-performance, offline-first personal productivity, medication scheduling, and habit-tracking application built with Flutter, Firebase, and custom Native Android Kotlin platform services. Engineered with a zero-bloat philosophy, it delivers enterprise-grade reliability, circadian-aware scheduling, bi-directional cloud sync, and custom canvas-rendered analytics.
 
 ---
 
@@ -163,7 +163,7 @@ daily_planner/
 │   │   ├── passkey_auth_service.dart     # Passkey & biometric verification helper
 │   │   ├── push_notifications.dart       # FCM configuration & foreground handler
 │   │   ├── reset_task.dart               # Waking-day auto-reset logic
-│   │   ├── Medicaltion Model/            # Circadian intake models & generator engine
+│   │   ├── medication_model/             # Circadian intake models & generator engine
 │   │   └── performance_page/             # Analytics aggregators (Daily & Total tasks)
 │   ├── widgets/
 │   │   └── charts/                       # Canvas-rendered Custom Bar & Pie charts
