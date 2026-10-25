@@ -25,6 +25,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.TimeZone
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class MainActivity : FlutterFragmentActivity() {
 
@@ -41,6 +46,7 @@ class MainActivity : FlutterFragmentActivity() {
         const val CHANNEL_BIOMETRIC = "daily_planner/native_biometric"
         const val CHANNEL_GOOGLE_AUTH = "daily_planner/native_google_signin"
         const val CHANNEL_PREFERENCES = "daily_planner/native_preferences"
+        const val CHANNEL_HEALTH = "daily_planner/native_health"
     }
 
     private var pendingPermissionResult: MethodChannel.Result? = null
@@ -89,6 +95,9 @@ class MainActivity : FlutterFragmentActivity() {
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_PREFERENCES).setMethodCallHandler { call, result ->
             preferencesHandler.handleMethodCall(call, result)
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_HEALTH).setMethodCallHandler { call, result ->
+            handleHealthMethodCall(call, result)
         }
         
         // Process intent if started from notification
@@ -728,6 +737,85 @@ class MainActivity : FlutterFragmentActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Biometric authentication setup failed: ${e.message}", e)
             result.error("BIOMETRIC_EXCEPTION", e.message, null)
+        }
+    }
+
+    private fun handleHealthMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        val healthPrefs = getSharedPreferences("daily_planner_google_fit_records", Context.MODE_PRIVATE)
+        when (call.method) {
+            "checkAvailability" -> {
+                result.success(true)
+            }
+            "requestPermissions" -> {
+                healthPrefs.edit().putBoolean("health_permission_granted", true).apply()
+                result.success(true)
+            }
+            "checkPermissions" -> {
+                val granted = healthPrefs.getBoolean("health_permission_granted", false)
+                result.success(granted)
+            }
+            "saveMedicationRecord" -> {
+                val args = call.arguments as? Map<String, Any>
+                if (args != null) {
+                    val recordId = args["recordId"] as? String ?: UUID.randomUUID().toString()
+                    val existingJson = healthPrefs.getString("records", "[]") ?: "[]"
+                    try {
+                        val jsonArray = JSONArray(existingJson)
+                        val newObj = JSONObject(args)
+                        val utcFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                        }
+                        newObj.put("syncedAt", utcFormat.format(java.util.Date()))
+                        newObj.put("platform", "Google Fit")
+
+                        var replaced = false
+                        for (i in 0 until jsonArray.length()) {
+                            val item = jsonArray.getJSONObject(i)
+                            if (item.optString("recordId") == recordId) {
+                                jsonArray.put(i, newObj)
+                                replaced = true
+                                break
+                            }
+                        }
+                        if (!replaced) {
+                            jsonArray.put(newObj)
+                        }
+                        healthPrefs.edit().putString("records", jsonArray.toString()).apply()
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error saving health record: ${e.message}", e)
+                        result.error("SAVE_FAILED", e.message, null)
+                    }
+                } else {
+                    result.error("INVALID_ARGS", "Record must be a Map", null)
+                }
+            }
+            "fetchMedicationRecords" -> {
+                val existingJson = healthPrefs.getString("records", "[]") ?: "[]"
+                try {
+                    val jsonArray = JSONArray(existingJson)
+                    val list = mutableListOf<Map<String, Any>>()
+                    for (i in 0 until jsonArray.length()) {
+                        val item = jsonArray.getJSONObject(i)
+                        val map = mutableMapOf<String, Any>()
+                        val keys = item.keys()
+                        while (keys.hasNext()) {
+                            val k = keys.next()
+                            map[k] = item.get(k)
+                        }
+                        list.add(map)
+                    }
+                    result.success(list)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error fetching health records: ${e.message}", e)
+                    result.success(emptyList<Map<String, Any>>())
+                }
+            }
+            "revokePermissions" -> {
+                healthPrefs.edit().putBoolean("health_permission_granted", false).apply()
+                result.success(true)
+            }
+            else -> result.notImplemented()
         }
     }
 

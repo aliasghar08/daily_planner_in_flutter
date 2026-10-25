@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:medday_flow/services/native_health_service.dart';
 import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
 import 'package:medday_flow/services/native_preferences_service.dart';
+import 'package:medday_flow/utils/medication_model/frequency_and_dosage.dart';
 import 'package:medday_flow/utils/medication_model/medication_intake.dart';
 import 'package:flutter/foundation.dart';
 
@@ -61,17 +62,23 @@ class HealthSyncService {
   Future<bool> isHealthPermissionGranted() async {
     final prefs = await _getPrefs();
     final prefGranted = prefs.getBool(_healthPermissionKey) ?? false;
-    if (kIsWeb || !Platform.isIOS) return prefGranted;
+    if (!prefGranted) return false;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return prefGranted;
 
-    final nativeGranted = await NativeHealthService.checkPermissions();
-    return nativeGranted || prefGranted;
+    try {
+      final nativeGranted = await NativeHealthService.checkPermissions();
+      return nativeGranted;
+    } catch (e) {
+      debugPrint('Health permission check fallback: $e');
+      return false;
+    }
   }
 
   /// Request health permissions from user
   Future<bool> requestHealthPermissions() async {
     try {
       bool granted = true;
-      if (!kIsWeb && Platform.isIOS) {
+      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
         granted = await NativeHealthService.requestPermissions();
       }
 
@@ -86,7 +93,7 @@ class HealthSyncService {
 
   /// Revoke health permissions
   Future<void> revokeHealthPermissions() async {
-    if (!kIsWeb && Platform.isIOS) {
+    if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
       await NativeHealthService.revokePermissions();
     }
     final prefs = await _getPrefs();
@@ -97,8 +104,10 @@ class HealthSyncService {
   Future<SyncResult> syncMedicationIntakes({
     required List<MedicationIntake> intakes,
   }) async {
-    if (intakes.isEmpty) {
-      return SyncResult.success(0, 'No medication intakes to sync');
+    // Only sync doses that have actually been taken; HealthKit strictly rejects future/pending dates
+    final takenIntakes = intakes.where((i) => i.status == IntakeStatus.taken).toList();
+    if (takenIntakes.isEmpty) {
+      return SyncResult.success(0, 'No taken medication doses to sync');
     }
 
     final hasPermission = await isHealthPermissionGranted();
@@ -116,12 +125,12 @@ class HealthSyncService {
       };
 
       int newOrUpdatedCount = 0;
-      for (final intake in intakes) {
+      for (final intake in takenIntakes) {
         final record = intakeToHealthRecord(intake);
         recordsMap[intake.intakeId] = record;
 
-        // Push directly to native Apple Health via MethodChannel on iOS
-        if (!kIsWeb && Platform.isIOS) {
+        // Push directly to native Apple Health (iOS) or Google Fit (Android) via MethodChannel
+        if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
           await NativeHealthService.saveMedicationRecord(record);
         }
 
@@ -131,7 +140,7 @@ class HealthSyncService {
       final updatedList = recordsMap.values.toList();
       await prefs.setString(_healthStorageKey, json.encode(updatedList));
 
-      final platformName = kIsWeb ? 'Health' : (Platform.isAndroid ? 'Health Connect' : 'Apple Health');
+      final platformName = kIsWeb ? 'Health' : (Platform.isAndroid ? 'Google Fit' : 'Apple Health');
       return SyncResult.success(
         newOrUpdatedCount,
         'Successfully synced $newOrUpdatedCount medication records to $platformName',
@@ -145,7 +154,7 @@ class HealthSyncService {
   /// Retrieve all synced health records
   Future<List<Map<String, dynamic>>> getSyncedHealthRecords() async {
     try {
-      if (!kIsWeb && Platform.isIOS) {
+      if (!kIsWeb && (Platform.isIOS || Platform.isAndroid)) {
         final nativeRecords = await NativeHealthService.fetchMedicationRecords();
         if (nativeRecords.isNotEmpty) {
           return nativeRecords;

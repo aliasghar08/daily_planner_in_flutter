@@ -2,15 +2,14 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// In-house native Apple Health (HealthKit) / Health Platform service
-/// Communicates directly with iOS HealthKit via native MethodChannel.
+/// In-house native Apple Health (HealthKit) and Google Fit / Health Platform service
+/// Communicates directly with iOS HealthKit and Android Google Fit via native MethodChannel.
 class NativeHealthService {
   static const MethodChannel _channel = MethodChannel('daily_planner/native_health');
 
-  /// Check if Health platform / HealthKit is available on this device
+  /// Check if Health platform (HealthKit / Google Fit) is available on this device
   static Future<bool> isAvailable() async {
-    if (kIsWeb) return false;
-    if (!Platform.isIOS) return false;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
 
     try {
       final bool? available = await _channel.invokeMethod<bool>('checkAvailability');
@@ -25,7 +24,7 @@ class NativeHealthService {
 
   /// Request authorization to read and write health records
   static Future<bool> requestPermissions() async {
-    if (kIsWeb || !Platform.isIOS) return false;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
 
     try {
       final bool? granted = await _channel.invokeMethod<bool>('requestPermissions');
@@ -40,7 +39,7 @@ class NativeHealthService {
 
   /// Check if the user has granted health authorization
   static Future<bool> checkPermissions() async {
-    if (kIsWeb || !Platform.isIOS) return false;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
 
     try {
       final bool? isGranted = await _channel.invokeMethod<bool>('checkPermissions');
@@ -53,9 +52,9 @@ class NativeHealthService {
     }
   }
 
-  /// Save a medication intake record to Apple HealthKit
+  /// Save a medication intake record to Apple HealthKit / Google Fit
   static Future<bool> saveMedicationRecord(Map<String, dynamic> record) async {
-    if (kIsWeb || !Platform.isIOS) return false;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return false;
 
     try {
       final bool? success = await _channel.invokeMethod<bool>('saveMedicationRecord', record);
@@ -68,9 +67,9 @@ class NativeHealthService {
     }
   }
 
-  /// Fetch medication records previously synced to Apple HealthKit
+  /// Fetch medication records previously synced to Apple HealthKit / Google Fit
   static Future<List<Map<String, dynamic>>> fetchMedicationRecords() async {
-    if (kIsWeb || !Platform.isIOS) return [];
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return [];
 
     try {
       final List<dynamic>? list = await _channel.invokeMethod<List<dynamic>>('fetchMedicationRecords');
@@ -86,7 +85,7 @@ class NativeHealthService {
 
   /// Revoke health authorization
   static Future<void> revokePermissions() async {
-    if (kIsWeb || !Platform.isIOS) return;
+    if (kIsWeb || (!Platform.isIOS && !Platform.isAndroid)) return;
 
     try {
       await _channel.invokeMethod('revokePermissions');
@@ -95,3 +94,4 @@ class NativeHealthService {
     }
   }
 }
+

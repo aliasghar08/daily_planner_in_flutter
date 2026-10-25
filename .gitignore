@@ -1,0 +1,31 @@
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE & Editor Files
+.idea/
+.vscode/
+.vs/
+*.iml
+*.ipr
+*.iws
+
+# Build artifacts & packages
+build/
+*.ipa
+*.apk
+*.aab
+*.symbols
+*.map.json
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Secrets / Service Accounts
+*service-account*.json
+*.key
+*.pem

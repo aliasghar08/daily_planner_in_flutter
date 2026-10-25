@@ -1,29 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class CatlalogModel {
-  static List<Task> items = [
-    Task(
-      docId: '1',
-      title: "Get the meal",
-      detail: "I need to have my dinner done on time",
-      date: DateTime.now(),
-      isCompleted: true,
-      completedAt: DateTime.now(),
-      notificationTimes: [],
-    ),
-    Task(
-      docId: '2',
-      title: "Get your work done before deadline",
-      detail: "I need to get my work done before the deadline at any cost",
-      date: DateTime.now(),
-      isCompleted: true,
-      completedAt: DateTime.now(),
-      notificationTimes: [],
-    ),
-  ];
-}
-
 class TaskEdit {
   final DateTime timestamp;
   final String? note;

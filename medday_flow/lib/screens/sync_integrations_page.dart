@@ -3,9 +3,11 @@ import 'package:medday_flow/providers/medication_provider.dart';
 import 'package:medday_flow/providers/sync_provider.dart';
 import 'package:medday_flow/providers/task_provider.dart';
 import 'package:medday_flow/services/custom_state_management.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:medday_flow/widgets/health_permission_prompt_dialog.dart';
 
 class SyncIntegrationsPage extends StatefulWidget {
   const SyncIntegrationsPage({super.key});
@@ -23,6 +25,52 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return DateFormat('MMM d, h:mm a').format(dt);
+  }
+
+  Future<void> _handleHealthToggle(
+    BuildContext context,
+    SyncProvider syncProvider,
+    bool enable,
+  ) async {
+    final isApple = defaultTargetPlatform == TargetPlatform.iOS;
+    final platformName = isApple ? 'Apple Health' : 'Google Fit';
+
+    if (enable) {
+      final confirmed = await HealthPermissionPromptDialog.showEnableConfirmDialog(
+        context,
+        isApple: isApple,
+      );
+      if (!confirmed) return;
+      if (!context.mounted) return;
+
+      final granted = await syncProvider.requestHealthPermissions();
+      if (!context.mounted) return;
+
+      if (granted) {
+        await syncProvider.toggleHealthSync(true);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$platformName connected successfully! Taken doses will auto-sync.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        await HealthPermissionPromptDialog.showPermissionRequiredDialog(
+          context,
+          isApple: isApple,
+        );
+      }
+    } else {
+      await syncProvider.toggleHealthSync(false);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$platformName synchronization turned off.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Widget _buildSectionHeader(String title) {
@@ -444,8 +492,12 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
             ],
           ),
 
-          // 4. Health Platform Card (Health Connect / Apple Health)
-          _buildSectionHeader('HEALTH PLATFORM (APPLE HEALTH / HEALTH CONNECT)'),
+          // 4. Health Platform Card (Apple Health / Google Fit)
+          _buildSectionHeader(
+            defaultTargetPlatform == TargetPlatform.iOS
+                ? 'APPLE HEALTH (HEALTHKIT)'
+                : 'GOOGLE FIT (HEALTH CONNECT)',
+          ),
           _buildCard(
             isDark: isDark,
             children: [
@@ -465,13 +517,17 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Medication & Health Records',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        Text(
+                          defaultTargetPlatform == TargetPlatform.iOS
+                              ? 'Apple Health'
+                              : 'Google Fit',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Sync medication intake logs, dosages & adherence with Health Connect / Apple Health',
+                          defaultTargetPlatform == TargetPlatform.iOS
+                              ? 'Sync medication intake logs, dosages & adherence with Apple Health'
+                              : 'Sync medication intake logs, dosages & adherence with Google Fit & Health Connect',
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark ? Colors.white60 : Colors.black54,
@@ -482,7 +538,7 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                   ),
                   Switch(
                     value: syncProvider.isHealthEnabled,
-                    onChanged: (val) => syncProvider.toggleHealthSync(val),
+                    onChanged: (val) => _handleHealthToggle(context, syncProvider, val),
                   ),
                 ],
               ),
@@ -513,54 +569,73 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                     onPressed: syncProvider.healthStatus == SyncStatus.syncing
                         ? null
                         : () async {
+                            final isApple = defaultTargetPlatform == TargetPlatform.iOS;
+                            final platformName = isApple ? 'Apple Health' : 'Google Fit';
+
+                            if (!syncProvider.isHealthEnabled) {
+                              await _handleHealthToggle(context, syncProvider, true);
+                              return;
+                            }
+
                             try {
                               final res = await syncProvider.syncHealth(allIntakes);
                               if (!context.mounted) return;
                               if (res.isSuccess) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text(res.message.isNotEmpty ? res.message : 'Apple Health synced successfully!'),
+                                    content: Text(
+                                      res.message.isNotEmpty
+                                          ? res.message
+                                          : '$platformName synced successfully!',
+                                    ),
                                     behavior: SnackBarBehavior.floating,
                                   ),
                                 );
                               } else {
-                                final isPermissionError = res.message.toLowerCase().contains('permission');
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isPermissionError
-                                          ? 'Health permissions not granted. Enable them in iOS Settings.'
-                                          : res.message,
+                                final isPermissionError = res.message.toLowerCase().contains('permission') ||
+                                    res.message.toLowerCase().contains('not granted');
+                                if (isPermissionError) {
+                                  await HealthPermissionPromptDialog.showPermissionRequiredDialog(
+                                    context,
+                                    isApple: isApple,
+                                    details: res.message,
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(res.message),
+                                      backgroundColor: Colors.orange,
+                                      behavior: SnackBarBehavior.floating,
                                     ),
-                                    backgroundColor: Colors.orange,
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                  );
+                                }
                               }
                             } on PlatformException catch (e) {
-                              debugPrint('HealthKit sync platform error: ${e.message}');
+                              debugPrint('$platformName sync platform error: ${e.message}');
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Sync failed: ${e.message}'),
-                                  backgroundColor: Colors.red,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
+                              await HealthPermissionPromptDialog.showPermissionRequiredDialog(
+                                context,
+                                isApple: isApple,
+                                details: e.message,
                               );
                             } catch (e) {
                               debugPrint('Unexpected error syncing health: $e');
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Unexpected error: $e'),
-                                  backgroundColor: Colors.red,
+                                  content: Text('Note: $e'),
+                                  backgroundColor: Colors.orange,
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
                             }
                           },
                     icon: const Icon(Icons.medical_services_outlined, size: 16),
-                    label: const Text('Sync Health'),
+                    label: Text(
+                      defaultTargetPlatform == TargetPlatform.iOS
+                          ? 'Sync Apple Health'
+                          : 'Sync Google Fit',
+                    ),
                   ),
                 ],
               ),

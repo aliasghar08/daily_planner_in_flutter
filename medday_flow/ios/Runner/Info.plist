@@ -32,8 +32,6 @@
 	<string>MedDay Flow reads health data to synchronize your medication tracking schedule.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>MedDay Flow logs your taken medication intakes into Apple Health.</string>
-	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
-	<string>MedDay Flow accesses health records to verify medication intakes.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -62,7 +62,16 @@ class PasskeyAuthService {
     }
   }
 
-  /// Save credential associated with Passkey login without enabling biometrics by default
+  static List<int> _applyCipher(List<int> bytes, String key) {
+    final keyBytes = utf8.encode(key);
+    final result = List<int>.filled(bytes.length, 0);
+    for (int i = 0; i < bytes.length; i++) {
+      result[i] = bytes[i] ^ keyBytes[i % keyBytes.length];
+    }
+    return result;
+  }
+
+  /// Save credential associated with Passkey login with salted obfuscation
   Future<void> savePasskeyCredential({
     required String email,
     required String password,
@@ -71,8 +80,10 @@ class PasskeyAuthService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefPasskeyEmail, email);
-      // Base64 encode for secure local caching of session credential
-      final encoded = base64Encode(utf8.encode(password));
+      // Mask password with user-specific cryptographic salt before encoding
+      final salt = 'MedDay_AuthEntropy_${email.toLowerCase().trim()}_secKey';
+      final maskedBytes = _applyCipher(utf8.encode(password), salt);
+      final encoded = 'v2:${base64Encode(maskedBytes)}';
       await prefs.setString(_prefPasskeySecret, encoded);
       if (enableBiometric) {
         await prefs.setBool(_prefPasskeyEnabled, true);
@@ -90,8 +101,17 @@ class PasskeyAuthService {
       final encoded = prefs.getString(_prefPasskeySecret);
 
       if (email != null && encoded != null) {
-        final decoded = utf8.decode(base64Decode(encoded));
-        return {'email': email, 'password': decoded};
+        if (encoded.startsWith('v2:')) {
+          final rawBase64 = encoded.substring(3);
+          final salt = 'MedDay_AuthEntropy_${email.toLowerCase().trim()}_secKey';
+          final cipherBytes = base64Decode(rawBase64);
+          final plainBytes = _applyCipher(cipherBytes, salt);
+          return {'email': email, 'password': utf8.decode(plainBytes)};
+        } else {
+          // Legacy backwards compatibility for previously saved base64 tokens
+          final decoded = utf8.decode(base64Decode(encoded));
+          return {'email': email, 'password': decoded};
+        }
       }
       return null;
     } catch (e) {

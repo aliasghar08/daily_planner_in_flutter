@@ -5,6 +5,7 @@ import 'package:medday_flow/utils/medication_model/frequency_and_dosage.dart';
 import 'package:medday_flow/utils/medication_model/medication_intake.dart';
 import 'package:medday_flow/utils/medication_model/medication_model.dart';
 import 'package:medday_flow/utils/medication_model/medication_schedule_model.dart';
+import 'package:medday_flow/services/sync/sync_manager.dart';
 import 'package:flutter/material.dart';
 
 class MedicationProvider extends ChangeNotifier {
@@ -420,8 +421,30 @@ class MedicationProvider extends ChangeNotifier {
         }
       }
       await docRef.set(intake.toMap(), SetOptions(merge: true));
+      _autoSyncIntakeToHealth(intake);
     } catch (e) {
       debugPrint('Error auto-marking missed intake: $e');
+    }
+  }
+
+  /// Automatically sync recorded intake to Apple Health / Google Fit without requiring manual sync
+  Future<void> _autoSyncIntakeToHealth(MedicationIntake intake) async {
+    // Only historical taken doses can be logged to Apple Health / Google Fit
+    if (intake.status != IntakeStatus.taken) return;
+
+    try {
+      final syncManager = SyncManager();
+      final config = await syncManager.loadConfig();
+      if (!config.healthSyncEnabled) return;
+
+      final isPermitted = await syncManager.healthService.isHealthPermissionGranted();
+      if (isPermitted) {
+        debugPrint('🩺 Auto-syncing taken dose ${intake.intakeId} to Health Platform...');
+        final result = await syncManager.syncHealthPlatform([intake]);
+        debugPrint('✅ Health auto-sync completed: ${result.message}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Health platform auto-sync background note: $e');
     }
   }
 
@@ -480,6 +503,9 @@ class MedicationProvider extends ChangeNotifier {
         final alarmId = _getNotificationId(intake.intakeId);
         await NativeAlarmHelper.cancelHybridAlarm(alarmId);
       }
+
+      // ✅ AUTOMATIC HEALTH SYNC: Instantly push the recorded intake to Apple Health / Google Fit
+      _autoSyncIntakeToHealth(updated);
     } catch (e) {
       debugPrint('ERROR saving intake to Firestore: $e');
       // Revert the optimistic local update so UI reflects the actual state

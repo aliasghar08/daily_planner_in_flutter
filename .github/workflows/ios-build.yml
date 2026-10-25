@@ -6,14 +6,18 @@ on:
 jobs:
   build-ios:
     runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: medday_flow
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -29,7 +33,7 @@ jobs:
           zip -qq -r -9 app.ipa Payload
 
       - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ios-app
-          path: build/ios/iphoneos/app.ipa
+          path: medday_flow/build/ios/iphoneos/app.ipa

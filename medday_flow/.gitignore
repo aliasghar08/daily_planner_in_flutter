@@ -14,11 +14,17 @@ migrate_working_dir/
 /fcmsender/
 
 
-# IntelliJ related
+# Visual Studio & IDE
+.vs/
+.idea/
 *.iml
 *.ipr
 *.iws
-.idea/
+
+# Build Archives
+*.ipa
+*.apk
+*.aab
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line

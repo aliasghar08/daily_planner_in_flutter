@@ -66,12 +66,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyC246wvcV72m_wB0bmlvZ-m9DTRpbVs7Tc',
-    appId: '1:777337977048:ios:b6ffdf110b4f06bb9a3fad',
+    appId: '1:777337977048:ios:bff0a97b240a49559a3fad',
     messagingSenderId: '777337977048',
     projectId: 'daily-planner-593d8',
     storageBucket: 'daily-planner-593d8.firebasestorage.app',
     androidClientId: '777337977048-j16obl6r7ejgg4gp4g6g8vbukaesu54c.apps.googleusercontent.com',
-    iosClientId: '777337977048-irs04ai9uj7jabkuvt1kv0dv4rj311bt.apps.googleusercontent.com',
-    iosBundleId: 'com.example.dailyPlanner',
+    iosClientId: '777337977048-qoq3gcapd3d1dfgn294drho2fjs50ja8.apps.googleusercontent.com',
+    iosBundleId: 'com.dartnexuslab.meddayflow',
   );
 }

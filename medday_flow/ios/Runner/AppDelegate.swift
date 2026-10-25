@@ -22,7 +22,33 @@ import HealthKit
   private var connectivityChannel: FlutterMethodChannel?
   private var shareChannel: FlutterMethodChannel?
   private var healthChannel: FlutterMethodChannel?
-  private let healthStore = HKHealthStore()
+  private var _healthStoreInstance: HKHealthStore?
+  private let healthLock = NSLock()
+
+  private func getHealthStore() -> HKHealthStore? {
+    healthLock.lock()
+    defer { healthLock.unlock() }
+    if _healthStoreInstance == nil {
+      var isAvail = false
+      let checkException = CatchObjCException {
+        isAvail = HKHealthStore.isHealthDataAvailable()
+      }
+      if checkException != nil || !isAvail {
+        return nil
+      }
+
+      var store: HKHealthStore?
+      let initException = CatchObjCException {
+        store = HKHealthStore()
+      }
+      if let ex = initException {
+        print("⚠️ HealthKit initialization exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
+        return nil
+      }
+      _healthStoreInstance = store
+    }
+    return _healthStoreInstance
+  }
 
   private let pathMonitor = NWPathMonitor()
   private let monitorQueue = DispatchQueue(label: "medday_flow.network_monitor")
@@ -199,6 +225,24 @@ import HealthKit
     healthChannel = FlutterMethodChannel(name: "daily_planner/native_health", binaryMessenger: messenger)
     healthChannel?.setMethodCallHandler { [weak self] call, result in
       self?.handleHealthCalls(call: call, result: result)
+    }
+
+    let googleAuthChannel = FlutterMethodChannel(name: "daily_planner/native_google_signin", binaryMessenger: messenger)
+    googleAuthChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "signIn":
+        result(FlutterError(
+          code: "UNSUPPORTED_ON_IOS",
+          message: "Native Google Sign-In channel is optimized for Android Google Identity. On iOS, authenticate via standard Firebase Auth or web credentials.",
+          details: nil
+        ))
+      case "signOut", "disconnect":
+        result(true)
+      case "getCurrentUser":
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
   }
 
@@ -737,119 +781,189 @@ import HealthKit
 
   // MARK: - Native Apple Health (HealthKit) Handler
 
+  private func parseDate(from string: String?) -> Date? {
+    guard let string = string, !string.isEmpty else { return nil }
+
+    // 1. Try ISO8601 with fractional seconds (Dart toIso8601String() default)
+    let fractionalFormatter = ISO8601DateFormatter()
+    fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractionalFormatter.date(from: string) {
+      return date
+    }
+
+    // 2. Try standard ISO8601
+    let standardFormatter = ISO8601DateFormatter()
+    standardFormatter.formatOptions = [.withInternetDateTime]
+    if let date = standardFormatter.date(from: string) {
+      return date
+    }
+
+    return nil
+  }
+
   private func handleHealthCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "checkAvailability":
-      DispatchQueue.main.async {
-        result(HKHealthStore.isHealthDataAvailable())
+      DispatchQueue.main.async { [weak self] in
+        var isAvail = false
+        let ex = CatchObjCException {
+          isAvail = HKHealthStore.isHealthDataAvailable()
+        }
+        if ex == nil && isAvail && self?.getHealthStore() != nil {
+          result(true)
+        } else {
+          result(false)
+        }
       }
 
     case "requestPermissions":
-      guard HKHealthStore.isHealthDataAvailable() else {
-        DispatchQueue.main.async { result(false) }
-        return
-      }
+      DispatchQueue.main.async { [weak self] in
+        guard let store = self?.getHealthStore(),
+              let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
+          result(false)
+          return
+        }
 
-      // Define the sample types safely
-      var typesToShare: Set<HKSampleType> = []
-      var typesToRead: Set<HKObjectType> = []
+        let typesToShare: Set<HKSampleType> = [mindfulType]
+        let typesToRead: Set<HKObjectType> = [mindfulType]
 
-      if let medType = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
-                       HKObjectType.categoryType(forIdentifier: .mindfulSession) {
-        typesToShare.insert(medType)
-        typesToRead.insert(medType)
-      }
-
-      self.healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { success, error in
-        DispatchQueue.main.async {
-          if let error = error {
-            result(FlutterError(code: "HEALTH_AUTH_ERROR", message: error.localizedDescription, details: nil))
-          } else {
-            result(success)
+        let reqException = CatchObjCException {
+          store.requestAuthorization(toShare: typesToShare, read: typesToRead) { success, error in
+            DispatchQueue.main.async {
+              if let error = error {
+                result(FlutterError(code: "HEALTH_AUTH_ERROR", message: error.localizedDescription, details: nil))
+              } else {
+                result(success)
+              }
+            }
           }
+        }
+
+        if let ex = reqException {
+          print("⚠️ HealthKit requestAuthorization exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
+          result(FlutterError(code: "HEALTHKIT_NOT_CONFIGURED", message: ex.reason ?? "HealthKit authorization exception", details: nil))
         }
       }
 
     case "checkPermissions":
-      guard HKHealthStore.isHealthDataAvailable() else {
-        DispatchQueue.main.async { result(false) }
-        return
-      }
+      DispatchQueue.main.async { [weak self] in
+        guard let store = self?.getHealthStore(),
+              let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
+          result(false)
+          return
+        }
 
-      guard let sampleType = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
-                             HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
-        DispatchQueue.main.async { result(false) }
-        return
-      }
+        var status: HKAuthorizationStatus = .notDetermined
+        let checkException = CatchObjCException {
+          status = store.authorizationStatus(for: mindfulType)
+        }
 
-      let status = self.healthStore.authorizationStatus(for: sampleType)
-      DispatchQueue.main.async {
+        if let ex = checkException {
+          print("⚠️ HealthKit checkPermissions exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
+          result(false)
+          return
+        }
+
         result(status == .sharingAuthorized)
       }
 
     case "saveMedicationRecord":
-      guard HKHealthStore.isHealthDataAvailable(),
-            let mindful = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
-                          HKObjectType.categoryType(forIdentifier: .mindfulSession),
+      guard let store = self.getHealthStore(),
+            let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession),
             let args = call.arguments as? [String: Any] else {
         DispatchQueue.main.async {
-          result(FlutterError(code: "INVALID_ARGS", message: "HealthKit unavailable or arguments invalid", details: nil))
+          result(FlutterError(code: "HEALTHKIT_NOT_AVAILABLE", message: "HealthKit is not available or arguments are invalid", details: nil))
         }
         return
       }
 
       let now = Date()
-      let scheduledStr = args["scheduledTime"] as? String ?? ""
+      let scheduledStr = args["scheduledTime"] as? String
       let actualStr = args["actualTime"] as? String
-      let isoFormatter = ISO8601DateFormatter()
-      let startDate: Date
-      if let actualStr = actualStr, let actualDate = isoFormatter.date(from: actualStr) {
-        startDate = actualDate
-      } else if let schedDate = isoFormatter.date(from: scheduledStr) {
-        startDate = schedDate
-      } else {
-        startDate = now
+
+      let parsedDate = parseDate(from: actualStr) ?? parseDate(from: scheduledStr) ?? now
+
+      // CRITICAL HEALTHKIT REQUIREMENT:
+      // HealthKit strictly forbids future dates for mindfulness sessions!
+      // If end date or start date is in the future, HealthKit raises _HKObjectValidationFailureException.
+      var endDate = parsedDate
+      if endDate > now {
+        endDate = now
       }
-      let endDate = startDate.addingTimeInterval(60)
+      var startDate = endDate.addingTimeInterval(-60) // 1-minute session ending at endDate
+      if startDate >= endDate {
+        startDate = endDate.addingTimeInterval(-1)
+      }
+
+      let recordId = args["recordId"] as? String ?? UUID().uuidString
+      let safeSyncId = String(recordId.prefix(99))
 
       let metadata: [String: Any] = [
-        HKMetadataKeySyncIdentifier: args["recordId"] as? String ?? UUID().uuidString,
+        "RecordId": recordId,
         "MedicationName": args["medicationName"] as? String ?? "Medication Intake",
         "Dosage": "\(args["dosage"] ?? "")",
         "DosageUnit": args["dosageUnit"] as? String ?? "",
         "Status": args["status"] as? String ?? "taken",
         "LogicalDate": args["logicalDate"] as? String ?? "",
-        "Source": "MedDay Flow"
+        "Source": "MedDay Flow",
+        HKMetadataKeySyncIdentifier: safeSyncId,
+        HKMetadataKeySyncVersion: NSNumber(value: 1)
       ]
 
-      let sample = HKCategorySample(
-        type: mindful,
-        value: HKCategoryValue.notApplicable.rawValue,
-        start: startDate,
-        end: endDate,
-        metadata: metadata
-      )
+      var sample: HKCategorySample?
+      let sampleException = CatchObjCException {
+        sample = HKCategorySample(
+          type: mindfulType,
+          value: HKCategoryValue.notApplicable.rawValue,
+          start: startDate,
+          end: endDate,
+          metadata: metadata
+        )
+      }
 
-      healthStore.save(sample) { success, error in
+      if let ex = sampleException, sample == nil {
+        print("⚠️ HealthKit HKCategorySample creation exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
         DispatchQueue.main.async {
-          if let error = error {
-            result(FlutterError(code: "HEALTHKIT_SAVE_FAILED", message: error.localizedDescription, details: nil))
-          } else {
-            result(true)
+          result(FlutterError(code: "SAMPLE_CREATION_FAILED", message: ex.reason ?? "Failed to create HealthKit sample", details: nil))
+        }
+        return
+      }
+
+      guard let sampleToSave = sample else {
+        DispatchQueue.main.async {
+          result(FlutterError(code: "SAMPLE_NIL", message: "HealthKit sample is nil", details: nil))
+        }
+        return
+      }
+
+      let saveException = CatchObjCException {
+        store.save(sampleToSave) { success, error in
+          DispatchQueue.main.async {
+            if let error = error {
+              result(FlutterError(code: "HEALTHKIT_SAVE_FAILED", message: error.localizedDescription, details: nil))
+            } else {
+              result(true)
+            }
           }
         }
       }
 
+      if let ex = saveException {
+        print("⚠️ HealthKit save exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
+        DispatchQueue.main.async {
+          result(FlutterError(code: "HEALTHKIT_EXCEPTION", message: ex.reason ?? "HealthKit save threw exception", details: nil))
+        }
+      }
+
     case "fetchMedicationRecords":
-      guard HKHealthStore.isHealthDataAvailable(),
-            let mindful = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
-                          HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
+      guard let store = self.getHealthStore(),
+            let mindfulType = HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
         DispatchQueue.main.async { result([]) }
         return
       }
 
       let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
-      let query = HKSampleQuery(sampleType: mindful, predicate: nil, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
+      let query = HKSampleQuery(sampleType: mindfulType, predicate: nil, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
         DispatchQueue.main.async {
           if let error = error {
             print("HealthKit Fetch Error: \(error.localizedDescription)")
@@ -862,7 +976,7 @@ import HealthKit
           for sample in (samples as? [HKCategorySample] ?? []) {
             let meta = sample.metadata ?? [:]
             let dict: [String: Any] = [
-              "recordId": meta[HKMetadataKeySyncIdentifier] as? String ?? sample.uuid.uuidString,
+              "recordId": meta["RecordId"] as? String ?? (meta[HKMetadataKeySyncIdentifier] as? String) ?? sample.uuid.uuidString,
               "medicationName": meta["MedicationName"] as? String ?? "Medication Intake",
               "dosage": meta["Dosage"] as? String ?? "",
               "dosageUnit": meta["DosageUnit"] as? String ?? "",
@@ -877,7 +991,14 @@ import HealthKit
         }
       }
 
-      healthStore.execute(query)
+      let queryException = CatchObjCException {
+        store.execute(query)
+      }
+
+      if let ex = queryException {
+        print("⚠️ HealthKit execute query exception: \(ex.name.rawValue) - \(ex.reason ?? "")")
+        DispatchQueue.main.async { result([]) }
+      }
 
     case "revokePermissions":
       DispatchQueue.main.async { result(true) }
