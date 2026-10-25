@@ -26,5 +26,5 @@
     "settingsSync.ignoredSettings": [],
     "gitlens.ai.model": "vscode",
     "gitlens.ai.vscode.model": "copilot:gpt-4o-mini",
-    "cmake.sourceDirectory": "/Users/aliasghar08/development/MedDay Flow Repo/daily_planner_in_flutter/medday_flow/linux"
+    "cmake.sourceDirectory": "/Users/aliasghar08/development/MedDay Flow Repo/MedDay-Flow/medday_flow/linux"
 }
