@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/utils/passkey_auth_service.dart';
-import 'package:daily_planner/screens/app_lock_screen.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/utils/passkey_auth_service.dart';
+import 'package:medday_flow/screens/app_lock_screen.dart';
 
 class AppLockWrapper extends StatefulWidget {
   final Widget child;

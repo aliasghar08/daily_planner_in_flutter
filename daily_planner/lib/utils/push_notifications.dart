@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'Alarm_helper.dart';
+import 'alarm_helper.dart';
 import 'native_permission_service.dart';
 
 /// PushNotifications service layer
@@ -327,7 +327,7 @@ class PushNotifications {
       final int notificationId = message.hashCode.abs() % 100000;
       await NativeAlarmHelper.showNow(
         id: notificationId,
-        title: message.notification?.title ?? 'Daily Planner',
+        title: message.notification?.title ?? 'Medday Flow',
         body: message.notification?.body ?? 'New notification',
       );
     } catch (e) {
@@ -374,7 +374,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (message.notification != null) {
     await NativeAlarmHelper.showNow(
       id: message.hashCode.abs() % 100000,
-      title: message.notification!.title ?? 'Daily Planner',
+      title: message.notification!.title ?? 'Medday Flow',
       body: message.notification!.body ?? 'New notification',
     );
   }

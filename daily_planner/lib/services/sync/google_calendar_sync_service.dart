@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -34,7 +34,7 @@ class SyncResult {
   }
 }
 
-/// Service handling Google Calendar API v3 synchronization for Daily Planner tasks
+/// Service handling Google Calendar API v3 synchronization for Medday Flow tasks
 class GoogleCalendarSyncService {
   static const String _calendarApiBase = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
@@ -43,7 +43,7 @@ class GoogleCalendarSyncService {
   GoogleCalendarSyncService({http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
 
-  /// Converts a Daily Planner [Task] to a Google Calendar Event JSON payload
+  /// Converts a Medday Flow [Task] to a Google Calendar Event JSON payload
   Map<String, dynamic> taskToCalendarEvent(Task task) {
     final taskDate = task.date ?? task.createdAt;
     
@@ -64,7 +64,7 @@ class GoogleCalendarSyncService {
 
     final payload = <String, dynamic>{
       'summary': task.title,
-      'description': '${task.detail}\n\n[Synced from Daily Planner]',
+      'description': '${task.detail}\n\n[Synced from Medday Flow]',
       'start': {
         'dateTime': startTime.toUtc().toIso8601String(),
         'timeZone': 'UTC',

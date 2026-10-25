@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:intl/intl.dart';
 
 // Add this enum (same as in AddTaskPage)

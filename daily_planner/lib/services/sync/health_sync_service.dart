@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
-import 'package:daily_planner/services/native_preferences_service.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/services/native_health_service.dart';
+import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
 import 'package:flutter/foundation.dart';
 
 /// Service handling Health Platform (Health Connect on Android / Apple Health on iOS) synchronization
@@ -36,7 +37,7 @@ class HealthSyncService {
       'syncedAt': DateTime.now().toUtc().toIso8601String(),
       'platform': kIsWeb ? 'Web' : (Platform.isAndroid ? 'Health Connect' : 'Apple Health'),
       'metadata': {
-        'source': 'Daily Planner',
+        'source': 'MedDay Flow',
         'frequency': intake.schedule.frequency.name,
         'instructions': intake.schedule.instructions ?? '',
       },
@@ -46,6 +47,10 @@ class HealthSyncService {
   /// Check if the current device platform supports Health Connect or Apple Health
   Future<bool> checkHealthPlatformAvailability() async {
     if (kIsWeb) return false;
+    if (Platform.isIOS) {
+      final nativeAvailable = await NativeHealthService.isAvailable();
+      if (nativeAvailable) return true;
+    }
     if (Platform.isAndroid || Platform.isIOS) {
       return true;
     }
@@ -55,15 +60,24 @@ class HealthSyncService {
   /// Checks if health permissions have been granted by user
   Future<bool> isHealthPermissionGranted() async {
     final prefs = await _getPrefs();
-    return prefs.getBool(_healthPermissionKey) ?? false;
+    final prefGranted = prefs.getBool(_healthPermissionKey) ?? false;
+    if (kIsWeb || !Platform.isIOS) return prefGranted;
+
+    final nativeGranted = await NativeHealthService.checkPermissions();
+    return nativeGranted || prefGranted;
   }
 
   /// Request health permissions from user
   Future<bool> requestHealthPermissions() async {
     try {
+      bool granted = true;
+      if (!kIsWeb && Platform.isIOS) {
+        granted = await NativeHealthService.requestPermissions();
+      }
+
       final prefs = await _getPrefs();
-      await prefs.setBool(_healthPermissionKey, true);
-      return true;
+      await prefs.setBool(_healthPermissionKey, granted);
+      return granted;
     } catch (e) {
       debugPrint('Error requesting health permissions: $e');
       return false;
@@ -72,6 +86,9 @@ class HealthSyncService {
 
   /// Revoke health permissions
   Future<void> revokeHealthPermissions() async {
+    if (!kIsWeb && Platform.isIOS) {
+      await NativeHealthService.revokePermissions();
+    }
     final prefs = await _getPrefs();
     await prefs.setBool(_healthPermissionKey, false);
   }
@@ -102,6 +119,12 @@ class HealthSyncService {
       for (final intake in intakes) {
         final record = intakeToHealthRecord(intake);
         recordsMap[intake.intakeId] = record;
+
+        // Push directly to native Apple Health via MethodChannel on iOS
+        if (!kIsWeb && Platform.isIOS) {
+          await NativeHealthService.saveMedicationRecord(record);
+        }
+
         newOrUpdatedCount++;
       }
 
@@ -122,6 +145,13 @@ class HealthSyncService {
   /// Retrieve all synced health records
   Future<List<Map<String, dynamic>>> getSyncedHealthRecords() async {
     try {
+      if (!kIsWeb && Platform.isIOS) {
+        final nativeRecords = await NativeHealthService.fetchMedicationRecords();
+        if (nativeRecords.isNotEmpty) {
+          return nativeRecords;
+        }
+      }
+
       final prefs = await _getPrefs();
       final jsonStr = prefs.getString(_healthStorageKey) ?? '[]';
       final List<dynamic> rawList = json.decode(jsonStr) as List<dynamic>? ?? [];

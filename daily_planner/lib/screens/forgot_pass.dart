@@ -11,28 +11,38 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool isLoading = false;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
 
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => isLoading = true);
+    setState(() => _isLoading = true);
 
     try {
       await FirebaseAuth.instance
           .sendPasswordResetEmail(email: _emailController.text.trim());
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Reset link sent to your email")),
       );
 
       Navigator.pop(context); 
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error: ${e.message}")),
       );
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -61,8 +71,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
               const SizedBox(height: 20),
               ElevatedButton(
-                onPressed: isLoading ? null : _resetPassword,
-                child: isLoading
+                onPressed: _isLoading ? null : _resetPassword,
+                child: _isLoading
                     ? const CircularProgressIndicator()
                     : const Text("Send Reset Link"),
               ),

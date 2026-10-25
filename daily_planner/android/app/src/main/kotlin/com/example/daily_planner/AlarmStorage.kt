@@ -30,7 +30,7 @@ data class AlarmItem(
                 val json = JSONObject(jsonStr)
                 AlarmItem(
                     id = json.getInt("id"),
-                    title = json.optString("title", "Daily Planner"),
+                    title = json.optString("title", "Medday Flow"),
                     body = json.optString("body", "You have a scheduled reminder"),
                     timeInMillis = json.getLong("timeInMillis"),
                     payload = json.optString("payload", null),

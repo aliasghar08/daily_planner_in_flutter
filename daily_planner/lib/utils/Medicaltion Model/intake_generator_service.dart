@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_manager_service.dart';
 import 'package:flutter/foundation.dart';
 
 class IntakeGeneratorService {

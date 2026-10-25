@@ -1,12 +1,12 @@
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/providers/theme_provider.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/native_permission_service.dart';
-import 'package:daily_planner/utils/passkey_auth_service.dart';
-import 'package:daily_planner/screens/sync_integrations_page.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/providers/theme_provider.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/native_permission_service.dart';
+import 'package:medday_flow/utils/passkey_auth_service.dart';
+import 'package:medday_flow/screens/sync_integrations_page.dart';
 import 'package:flutter/material.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
-import 'package:daily_planner/services/native_preferences_service.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
 import 'dart:io' show Platform;
 
 class SettingsPage extends StatefulWidget {
@@ -60,11 +60,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _checkPasskeySupport() async {
     final supported = await PasskeyAuthService().isPasskeySupported();
-    final hasKey = await PasskeyAuthService().hasPasskeyRegistered();
+    final isEnabled = await PasskeyAuthService().isPasskeyEnabled();
     if (mounted) {
       setState(() {
         _passkeySupported = supported;
-        _passkeyEnabled = hasKey;
+        _passkeyEnabled = isEnabled;
       });
     }
   }
@@ -646,11 +646,12 @@ class _SettingsPageState extends State<SettingsPage> {
                               }
                             }
                           } else {
+                            await PasskeyAuthService().setPasskeyEnabled(false);
                             await PasskeyAuthService().clearPasskey();
                             if (mounted) setState(() => _passkeyEnabled = false);
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Passkey credentials cleared.')),
+                                const SnackBar(content: Text('Biometric authentication disabled.')),
                               );
                             }
                           }

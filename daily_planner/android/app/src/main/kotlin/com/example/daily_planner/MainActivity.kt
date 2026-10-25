@@ -122,7 +122,7 @@ class MainActivity : FlutterFragmentActivity() {
             when (call.method) {
                 "scheduleNativeAlarm", "scheduleAlarm" -> {
                     val id = call.argument<Int>("id") ?: 0
-                    val title = call.argument<String>("title") ?: "Daily Planner"
+                    val title = call.argument<String>("title") ?: "Medday Flow"
                     val body = call.argument<String>("body") ?: "You have a scheduled reminder"
                     val time = call.argument<Long>("time")
                         ?: call.argument<Long>("timeInMillis")
@@ -148,7 +148,7 @@ class MainActivity : FlutterFragmentActivity() {
 
                 "showNotification", "showNow" -> {
                     val id = call.argument<Int>("id") ?: ((System.currentTimeMillis() % 100000).toInt())
-                    val title = call.argument<String>("title") ?: "Daily Planner"
+                    val title = call.argument<String>("title") ?: "Medday Flow"
                     val body = call.argument<String>("body") ?: "Notification"
                     val payload = call.argument<String>("payload")
 

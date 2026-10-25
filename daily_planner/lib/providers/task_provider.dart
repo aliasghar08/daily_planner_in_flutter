@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/screens/home.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/screens/home.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 

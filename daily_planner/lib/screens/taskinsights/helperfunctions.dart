@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/widgets/charts/custom_charts.dart';
+import 'package:medday_flow/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -72,7 +72,7 @@ class HelperFunctions {
 
     final totalMinutes = stamps.fold(
       0,
-      (sum, stamp) => sum + stamp.hour * 60 + stamp.minute,
+      (acc, stamp) => acc + stamp.hour * 60 + stamp.minute,
     );
     final avgMinutes = totalMinutes ~/ stamps.length;
     final avgTime = TimeOfDay(hour: avgMinutes ~/ 60, minute: avgMinutes % 60);
@@ -429,7 +429,7 @@ class HelperFunctions {
     final timeCounts = <TimeOfDay, int>{};
     for (final time in times) {
       final timeOfDay = TimeOfDay.fromDateTime(time);
-      timeCounts.update(timeOfDay, (count) => count + 1, ifAbsent: () => 1);
+      timeCounts.update(timeOfDay, (c) => c + 1, ifAbsent: () => 1);
     }
 
     final maxCount = timeCounts.values.reduce(max);

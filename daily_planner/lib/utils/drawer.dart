@@ -1,12 +1,12 @@
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/screens/login.dart';
-import 'package:daily_planner/screens/medication_list_page.dart';
-import 'package:daily_planner/screens/settings.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
-import 'package:daily_planner/utils/performance_page/total_tasks.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/screens/login.dart';
+import 'package:medday_flow/screens/medication_list_page.dart';
+import 'package:medday_flow/screens/settings.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/performance_page/daily_tasks.dart';
+import 'package:medday_flow/utils/performance_page/total_tasks.dart';
 import 'package:flutter/material.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
 import 'dart:io' show Platform;
 
 class MyDrawer extends StatefulWidget {

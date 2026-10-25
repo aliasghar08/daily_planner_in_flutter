@@ -1,16 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/providers/task_provider.dart';
-import 'package:daily_planner/screens/itemdetailedit.dart';
-import 'package:daily_planner/screens/itemdetailpage.dart';
-import 'package:daily_planner/screens/taskInsights.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/providers/task_provider.dart';
+import 'package:medday_flow/screens/itemdetailedit.dart';
+import 'package:medday_flow/screens/itemdetailpage.dart';
+import 'package:medday_flow/screens/task_insights.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
-import 'package:daily_planner/services/native_share_service.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
+import 'package:medday_flow/services/native_share_service.dart';
 
 class ItemWidget extends StatefulWidget {
   final Task item;
@@ -106,6 +106,8 @@ class _ItemWidgetState extends State<ItemWidget> {
         return;
       }
     }
+
+    if (!mounted) return;
 
     final previousStatus = _isChecked;
 

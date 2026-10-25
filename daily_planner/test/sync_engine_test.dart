@@ -1,13 +1,13 @@
-import 'package:daily_planner/models/sync_config_model.dart';
-import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
-import 'package:daily_planner/services/sync/google_tasks_sync_service.dart';
-import 'package:daily_planner/services/sync/health_sync_service.dart';
-import 'package:daily_planner/services/sync/sync_manager.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/models/sync_config_model.dart';
+import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
+import 'package:medday_flow/services/sync/google_tasks_sync_service.dart';
+import 'package:medday_flow/services/sync/health_sync_service.dart';
+import 'package:medday_flow/services/sync/sync_manager.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,7 +49,7 @@ void main() {
 
       expect(event['summary'], equals('Project Standup'));
       expect(event['description'], contains('Discuss Sprint Goals'));
-      expect(event['description'], contains('[Synced from Daily Planner]'));
+      expect(event['description'], contains('[Synced from Medday Flow]'));
       expect(event['start']['dateTime'], isNotNull);
       expect(event['end']['dateTime'], isNotNull);
       expect(event['extendedProperties']['private']['dailyPlannerTaskId'], equals('task_123'));
@@ -207,6 +207,52 @@ void main() {
       expect(record['actualTime'], equals(actualTime.toUtc().toIso8601String()));
       expect(record['logicalDate'], equals(intake.logicalDate.toIso8601String()));
       expect(record['metadata']['instructions'], equals('Take with water after breakfast'));
+    });
+
+    test('Health permissions lifecycle and sync operations operate correctly', () async {
+      // 1. Initial state (unauthorized)
+      await healthService.revokeHealthPermissions();
+      final hasPermissionInitially = await healthService.isHealthPermissionGranted();
+      expect(hasPermissionInitially, isFalse);
+
+      // 2. Request permissions
+      final granted = await healthService.requestHealthPermissions();
+      expect(granted, isTrue);
+      expect(await healthService.isHealthPermissionGranted(), isTrue);
+
+      // 3. Sync medication intakes
+      final med = Medication(
+        medicationId: 'med_test',
+        name: 'Aspirin',
+        dosage: 81.0,
+        unit: DosageUnit.mg,
+      );
+      final schedule = MedicationSchedule(
+        scheduleId: 'sched_test',
+        medication: med,
+        startDate: DateTime(2026, 8, 1),
+        frequency: MedicationFrequency.daily,
+        timesPerDay: [const TimeOfDay(hour: 9, minute: 0)],
+      );
+      final intake = MedicationIntake(
+        intakeId: 'intake_test_1',
+        schedule: schedule,
+        scheduledTime: DateTime(2026, 8, 8, 9, 0),
+        status: IntakeStatus.taken,
+      );
+
+      final syncResult = await healthService.syncMedicationIntakes(intakes: [intake]);
+      expect(syncResult.isSuccess, isTrue);
+      expect(syncResult.itemsSynced, equals(1));
+
+      // 4. Retrieve synced records
+      final records = await healthService.getSyncedHealthRecords();
+      expect(records.isNotEmpty, isTrue);
+      expect(records.any((r) => r['medicationName'] == 'Aspirin'), isTrue);
+
+      // 5. Revoke permissions
+      await healthService.revokeHealthPermissions();
+      expect(await healthService.isHealthPermissionGranted(), isFalse);
     });
   });
 

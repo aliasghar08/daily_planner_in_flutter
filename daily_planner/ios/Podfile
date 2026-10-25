@@ -39,5 +39,12 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      # Fix 'cstdint' file not found in leveldb-library during Archive
+      config.build_settings['ENABLE_MODULE_VERIFIER'] = 'NO'
+      
+      # Silence double-quoted include warnings in framework headers
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+    end
   end
 end

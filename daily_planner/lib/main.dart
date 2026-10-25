@@ -1,28 +1,28 @@
 import 'dart:convert';
-import 'package:daily_planner/screens/medication_detail_page.dart';
+import 'package:medday_flow/screens/medication_detail_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/providers/medication_provider.dart';
-import 'package:daily_planner/providers/task_provider.dart';
-import 'package:daily_planner/providers/theme_provider.dart';
-import 'package:daily_planner/providers/settings_provider.dart';
-import 'package:daily_planner/providers/sync_provider.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/native_permission_service.dart';
-import 'package:daily_planner/utils/push_notifications.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/providers/medication_provider.dart';
+import 'package:medday_flow/providers/task_provider.dart';
+import 'package:medday_flow/providers/theme_provider.dart';
+import 'package:medday_flow/providers/settings_provider.dart';
+import 'package:medday_flow/providers/sync_provider.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/native_permission_service.dart';
+import 'package:medday_flow/utils/push_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:daily_planner/screens/home.dart';
-import 'package:daily_planner/screens/login.dart';
-import 'package:daily_planner/screens/changePass.dart';
-import 'package:daily_planner/screens/forgotPass.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
-import 'package:daily_planner/utils/app_theme.dart';
-import 'package:daily_planner/utils/reset_task.dart';
-import 'package:daily_planner/widgets/app_lock_wrapper.dart';
+import 'package:medday_flow/screens/home.dart';
+import 'package:medday_flow/screens/login.dart';
+import 'package:medday_flow/screens/change_pass.dart';
+import 'package:medday_flow/screens/forgot_pass.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
+import 'package:medday_flow/utils/app_theme.dart';
+import 'package:medday_flow/utils/reset_task.dart';
+import 'package:medday_flow/widgets/app_lock_wrapper.dart';
 import 'firebase_options.dart';
 
 // Global navigator key for notifications
@@ -40,7 +40,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (message.notification != null) {
     await NativeAlarmHelper.showNow(
       id: message.hashCode.abs() % 100000,
-      title: message.notification!.title ?? 'Daily Planner',
+      title: message.notification!.title ?? 'MedDay Flow',
       body: message.notification!.body ?? 'New notification',
     );
   }
@@ -183,7 +183,7 @@ Future<void> _initializeFCM() async {
 
       if (message.notification != null) {
         _showNotification(
-          title: message.notification!.title ?? 'Daily Planner',
+          title: message.notification!.title ?? 'Medday Flow',
           body: message.notification!.body ?? 'New notification',
         );
       }
@@ -305,7 +305,7 @@ class _MyAppBody extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: "Daily Planner",
+            title: "MedDay Flow",
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,

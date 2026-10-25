@@ -1,4 +1,4 @@
-import 'package:daily_planner/services/native_preferences_service.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
 import 'package:flutter/material.dart';
 
 class ThemeProvider extends ChangeNotifier {

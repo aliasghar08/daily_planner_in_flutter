@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
 import 'package:flutter/foundation.dart';
 
 @immutable

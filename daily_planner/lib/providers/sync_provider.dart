@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'package:daily_planner/models/sync_config_model.dart';
-import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
-import 'package:daily_planner/services/sync/sync_manager.dart';
-import 'package:daily_planner/services/native_connectivity_service.dart';
-import 'package:daily_planner/services/native_google_sign_in.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/models/sync_config_model.dart';
+import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
+import 'package:medday_flow/services/sync/sync_manager.dart';
+import 'package:medday_flow/services/native_connectivity_service.dart';
+import 'package:medday_flow/services/native_google_sign_in.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 

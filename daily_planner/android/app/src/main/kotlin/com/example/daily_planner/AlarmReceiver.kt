@@ -127,7 +127,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         createNotificationChannel(context)
 
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Daily Planner Reminder"
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Medday Flow Reminder"
         val body = intent.getStringExtra(EXTRA_BODY) ?: "You have a scheduled reminder!"
         val payload = intent.getStringExtra(EXTRA_PAYLOAD)
 
@@ -225,7 +225,7 @@ class AlarmReceiver : BroadcastReceiver() {
     private fun handleSnooze(context: Context, intent: Intent, id: Int) {
         if (id <= 0) return
 
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Daily Planner Reminder"
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: "Medday Flow Reminder"
         val body = intent.getStringExtra(EXTRA_BODY) ?: "Reminder"
         val payload = intent.getStringExtra(EXTRA_PAYLOAD)
 

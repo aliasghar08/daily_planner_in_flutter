@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Medday Flow</string>
+	<string>MedDay Flow</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Medday Flow</string>
+	<string>MedDay Flow</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,7 +27,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Medday Flow uses Face ID to securely unlock the app and protect your personal data.</string>
+	<string>MedDay Flow uses Face ID to securely unlock the app and protect your personal data.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>MedDay Flow reads health data to synchronize your medication tracking schedule.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>MedDay Flow logs your taken medication intakes into Apple Health.</string>
+	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
+	<string>MedDay Flow accesses health records to verify medication intakes.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

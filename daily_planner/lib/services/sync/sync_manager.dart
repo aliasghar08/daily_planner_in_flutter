@@ -1,14 +1,14 @@
 import 'dart:convert';
-import 'package:daily_planner/models/sync_config_model.dart';
-import 'package:daily_planner/services/native_preferences_service.dart';
-import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
-import 'package:daily_planner/services/sync/google_tasks_sync_service.dart';
-import 'package:daily_planner/services/sync/health_sync_service.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/models/sync_config_model.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
+import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
+import 'package:medday_flow/services/sync/google_tasks_sync_service.dart';
+import 'package:medday_flow/services/sync/health_sync_service.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:flutter/foundation.dart';
 
-/// Master orchestrator for Daily Planner integrations & data synchronization
+/// Master orchestrator for Medday Flow integrations & data synchronization
 class SyncManager {
   static const String _configKey = 'daily_planner_sync_config';
   static const String _logsKey = 'daily_planner_sync_logs';

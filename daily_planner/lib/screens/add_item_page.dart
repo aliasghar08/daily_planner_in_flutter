@@ -1,8 +1,8 @@
-import 'package:daily_planner/utils/Alarm_helper.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:intl/intl.dart';
 
 enum TaskType { oneTime, daily, weekly, monthly }
@@ -169,6 +169,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     );
 
     if (pickedDate == null) return;
+    if (!mounted) return;
 
     final pickedTime = await showTimePicker(
       context: context,
@@ -668,12 +669,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
       lastDate: taskDate ?? DateTime(2100),
     );
     if (pickedDate == null) return;
+    if (!mounted) return;
 
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
     if (pickedTime == null) return;
+    if (!mounted) return;
 
     final newNotificationTime = DateTime(
       pickedDate.year,

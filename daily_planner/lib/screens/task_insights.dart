@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/widgets/charts/custom_charts.dart';
+import 'package:medday_flow/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:math';
 
@@ -12,7 +12,7 @@ class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key, required this.task});
 
   @override
-  _AnalyticsPageState createState() => _AnalyticsPageState();
+  State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
@@ -424,35 +424,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  String _getNextOccurrenceText(TimeOfDay time) {
-    final now = DateTime.now();
-    DateTime next = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
-
-    if (next.isBefore(now)) {
-      next = next.add(const Duration(days: 1));
-    }
-
-    return DateFormat('EEEE, MMMM d, y').format(next);
-  }
-
-  String _formatFullDateWithDay(DateTime date, TimeOfDay time) {
-    // Create a DateTime object using the current date and the notification time
-    final dateTime = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time.hour,
-      time.minute,
-    );
-
-    return DateFormat('EEEE, MMMM d, y').format(dateTime);
-  }
 
   Widget _buildTimeDistributionChart(List<TimeOfDay> times) {
     if (times.isEmpty) return const SizedBox.shrink();
@@ -751,35 +722,6 @@ Widget _buildOneTimeTaskAnalytics(
   );
 }
 
-// Helper method to safely build notification times list
-List<Widget> _buildNotificationTimesListforOneTimeTask(BuildContext context, dynamic notificationTimes) {
-  try {
-    final times = _parseNotificationTimes(notificationTimes);
-    if (times.isEmpty) {
-      return [const Text("No notification times", style: TextStyle(color: Colors.grey))];
-    }
-    
-    return times.map((time) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Text(
-          _formatTimeOfDay(context, time as TimeOfDay),
-          style: const TextStyle(
-            fontSize: 14, // Match your existing style
-          ),
-        ),
-      );
-    }).toList();
-  } catch (e) {
-    // Fallback if there's any parsing error
-    return [
-      const Text(
-        "Error displaying times",
-        style: TextStyle(color: Colors.red),
-      )
-    ];
-  }
-}
 
 // Safe time formatting method
 String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
@@ -1266,7 +1208,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
 
     final totalMinutes = stamps.fold(
       0,
-      (sum, stamp) => sum + stamp.hour * 60 + stamp.minute,
+      (acc, stamp) => acc + stamp.hour * 60 + stamp.minute,
     );
     final avgMinutes = totalMinutes ~/ stamps.length;
     final avgTime = TimeOfDay(hour: avgMinutes ~/ 60, minute: avgMinutes % 60);
@@ -1316,7 +1258,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
     final timeCounts = <TimeOfDay, int>{};
     for (final time in times) {
       final timeOfDay = TimeOfDay.fromDateTime(time);
-      timeCounts.update(timeOfDay, (count) => count + 1, ifAbsent: () => 1);
+      timeCounts.update(timeOfDay, (c) => c + 1, ifAbsent: () => 1);
     }
 
     // Handle ties by choosing the earliest time
@@ -1334,19 +1276,6 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
           );
 
     return mostCommonTimes.first;
-  }
-
-  String _analyzeTimeDistribution(List<TimeOfDay> times) {
-    final morning = times.where((t) => t.hour >= 6 && t.hour < 12).length;
-    final afternoon = times.where((t) => t.hour >= 12 && t.hour < 18).length;
-    final evening = times.where((t) => t.hour >= 18 && t.hour < 24).length;
-    final night = times.where((t) => t.hour >= 0 && t.hour < 6).length;
-
-    final total = times.length.toDouble();
-    return 'Morning ${(morning / total * 100).round()}%, '
-        'Afternoon ${(afternoon / total * 100).round()}%, '
-        'Evening ${(evening / total * 100).round()}%, '
-        'Night ${(night / total * 100).round()}%';
   }
 
   String _findMostActiveDay(List<DateTime> stamps) {
@@ -1423,23 +1352,6 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
     return (years.length / taskAge) * 100;
   }
 
-  // String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
-  //   final now = DateTime.now();
-  //   final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
-  //   return DateFormat.jm().format(dt);
-  // }
-
-  String _formatNotificationTimes(BuildContext context, List<DateTime> times) {
-    if (times.isEmpty) return 'None';
-
-    final formattedTimes = times
-        .map((time) => DateFormat.jm().format(time))
-        .toSet() // Remove duplicates
-        .toList()
-        .join(', ');
-
-    return formattedTimes;
-  }
 
   Widget _buildAnalyticsCard({
     required String title,
@@ -1499,7 +1411,7 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
   }
 
   Widget _buildPendingNotificationsChart(List<DateTime> notificationTimes) {
-    print(notificationTimes);
+    debugPrint(notificationTimes.toString());
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -1601,23 +1513,5 @@ String _formatTimeOfDay(BuildContext context, TimeOfDay time) {
         Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
-  }
-
-  DateTime _getNextOccurrence(DateTime notificationTime) {
-    final now = DateTime.now();
-    final time = TimeOfDay.fromDateTime(notificationTime);
-    DateTime next = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
-
-    if (next.isBefore(now)) {
-      next = next.add(const Duration(days: 1));
-    }
-
-    return next;
   }
 }

@@ -1,5 +1,5 @@
-// import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
-// import 'package:daily_planner/utils/performance_page/total_tasks.dart';
+// import 'package:medday_flow/utils/performance_page/daily_tasks.dart';
+// import 'package:medday_flow/utils/performance_page/total_tasks.dart';
 // import 'package:flutter/material.dart';
 
 // class AdvancedPerformancePage extends StatelessWidget {
@@ -74,7 +74,7 @@
 //   }
 // }
 
-import 'package:daily_planner/utils/performance_page/daily_tasks.dart';
+import 'package:medday_flow/utils/performance_page/daily_tasks.dart';
 import 'package:flutter/material.dart';
 
 class AdvancedPerformancePage extends StatelessWidget {

@@ -1,10 +1,10 @@
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/providers/medication_provider.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/providers/medication_provider.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
 
 class AddMedicationPage extends StatefulWidget {
   final Medication? existingMedication;
@@ -414,12 +414,7 @@ class _AddMedicationPageState extends State<AddMedicationPage> {
   }
 
   Color _getTextColor(Color backgroundColor) {
-    final luminance =
-        (0.299 * backgroundColor.red +
-            0.587 * backgroundColor.green +
-            0.114 * backgroundColor.blue) /
-        255;
-    return luminance > 0.5 ? Colors.black : Colors.white;
+    return backgroundColor.computeLuminance() > 0.5 ? Colors.black : Colors.white;
   }
 
   Widget _buildFrequencySection() {

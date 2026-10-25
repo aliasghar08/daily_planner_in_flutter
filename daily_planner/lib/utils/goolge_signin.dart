@@ -1,4 +1,4 @@
-import 'package:daily_planner/services/native_google_sign_in.dart';
+import 'package:medday_flow/services/native_google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 

@@ -1,8 +1,8 @@
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_manager_service.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_manager_service.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,6 +34,38 @@ void main() {
       // 08:00 AM on Aug 8 -> Logical day Aug 8
       final t6 = DateTime(2026, 8, 8, 8, 0);
       expect(MedicationIntake.getLogicalDate(t6), DateTime(2026, 8, 8));
+    });
+
+    test('Exhaustive Circadian Boundary & Rollover Edge Cases (Month, Year, Leap Year)', () {
+      // 1. Midnight & Exact Second Edge Cases
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 5, 10, 23, 59, 59)), DateTime(2026, 5, 10));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 5, 11, 0, 0, 0)), DateTime(2026, 5, 10));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 5, 11, 3, 59, 59)), DateTime(2026, 5, 10));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 5, 11, 4, 0, 0)), DateTime(2026, 5, 11));
+
+      // 2. Month Boundary: Aug 31 11:59 PM -> Sep 1 12:00 AM -> Sep 1 4:00 AM
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 8, 31, 23, 59)), DateTime(2026, 8, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 9, 1, 0, 0)), DateTime(2026, 8, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 9, 1, 3, 59)), DateTime(2026, 8, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 9, 1, 4, 0)), DateTime(2026, 9, 1));
+
+      // 3. Year Boundary: Dec 31 11:59 PM -> Jan 1 12:00 AM -> Jan 1 4:00 AM
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 12, 31, 23, 59)), DateTime(2026, 12, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2027, 1, 1, 0, 0)), DateTime(2026, 12, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2027, 1, 1, 3, 59)), DateTime(2026, 12, 31));
+      expect(MedicationIntake.getLogicalDate(DateTime(2027, 1, 1, 4, 0)), DateTime(2027, 1, 1));
+
+      // 4. Leap Year Boundary: Feb 28 11:59 PM -> Feb 29 12:00 AM (Leap Year 2028)
+      expect(MedicationIntake.getLogicalDate(DateTime(2028, 2, 28, 23, 59)), DateTime(2028, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2028, 2, 29, 0, 0)), DateTime(2028, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2028, 2, 29, 3, 59)), DateTime(2028, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2028, 2, 29, 4, 0)), DateTime(2028, 2, 29));
+
+      // 5. Non-Leap Year Boundary: Feb 28 11:59 PM -> Mar 1 12:00 AM (2026)
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 2, 28, 23, 59)), DateTime(2026, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 3, 1, 0, 0)), DateTime(2026, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 3, 1, 3, 59)), DateTime(2026, 2, 28));
+      expect(MedicationIntake.getLogicalDate(DateTime(2026, 3, 1, 4, 0)), DateTime(2026, 3, 1));
     });
 
     test('isForLogicalDate matches correctly across midnight', () {

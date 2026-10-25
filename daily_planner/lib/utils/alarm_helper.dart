@@ -3,8 +3,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:daily_planner/services/native_connectivity_service.dart';
-import 'package:daily_planner/services/native_timezone_service.dart';
+import 'package:medday_flow/services/native_connectivity_service.dart';
+import 'package:medday_flow/services/native_timezone_service.dart';
 import 'native_permission_service.dart';
 
 /// NativeAlarmHelper
@@ -404,40 +404,40 @@ class NativeAlarmHelper {
       oemTitle = 'Infinix / Tecno (Transsion) Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
-          '2. In Phone Master, turn ON "Auto-start" for Daily Planner.\n'
-          '3. Disable "App Freeze" / Power Save restrictions for Daily Planner.';
+          '2. In Phone Master, turn ON "Auto-start" for Medday Flow.\n'
+          '3. Disable "App Freeze" / Power Save restrictions for Medday Flow.';
     } else if (manufacturer.contains('xiaomi') || manufacturer.contains('redmi') || manufacturer.contains('poco')) {
       oemTitle = 'Xiaomi / MIUI / HyperOS Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
-          '1. Tap "Open Auto-Start" below and turn ON "Autostart" for Daily Planner.\n'
+          '1. Tap "Open Auto-Start" below and turn ON "Autostart" for Medday Flow.\n'
           '2. In App Info -> Battery saver, select "No restrictions".\n'
           '3. Under Other Permissions, allow "Show on Lock screen".';
     } else if (manufacturer.contains('oppo') || manufacturer.contains('realme')) {
       oemTitle = 'Oppo / Realme (ColorOS) Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
-          '2. Enable "Auto-launch" for Daily Planner.\n'
+          '2. Enable "Auto-launch" for Medday Flow.\n'
           '3. Under Battery -> App Battery Management, enable "Allow background activity".';
     } else if (manufacturer.contains('vivo') || manufacturer.contains('iqoo')) {
       oemTitle = 'Vivo / iQOO (FuntouchOS) Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
-          '1. Tap "Open Auto-Start" below and enable Daily Planner.\n'
+          '1. Tap "Open Auto-Start" below and enable Medday Flow.\n'
           '2. In Settings -> Battery, enable "High background power consumption".';
     } else if (manufacturer.contains('huawei') || manufacturer.contains('honor')) {
       oemTitle = 'Huawei / Honor Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
           '1. Tap "Open Auto-Start" below.\n'
-          '2. Set Daily Planner launch to "Manage manually".\n'
+          '2. Set Medday Flow launch to "Manage manually".\n'
           '3. Turn ON Auto-launch, Secondary launch, and Run in background.';
     } else if (manufacturer.contains('samsung')) {
       oemTitle = 'Samsung OneUI Setup';
       oemGuide = 'To ensure alarms ring when your phone is locked or after reboot:\n\n'
-          '1. In Settings -> Battery -> Background usage limits, ensure Daily Planner is NOT in "Sleeping apps" or "Deep sleeping apps".\n'
+          '1. In Settings -> Battery -> Background usage limits, ensure Medday Flow is NOT in "Sleeping apps" or "Deep sleeping apps".\n'
           '2. Tap "Battery Settings" below.';
     } else {
       oemTitle = 'Alarm Reliability Settings';
       oemGuide = 'To ensure notifications & alarms ring reliably even when the app is closed or after restarting:\n\n'
-          '1. Disable battery optimization for Daily Planner.\n'
+          '1. Disable battery optimization for Medday Flow.\n'
           '2. Ensure exact alarm permissions are granted.';
     }
 

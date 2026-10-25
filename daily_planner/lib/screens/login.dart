@@ -1,13 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/screens/forgotPass.dart';
-import 'package:daily_planner/screens/home.dart';
-import 'package:daily_planner/screens/signup.dart';
-import 'package:daily_planner/services/native_google_sign_in.dart';
-import 'package:daily_planner/utils/passkey_auth_service.dart';
+import 'package:medday_flow/screens/forgot_pass.dart';
+import 'package:medday_flow/screens/home.dart';
+import 'package:medday_flow/screens/signup.dart';
+import 'package:medday_flow/services/native_google_sign_in.dart';
+import 'package:medday_flow/utils/passkey_auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:daily_planner/services/native_preferences_service.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -50,7 +50,8 @@ class _LoginPageState extends State<LoginPage> {
       final isEnabled = await _passkeyAuthService.isPasskeyEnabled();
       if (mounted) {
         setState(() {
-          _isPasskeyAvailable = isSupported && (hasCreds || isEnabled);
+          // Biometric login is ONLY offered if supported, credentials exist, AND explicitly turned on in Settings
+          _isPasskeyAvailable = isSupported && hasCreds && isEnabled;
         });
       }
     } catch (e) {
@@ -63,7 +64,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isPasskeyLoading = true);
     try {
       final authenticated = await _passkeyAuthService.verifyWithPasskey(
-        reason: 'Verify with Passkey to sign in to Daily Planner',
+        reason: 'Verify with Passkey to sign in to Medday Flow',
       );
 
       if (!mounted) return;
@@ -256,7 +257,7 @@ class _LoginPageState extends State<LoginPage> {
           content: Text('An unexpected error occurred. Please try again.'),
         ),
       );
-      print('Unexpected error during login: $e');
+      debugPrint('Unexpected error during login: $e');
     }
   }
 

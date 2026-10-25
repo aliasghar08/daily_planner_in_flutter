@@ -1,7 +1,7 @@
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
 
 class MedicationManager {
   final Map<String, Medication> _medications = {};

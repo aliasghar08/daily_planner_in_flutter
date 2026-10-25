@@ -1,9 +1,10 @@
-import 'package:daily_planner/models/sync_config_model.dart';
-import 'package:daily_planner/providers/medication_provider.dart';
-import 'package:daily_planner/providers/sync_provider.dart';
-import 'package:daily_planner/providers/task_provider.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
+import 'package:medday_flow/models/sync_config_model.dart';
+import 'package:medday_flow/providers/medication_provider.dart';
+import 'package:medday_flow/providers/sync_provider.dart';
+import 'package:medday_flow/providers/task_provider.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 class SyncIntegrationsPage extends StatefulWidget {
@@ -512,10 +513,49 @@ class _SyncIntegrationsPageState extends State<SyncIntegrationsPage> {
                     onPressed: syncProvider.healthStatus == SyncStatus.syncing
                         ? null
                         : () async {
-                            final res = await syncProvider.syncHealth(allIntakes);
-                            if (context.mounted) {
+                            try {
+                              final res = await syncProvider.syncHealth(allIntakes);
+                              if (!context.mounted) return;
+                              if (res.isSuccess) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(res.message.isNotEmpty ? res.message : 'Apple Health synced successfully!'),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              } else {
+                                final isPermissionError = res.message.toLowerCase().contains('permission');
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isPermissionError
+                                          ? 'Health permissions not granted. Enable them in iOS Settings.'
+                                          : res.message,
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            } on PlatformException catch (e) {
+                              debugPrint('HealthKit sync platform error: ${e.message}');
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(res.message), behavior: SnackBarBehavior.floating),
+                                SnackBar(
+                                  content: Text('Sync failed: ${e.message}'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            } catch (e) {
+                              debugPrint('Unexpected error syncing health: $e');
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Unexpected error: $e'),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
                               );
                             }
                           },

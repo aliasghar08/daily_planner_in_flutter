@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/services/native_connectivity_service.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -291,158 +290,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     }
   }
 
-  // ✅ UPDATED: Trigger test alarm based on notification type
-  Future<void> _triggerTestAlarm(int seconds) async {
-    try {
-      final scheduledTime = DateTime.now().add(Duration(seconds: seconds));
-
-      if (!_nativeAlarmInitialized) {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text('Alarm system not initialized yet. Please wait...'),
-          ),
-        );
-        return;
-      }
-
-      // Get connectivity status for user feedback
-      final isOnline = await NativeConnectivityService.isConnected;
-
-      // Prepare payload with recurrence info
-      final payload = {
-        'taskId': widget.task.docId,
-        'type': 'task_reminder',
-        'taskTitle': widget.task.title,
-        'dueDate': widget.task.date?.toIso8601String(),
-        'notificationType': _notificationRecurrence?.name ?? 'none',
-      };
-
-      // Add recurrence info if applicable
-      if (_notificationRecurrence != NotificationRecurrence.none) {
-        payload['recurrence'] = _notificationRecurrence!.name;
-        if (_recurrenceTime != null) {
-          payload['recurrenceTime'] = {
-            'hour': _recurrenceTime!.hour,
-            'minute': _recurrenceTime!.minute,
-          } as String?;
-        }
-        if (_selectedDays != null && _selectedDays!.isNotEmpty) {
-          payload['selectedDays'] = _selectedDays as String?;
-        }
-      }
-
-      await NativeAlarmHelper.scheduleHybridAlarm(
-        id: _generateAlarmId(widget.task.docId!, scheduledTime),
-        title: "🚨 TEST ALARM: ${widget.task.title}",
-        body: _getTestAlarmBody(),
-        dateTime: scheduledTime,
-        payload: payload,
-      );
-
-      // Show specific feedback based on notification type
-      final notificationTypeText = _notificationRecurrence != NotificationRecurrence.none
-          ? "Recurring (${_notificationRecurrence!.name})"
-          : "Single";
-
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(
-            "✅ $notificationTypeText test alarm scheduled for $seconds seconds!\n"
-            "• Native Android Alarm (most reliable)\n"
-            "• ${isOnline ? 'Online - push capable' : 'Offline - local only'}",
-          ),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-
-      debugPrint('Test alarm scheduled for: $scheduledTime');
-      debugPrint('Notification type: $notificationTypeText');
-    } catch (e) {
-      debugPrint('Error in test alarm: $e');
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text("❌ Failed to schedule test alarm: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // ✅ NEW: Get appropriate body text for test alarm
-  String _getTestAlarmBody() {
-    if (_notificationRecurrence != NotificationRecurrence.none) {
-      return "This is a test for ${_getRecurrenceDescription()}";
-    }
-    return "This is a test alarm - Tap to view task details";
-  }
-
-  int _generateAlarmId(String taskId, DateTime time) {
-    return (taskId + time.millisecondsSinceEpoch.toString()).hashCode.abs() %
-        1000000;
-  }
-
-  Future<void> _cancelAllNotifications() async {
-    try {
-      if (_nativeAlarmInitialized) {
-        // Cancel all potential alarms for this task
-        await NativeAlarmHelper.cancelAlarmsForTask(widget.task.docId!);
-
-        // Also cancel legacy single-alarm ID
-        await NativeAlarmHelper.cancelAlarmById(
-          (widget.task.docId.hashCode & 0x7FFFFFFF)
-        );
-
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text("All scheduled alarms canceled for this task"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text("Alarm system not initialized"),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error cancelling alarms: $e');
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text("Failed to cancel alarms: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  // ✅ UPDATED: Test immediate notification
-  Future<void> _testImmediateNotification() async {
-    try {
-      await NativeAlarmHelper.showNow(
-        id: _generateAlarmId(widget.task.docId!, DateTime.now()),
-        title: "🔔 TEST: ${widget.task.title}",
-        body: _getRecurrenceDescription(),
-      );
-
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text("✅ Test notification shown for ${_getRecurrenceDescription()}"),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error showing immediate notification: $e');
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text("❌ Failed to show test notification: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
   Future<void> _toggleCompletion(bool value) async {
     if (!value) {
@@ -478,7 +325,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     final nowStamp = Timestamp.fromDate(now.toUtc());
 
     final currentStamps = List<Timestamp>.from(
-      widget.task.completionStamps ?? [],
+      widget.task.completionStamps.map((dt) => Timestamp.fromDate(dt)),
     );
 
     if (value) {
@@ -508,6 +355,7 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
             ..sort((a, b) => b.compareTo(a));
     });
 
+    if (!mounted) return;
     Navigator.pop(context);
 
     final updateData = <String, dynamic>{
@@ -1098,183 +946,6 @@ class _ItemDetailPageState extends State<ItemDetailPage> {
     ),
   );
 
-  // ✅ UPDATED: Alarm test buttons with notification type context
-  Widget _buildAlarmTestButtons() => Card(
-    elevation: 2,
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "⏰ ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring' : 'Single'} Alarm System",
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blue[50],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue[100]!),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Notification Type: ${_getRecurrenceDescription()}",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _getRecurrenceColor(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildFeatureRow(
-                  "📱 Native Android Alarm",
-                  "Uses AlarmManager for ${_notificationRecurrence != NotificationRecurrence.none ? 'recurring' : 'exact'} timing",
-                ),
-                _buildFeatureRow(
-                  "🔄 Smart Fallback System",
-                  "Automatically switches to local notifications if needed",
-                ),
-                _buildFeatureRow(
-                  "🔔 Persistent Alarms",
-                  _notificationRecurrence != NotificationRecurrence.none
-                      ? "Will repeat according to schedule"
-                      : "Single alarm with full system integration",
-                ),
-                _buildFeatureRow(
-                  "⚡ Exact Timing",
-                  "Precision scheduling with system-level integration",
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Test buttons with context
-          if (_notificationRecurrence != NotificationRecurrence.none)
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: _getRecurrenceColor().withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                "Testing ${_getRecurrenceDescription()}",
-                style: TextStyle(
-                  color: _getRecurrenceColor(),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
-
-          // Immediate test notification
-          ElevatedButton(
-            onPressed:
-                _nativeAlarmInitialized ? _testImmediateNotification : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _getRecurrenceColor(),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            child: Text(
-              _nativeAlarmInitialized
-                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring' : ''} Notification Now"
-                  : "Initializing...",
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Scheduled alarm tests
-          ElevatedButton(
-            onPressed:
-                _nativeAlarmInitialized ? () => _triggerTestAlarm(2) : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            child: Text(
-              _nativeAlarmInitialized
-                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (2 seconds)"
-                  : "Initializing...",
-            ),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed:
-                _nativeAlarmInitialized ? () => _triggerTestAlarm(10) : null,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            child: Text(
-              _nativeAlarmInitialized
-                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (10 seconds)"
-                  : "Initializing...",
-            ),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed:
-                _nativeAlarmInitialized ? () => _triggerTestAlarm(60) : null,
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            child: Text(
-              _nativeAlarmInitialized
-                  ? "Test ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarm (1 minute)"
-                  : "Initializing...",
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-            ),
-            onPressed: _nativeAlarmInitialized ? _cancelAllNotifications : null,
-            child: Text(
-              _nativeAlarmInitialized
-                  ? "Cancel All ${_notificationRecurrence != NotificationRecurrence.none ? 'Recurring ' : ''}Alarms"
-                  : "Initializing...",
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  // Helper widget for feature list
-  Widget _buildFeatureRow(String title, String subtitle) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                subtitle,
-                style: TextStyle(fontSize: 10, color: Colors.grey[700]),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
 // ✅ ADD: NotificationRecurrence enum (same as in AddTaskPage)

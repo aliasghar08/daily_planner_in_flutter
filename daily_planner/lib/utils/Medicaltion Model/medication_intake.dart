@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -20,13 +20,6 @@ class MedicationIntake {
   /// Any time between 00:00 and 03:59 AM is treated as part of the previous day's night/bedtime cycle.
   /// From 04:00 AM onwards, it is treated as the current calendar day.
   static DateTime getLogicalDate(DateTime dt, {int cutoffHour = defaultCircadianCutoffHour}) {
-    // If dt has no time component (it's exactly midnight down to microseconds), 
-    // it usually represents a purely logical calendar date selected from UI, 
-    // rather than an actual wall-clock time that happened to be precisely midnight.
-    if (dt.hour == 0 && dt.minute == 0 && dt.second == 0 && dt.millisecond == 0 && dt.microsecond == 0) {
-      return DateTime(dt.year, dt.month, dt.day);
-    }
-    
     if (dt.hour < cutoffHour) {
       final prev = dt.subtract(const Duration(days: 1));
       return DateTime(prev.year, prev.month, prev.day);

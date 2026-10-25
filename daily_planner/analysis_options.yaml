@@ -22,6 +22,10 @@ analyzer:
 
 linter:
   rules:
+    - file_names
+    - use_build_context_synchronously
+    - avoid_shadowing_type_parameters
+    - avoid_types_as_parameter_names
     - avoid_unused_constructor_parameters
     - unnecessary_nullable_for_final_variable_declarations
     - unnecessary_null_aware_assignments

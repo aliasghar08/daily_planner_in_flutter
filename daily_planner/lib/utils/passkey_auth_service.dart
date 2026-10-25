@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:daily_planner/services/native_biometric_service.dart';
+import 'package:medday_flow/services/native_biometric_service.dart';
 import 'package:flutter/foundation.dart';
-import 'package:daily_planner/services/native_preferences_service.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
 
 class PasskeyAuthService {
   static final PasskeyAuthService _instance = PasskeyAuthService._internal();
@@ -62,10 +62,11 @@ class PasskeyAuthService {
     }
   }
 
-  /// Save credential associated with Passkey login
+  /// Save credential associated with Passkey login without enabling biometrics by default
   Future<void> savePasskeyCredential({
     required String email,
     required String password,
+    bool enableBiometric = false,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -73,7 +74,9 @@ class PasskeyAuthService {
       // Base64 encode for secure local caching of session credential
       final encoded = base64Encode(utf8.encode(password));
       await prefs.setString(_prefPasskeySecret, encoded);
-      await prefs.setBool(_prefPasskeyEnabled, true);
+      if (enableBiometric) {
+        await prefs.setBool(_prefPasskeyEnabled, true);
+      }
     } catch (e) {
       debugPrint('Error saving passkey credential: $e');
     }
@@ -115,11 +118,10 @@ class PasskeyAuthService {
   /// Check if passkey is supported on the hardware/OS
   Future<bool> isPasskeySupported() => isDeviceSupported();
 
-  /// Check if passkey credential is saved or enabled
+  /// Check if passkey / biometric is enabled by user in Settings
   Future<bool> hasPasskeyRegistered() async {
-    final cred = await getSavedPasskeyCredential();
     final enabled = await isPasskeyEnabled();
-    return cred != null || enabled;
+    return enabled;
   }
 
   /// Trigger Passkey / Biometric authentication prompt

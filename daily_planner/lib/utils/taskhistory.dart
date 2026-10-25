@@ -1,4 +1,4 @@
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 

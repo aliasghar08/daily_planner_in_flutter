@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 import LocalAuthentication
 import Network
+import HealthKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -20,6 +21,8 @@ import Network
   private var timezoneChannel: FlutterMethodChannel?
   private var connectivityChannel: FlutterMethodChannel?
   private var shareChannel: FlutterMethodChannel?
+  private var healthChannel: FlutterMethodChannel?
+  private let healthStore = HKHealthStore()
 
   private let pathMonitor = NWPathMonitor()
   private let monitorQueue = DispatchQueue(label: "daily_planner.network_monitor")
@@ -192,6 +195,11 @@ import Network
         result(FlutterMethodNotImplemented)
       }
     }
+
+    healthChannel = FlutterMethodChannel(name: "daily_planner/native_health", binaryMessenger: messenger)
+    healthChannel?.setMethodCallHandler { [weak self] call, result in
+      self?.handleHealthCalls(call: call, result: result)
+    }
   }
 
   // MARK: - Alarm & Notification Handler
@@ -206,7 +214,7 @@ import Network
 
       let rawId = (args["id"] as? NSNumber)?.intValue ?? 0
       let id = rawId != 0 ? abs(rawId) : Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100000)) + 1
-      let title = args["title"] as? String ?? "Daily Planner"
+      let title = args["title"] as? String ?? "Medday Flow"
       let body = args["body"] as? String ?? "You have a scheduled task"
       let timeInMillis = (args["time"] as? NSNumber)?.int64Value
         ?? (args["timeInMillis"] as? NSNumber)?.int64Value
@@ -264,7 +272,7 @@ import Network
 
       let rawId = (args["id"] as? NSNumber)?.intValue ?? 0
       let id = rawId != 0 ? abs(rawId) : Int(Date().timeIntervalSince1970.truncatingRemainder(dividingBy: 100000)) + 1
-      let title = args["title"] as? String ?? "Daily Planner"
+      let title = args["title"] as? String ?? "Medday Flow"
       let body = args["body"] as? String ?? "Notification"
       let payload = args["payload"] as? String ?? ""
 
@@ -724,6 +732,158 @@ import Network
 
     controller.present(activityVC, animated: true) {
       result(true)
+    }
+  }
+
+  // MARK: - Native Apple Health (HealthKit) Handler
+
+  private func handleHealthCalls(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "checkAvailability":
+      DispatchQueue.main.async {
+        result(HKHealthStore.isHealthDataAvailable())
+      }
+
+    case "requestPermissions":
+      guard HKHealthStore.isHealthDataAvailable() else {
+        DispatchQueue.main.async { result(false) }
+        return
+      }
+
+      // Define the sample types safely
+      var typesToShare: Set<HKSampleType> = []
+      var typesToRead: Set<HKObjectType> = []
+
+      if let medType = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
+                       HKObjectType.categoryType(forIdentifier: .mindfulSession) {
+        typesToShare.insert(medType)
+        typesToRead.insert(medType)
+      }
+
+      self.healthStore.requestAuthorization(toShare: typesToShare, read: typesToRead) { success, error in
+        DispatchQueue.main.async {
+          if let error = error {
+            result(FlutterError(code: "HEALTH_AUTH_ERROR", message: error.localizedDescription, details: nil))
+          } else {
+            result(success)
+          }
+        }
+      }
+
+    case "checkPermissions":
+      guard HKHealthStore.isHealthDataAvailable() else {
+        DispatchQueue.main.async { result(false) }
+        return
+      }
+
+      guard let sampleType = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
+                             HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
+        DispatchQueue.main.async { result(false) }
+        return
+      }
+
+      let status = self.healthStore.authorizationStatus(for: sampleType)
+      DispatchQueue.main.async {
+        result(status == .sharingAuthorized)
+      }
+
+    case "saveMedicationRecord":
+      guard HKHealthStore.isHealthDataAvailable(),
+            let mindful = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
+                          HKObjectType.categoryType(forIdentifier: .mindfulSession),
+            let args = call.arguments as? [String: Any] else {
+        DispatchQueue.main.async {
+          result(FlutterError(code: "INVALID_ARGS", message: "HealthKit unavailable or arguments invalid", details: nil))
+        }
+        return
+      }
+
+      let now = Date()
+      let scheduledStr = args["scheduledTime"] as? String ?? ""
+      let actualStr = args["actualTime"] as? String
+      let isoFormatter = ISO8601DateFormatter()
+      let startDate: Date
+      if let actualStr = actualStr, let actualDate = isoFormatter.date(from: actualStr) {
+        startDate = actualDate
+      } else if let schedDate = isoFormatter.date(from: scheduledStr) {
+        startDate = schedDate
+      } else {
+        startDate = now
+      }
+      let endDate = startDate.addingTimeInterval(60)
+
+      let metadata: [String: Any] = [
+        HKMetadataKeySyncIdentifier: args["recordId"] as? String ?? UUID().uuidString,
+        "MedicationName": args["medicationName"] as? String ?? "Medication Intake",
+        "Dosage": "\(args["dosage"] ?? "")",
+        "DosageUnit": args["dosageUnit"] as? String ?? "",
+        "Status": args["status"] as? String ?? "taken",
+        "LogicalDate": args["logicalDate"] as? String ?? "",
+        "Source": "MedDay Flow"
+      ]
+
+      let sample = HKCategorySample(
+        type: mindful,
+        value: HKCategoryValue.notApplicable.rawValue,
+        start: startDate,
+        end: endDate,
+        metadata: metadata
+      )
+
+      healthStore.save(sample) { success, error in
+        DispatchQueue.main.async {
+          if let error = error {
+            result(FlutterError(code: "HEALTHKIT_SAVE_FAILED", message: error.localizedDescription, details: nil))
+          } else {
+            result(true)
+          }
+        }
+      }
+
+    case "fetchMedicationRecords":
+      guard HKHealthStore.isHealthDataAvailable(),
+            let mindful = HKObjectType.categoryType(forIdentifier: HKCategoryTypeIdentifier(rawValue: "HKCategoryTypeIdentifierMedicationRecord")) ??
+                          HKObjectType.categoryType(forIdentifier: .mindfulSession) else {
+        DispatchQueue.main.async { result([]) }
+        return
+      }
+
+      let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+      let query = HKSampleQuery(sampleType: mindful, predicate: nil, limit: 100, sortDescriptors: [sortDescriptor]) { _, samples, error in
+        DispatchQueue.main.async {
+          if let error = error {
+            print("HealthKit Fetch Error: \(error.localizedDescription)")
+            result([])
+            return
+          }
+
+          var records: [[String: Any]] = []
+          let iso = ISO8601DateFormatter()
+          for sample in (samples as? [HKCategorySample] ?? []) {
+            let meta = sample.metadata ?? [:]
+            let dict: [String: Any] = [
+              "recordId": meta[HKMetadataKeySyncIdentifier] as? String ?? sample.uuid.uuidString,
+              "medicationName": meta["MedicationName"] as? String ?? "Medication Intake",
+              "dosage": meta["Dosage"] as? String ?? "",
+              "dosageUnit": meta["DosageUnit"] as? String ?? "",
+              "status": meta["Status"] as? String ?? "taken",
+              "logicalDate": meta["LogicalDate"] as? String ?? "",
+              "syncedAt": iso.string(from: sample.startDate),
+              "platform": "Apple Health"
+            ]
+            records.append(dict)
+          }
+          result(records)
+        }
+      }
+
+      healthStore.execute(query)
+
+    case "revokePermissions":
+      DispatchQueue.main.async { result(true) }
+
+    default:
+      DispatchQueue.main.async { result(FlutterMethodNotImplemented) }
     }
   }
 }

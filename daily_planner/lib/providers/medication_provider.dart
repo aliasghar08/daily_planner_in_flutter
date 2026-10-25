@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/frequency_and_dosage.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_intake.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_model.dart';
-import 'package:daily_planner/utils/Medicaltion%20Model/medication_schedule_model.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/frequency_and_dosage.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_intake.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_model.dart';
+import 'package:medday_flow/utils/Medicaltion%20Model/medication_schedule_model.dart';
 import 'package:flutter/material.dart';
 
 class MedicationProvider extends ChangeNotifier {
@@ -49,7 +49,7 @@ class MedicationProvider extends ChangeNotifier {
 
   /// Whether the currently viewed date is the active logical day
   bool get isSelectedDateToday {
-    final sel = MedicationIntake.getLogicalDate(_selectedDate);
+    final sel = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
     final cur = currentLogicalDate;
     return sel.year == cur.year && sel.month == cur.month && sel.day == cur.day;
   }
@@ -249,7 +249,7 @@ class MedicationProvider extends ChangeNotifier {
 
   /// Change selected date (Apple Health calendar strip)
   Future<void> selectDate(DateTime date) async {
-    _selectedDate = MedicationIntake.getLogicalDate(date);
+    _selectedDate = DateTime(date.year, date.month, date.day);
     _setupIntakeListeners(_selectedDate);
   }
 
@@ -257,7 +257,7 @@ class MedicationProvider extends ChangeNotifier {
   void _setupIntakeListeners(DateTime date) {
     if (_userId == null) return;
 
-    final logicalDate = MedicationIntake.getLogicalDate(date);
+    final logicalDate = DateTime(date.year, date.month, date.day);
 
     // A logical day runs from 4:00 AM on the calendar date to 3:59 AM the next calendar date.
     // This means scheduled times can range from logicalDate 04:00 to logicalDate+1 03:59.
@@ -667,7 +667,7 @@ class MedicationProvider extends ChangeNotifier {
     // transition to "missed" even if the user doesn't interact with the app.
     _periodicRefreshTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       debugPrint('MedicationProvider: Periodic refresh — recomputing intakes');
-      final logicalDate = MedicationIntake.getLogicalDate(_selectedDate);
+      final logicalDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
       _computeFinalIntakes(logicalDate);
     });
 

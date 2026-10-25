@@ -1,17 +1,17 @@
 import 'dart:async';
-import 'package:daily_planner/providers/auth_provider.dart' as app_auth;
-import 'package:daily_planner/providers/medication_provider.dart';
-import 'package:daily_planner/providers/task_provider.dart';
-import 'package:daily_planner/screens/add_medication_page.dart';
-import 'package:daily_planner/screens/additemPage.dart';
-import 'package:daily_planner/screens/medication_list_page.dart';
-import 'package:daily_planner/utils/Alarm_helper.dart';
-import 'package:daily_planner/utils/catalog.dart';
-import 'package:daily_planner/utils/drawer.dart';
-import 'package:daily_planner/utils/item.dart';
+import 'package:medday_flow/providers/auth_provider.dart' as app_auth;
+import 'package:medday_flow/providers/medication_provider.dart';
+import 'package:medday_flow/providers/task_provider.dart';
+import 'package:medday_flow/screens/add_medication_page.dart';
+import 'package:medday_flow/screens/add_item_page.dart';
+import 'package:medday_flow/screens/medication_list_page.dart';
+import 'package:medday_flow/utils/alarm_helper.dart';
+import 'package:medday_flow/utils/catalog.dart';
+import 'package:medday_flow/utils/drawer.dart';
+import 'package:medday_flow/utils/item.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:daily_planner/services/custom_state_management.dart';
+import 'package:medday_flow/services/custom_state_management.dart';
 import 'dart:io' show Platform;
 
 enum TaskFilter { all, completed, incomplete, overdue }

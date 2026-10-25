@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'package:daily_planner/services/sync/google_calendar_sync_service.dart';
-import 'package:daily_planner/utils/catalog.dart';
+import 'package:medday_flow/services/sync/google_calendar_sync_service.dart';
+import 'package:medday_flow/utils/catalog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-/// Service handling Google Tasks API v1 synchronization for Daily Planner tasks
+/// Service handling Google Tasks API v1 synchronization for Medday Flow tasks
 class GoogleTasksSyncService {
   static const String _tasksApiBase = 'https://tasks.googleapis.com/tasks/v1/lists/@default/tasks';
 
@@ -13,13 +13,13 @@ class GoogleTasksSyncService {
   GoogleTasksSyncService({http.Client? httpClient})
       : _httpClient = httpClient ?? http.Client();
 
-  /// Converts a Daily Planner [Task] to a Google Tasks JSON payload
+  /// Converts a Medday Flow [Task] to a Google Tasks JSON payload
   Map<String, dynamic> taskToGoogleTask(Task task) {
     final taskDate = task.date ?? task.createdAt;
 
     final payload = <String, dynamic>{
       'title': task.title,
-      'notes': '${task.detail}\n\n[Synced from Daily Planner | ID: ${task.docId ?? "local"}]',
+      'notes': '${task.detail}\n\n[Synced from Medday Flow | ID: ${task.docId ?? "local"}]',
       'due': taskDate.toUtc().toIso8601String(),
       'status': task.isCompleted ? 'completed' : 'needsAction',
     };
@@ -31,7 +31,7 @@ class GoogleTasksSyncService {
     return payload;
   }
 
-  /// Converts a Google Task JSON map to a Daily Planner [Task]
+  /// Converts a Google Task JSON map to a Medday Flow [Task]
   Task googleTaskToDailyPlannerTask(Map<String, dynamic> map) {
     final title = map['title'] as String? ?? 'Untitled Task';
     final notes = map['notes'] as String? ?? '';
@@ -50,7 +50,7 @@ class GoogleTasksSyncService {
     }
 
     // Clean notes by removing the sync footer if present
-    final cleanDetail = notes.replaceAll(RegExp(r'\n\n\[Synced from Daily Planner.*\]'), '').trim();
+    final cleanDetail = notes.replaceAll(RegExp(r'\n\n\[Synced from (Daily Planner|Medday Flow).*\]'), '').trim();
 
     return Task(
       docId: map['id'] as String?,

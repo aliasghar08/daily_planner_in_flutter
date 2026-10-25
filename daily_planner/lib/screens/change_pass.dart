@@ -1,4 +1,4 @@
-import 'package:daily_planner/utils/passkey_auth_service.dart';
+import 'package:medday_flow/utils/passkey_auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,6 +66,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
         );
 
         await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     } on FirebaseAuthException catch (e) {
@@ -77,6 +78,14 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _currentPassController.dispose();
+    _newPassController.dispose();
+    _confirmPassController.dispose();
+    super.dispose();
   }
 
   @override

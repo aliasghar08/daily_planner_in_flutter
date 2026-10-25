@@ -1,4 +1,4 @@
-# 🗓️ Medday Flow — Modern Flutter & Native Android Productivity App
+# 🗓️ MedDay Flow — Modern Flutter & Native Productivity App
 
 [![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=Flutter&logoColor=white)](https://flutter.dev)
 [![Dart](https://img.shields.io/badge/Dart-%230175C2.svg?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
@@ -6,7 +6,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Android 14+ Ready](https://img.shields.io/badge/Android%2014%2B-Compatible-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)
 
-**Medday Flow** is a high-performance, offline-first personal productivity, medication scheduling, and habit-tracking application built with Flutter, Firebase, and custom Native Android Kotlin platform services. Engineered with a zero-bloat philosophy, it delivers enterprise-grade reliability, circadian-aware scheduling, bi-directional cloud sync, and custom canvas-rendered analytics.
+**MedDay Flow** is a high-performance, offline-first personal productivity, medication scheduling, and habit-tracking application built with Flutter, Firebase, and custom Native Android Kotlin platform services. Engineered with a zero-bloat philosophy, it delivers enterprise-grade reliability, circadian-aware scheduling, bi-directional cloud sync, and custom canvas-rendered analytics.
 
 ---
 
@@ -129,7 +129,7 @@ daily_planner/
 │   │   └── theme_provider.dart           # Light/Dark/System theme switcher
 │   ├── screens/
 │   │   ├── add_medication_page.dart      # Medication & schedule creation screen
-│   │   ├── additemPage.dart              # Task creation screen
+│   │   ├── add_item_page.dart            # Task creation screen
 │   │   ├── home.dart                     # Main dashboard & task feed
 │   │   ├── itemdetailedit.dart           # Task editing & configuration
 │   │   ├── itemdetailpage.dart           # Task detail view with checklist
@@ -139,13 +139,14 @@ daily_planner/
 │   │   ├── performance.dart              # Overview performance dashboard
 │   │   ├── settings.dart                 # App settings & passkey manager
 │   │   ├── sync_integrations_page.dart   # Google Calendar/Tasks & Health sync hub
-│   │   ├── taskInsights.dart             # Deep task analytics with custom charts
+│   │   ├── task_insights.dart            # Deep task analytics with custom charts
 │   │   └── taskinsights/                 # Analytics helper widgets & logic
 │   ├── services/
 │   │   ├── custom_state_management.dart  # Pure Flutter InheritedNotifier Provider engine
 │   │   ├── native_biometric_service.dart # Biometric & Passkey channel service
 │   │   ├── native_connectivity_service.dart # Real-time network state listener
 │   │   ├── native_google_sign_in.dart    # Native Google Auth channel
+│   │   ├── native_health_service.dart    # Native Apple Health (HealthKit) channel
 │   │   ├── native_preferences_service.dart # Fast native storage service
 │   │   ├── native_share_service.dart     # System share intent channel
 │   │   ├── native_timezone_service.dart  # Native timezone resolver
@@ -155,7 +156,7 @@ daily_planner/
 │   │       ├── health_sync_service.dart          # Health Connect / Apple Health sync
 │   │       └── sync_manager.dart                 # Master sync coordinator
 │   ├── utils/
-│   │   ├── Alarm_helper.dart             # Flutter-to-Native alarm service bridge
+│   │   ├── alarm_helper.dart             # Flutter-to-Native alarm service bridge
 │   │   ├── app_theme.dart                # Material 3 Design System & Theme palettes
 │   │   ├── catalog.dart / item.dart      # Core Task data models & catalogs
 │   │   ├── drawer.dart                   # Custom animated navigation drawer

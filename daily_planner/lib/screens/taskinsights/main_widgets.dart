@@ -1,4 +1,4 @@
-import 'package:daily_planner/widgets/charts/custom_charts.dart';
+import 'package:medday_flow/widgets/charts/custom_charts.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 

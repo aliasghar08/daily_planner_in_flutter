@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart'; // Added to use kIsWeb
-import 'package:daily_planner/services/native_preferences_service.dart';
+import 'package:medday_flow/services/native_preferences_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
