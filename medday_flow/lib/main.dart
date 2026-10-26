@@ -115,9 +115,12 @@ Future<void> _runStartupTasks() async {
     // Notification service
     await _initializeNotificationService();
 
-    // FCM + platform services
-    await _initializeFCM();
-    await _initializePlatformServices();
+    // Signal to the UI that it's safe to show the real app immediately
+    _appReady.value = true;
+
+    // FCM + platform services run asynchronously without blocking the UI
+    _initializeFCM().catchError((e) => debugPrint('FCM init non-fatal error: $e'));
+    _initializePlatformServices().catchError((e) => debugPrint('Platform services non-fatal error: $e'));
 
     // Background task
     resetAllTasksIfNeeded();
@@ -126,7 +129,6 @@ Future<void> _runStartupTasks() async {
   } catch (e) {
     debugPrint('❌ Startup task error: $e');
   } finally {
-    // Signal to the UI that it's safe to show the real app
     _appReady.value = true;
   }
 }
